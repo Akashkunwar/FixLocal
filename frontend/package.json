@@ -1,0 +1,31 @@
+{
+  "name": "fixlocal-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "e2e:auth": "node scripts/e2e-auth.mjs",
+    "e2e:homeowner": "node scripts/e2e-homeowner.mjs",
+    "e2e:tradesperson": "node scripts/e2e-tradesperson.mjs",
+    "e2e:admin": "node scripts/e2e-admin.mjs",
+    "demo:smoke": "node scripts/demo-smoke.mjs",
+    "e2e:visual": "node scripts/e2e-visual.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@types/react-router-dom": "^5.3.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "playwright": "^1.61.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}
