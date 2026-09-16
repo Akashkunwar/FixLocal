@@ -55,6 +55,14 @@ export class Dispute {
   @Column({ type: "text", nullable: true })
   resolutionNotes?: string;
 
+  /** Simulated escrow refunds applied at resolve time. */
+  @Column({ type: "jsonb", nullable: true })
+  refundMeta?: {
+    milestoneIds: string[];
+    totalRefunded: number;
+    labels?: string[];
+  } | null;
+
   @Column({ type: "timestamptz", nullable: true })
   resolvedAt?: Date;
 

@@ -1,5 +1,12 @@
 export { User, UserRole } from "./User";
 export { TradespersonProfile, VerificationStatus } from "./TradespersonProfile";
-export { Job, JobCategory, JobStatus, PaymentStatus } from "./Job";
+export { Job, JobCategory, JobStatus, PaymentStatus, ScheduleStatus } from "./Job";
 export { Bid, BidStatus } from "./Bid";
 export { Dispute, DisputeStatus, DisputeResolution } from "./Dispute";
+export { Review } from "./Review";
+export { Message } from "./Message";
+export { Notification, NotificationType } from "./Notification";
+export { Favorite, FavoriteTargetType } from "./Favorite";
+export { PaymentMilestone, MilestoneStatus } from "./PaymentMilestone";
+export { AuditLog, AuditAction } from "./AuditLog";
+export { AppConfig } from "./AppConfig";

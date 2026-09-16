@@ -1,135 +1,97 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiError } from "../../api/client";
-import {
-  completeJob,
-  listJobs,
-  startJob,
-  type Job,
-} from "../../api/jobs";
 import { Shell } from "../../components/Shell";
-import { ProNav } from "../../components/ProNav";
+import { listJobs, getMyEarnings, type Job, type EarningsSummary } from "../../api/jobs";
+import { Badge } from "../../components/ui/Badge";
+import { Spinner } from "../../components/ui/Spinner";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { categoryLabel, fmtDate, money } from "../../lib/format";
 
 export function MyJobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [status, setStatus] = useState("");
+  const [earnings, setEarnings] = useState<EarningsSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await listJobs({
-        scope: "mine",
-        status: status || undefined,
-        sort: "newest",
-        limit: "30",
-      });
-      setJobs(res.jobs);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load jobs");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    Promise.all([
+      listJobs({ scope: "mine" }),
+      getMyEarnings().catch(() => null),
+    ])
+      .then(([j, e]) => {
+        setJobs(j.jobs);
+        if (e) setEarnings(e.earnings);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  async function onStart(id: string) {
-    setActionError(null);
-    setBusyId(id);
-    try {
-      await startJob(id);
-      await load();
-    } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not start job");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function onComplete(id: string) {
-    setActionError(null);
-    setBusyId(id);
-    try {
-      await completeJob(id);
-      await load();
-    } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not complete job");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   return (
-    <Shell title="My awarded jobs">
-      <ProNav />
-      <form
-        className="filters"
-        onSubmit={(e) => {
-          e.preventDefault();
-          load();
-        }}
-      >
-        <select value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All</option>
-          <option value="awarded">awarded</option>
-          <option value="in_progress">in_progress</option>
-          <option value="completed">completed</option>
-          <option value="disputed">disputed</option>
-        </select>
-        <button type="submit" className="btn ghost">
-          Filter
-        </button>
-      </form>
-
-      {error && <div className="alert">{error}</div>}
-      {actionError && <div className="alert">{actionError}</div>}
-      {loading && <p className="muted">Loading…</p>}
-      {!loading && jobs.length === 0 && (
-        <p className="muted">No awarded jobs yet. Bid on open jobs to get work.</p>
-      )}
-
-      <ul className="list">
-        {jobs.map((job) => (
-          <li key={job.id} className="list-item static">
-            <div>
-              <strong>{job.title}</strong>
-              <div className="muted">
-                {job.category} · {job.area || "—"}
+    <Shell title="My awarded jobs" subtitle="Jobs where your bid was accepted · earnings are simulated">
+      {loading ? (
+        <Spinner />
+      ) : (
+        <>
+          {earnings && (
+            <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="card p-4">
+                <p className="text-xs uppercase tracking-wide text-slate-400">Earned (completed)</p>
+                <p className="mt-1 font-display text-2xl font-semibold text-brand-800">
+                  {money(earnings.totalEarned)}
+                </p>
               </div>
-              <div className="btn-row">
-                {job.status === "awarded" && (
-                  <button
-                    className="btn primary"
-                    disabled={busyId === job.id}
-                    onClick={() => onStart(job.id)}
-                  >
-                    Start work
-                  </button>
-                )}
-                {job.status === "in_progress" && (
-                  <button
-                    className="btn primary"
-                    disabled={busyId === job.id}
-                    onClick={() => onComplete(job.id)}
-                  >
-                    Mark completed
-                  </button>
-                )}
-                <Link to={`/tradesperson/jobs/${job.id}`}>View</Link>
+              <div className="card p-4">
+                <p className="text-xs uppercase tracking-wide text-slate-400">Completed</p>
+                <p className="mt-1 text-2xl font-semibold">{earnings.completedJobs}</p>
+              </div>
+              <div className="card p-4">
+                <p className="text-xs uppercase tracking-wide text-slate-400">In progress / awarded</p>
+                <p className="mt-1 text-2xl font-semibold">
+                  {earnings.inProgressJobs + earnings.awardedJobs}
+                </p>
+              </div>
+              <div className="card p-4">
+                <p className="text-xs uppercase tracking-wide text-slate-400">Active bids</p>
+                <p className="mt-1 text-2xl font-semibold">{earnings.activeBids}</p>
               </div>
             </div>
-            <span className={`badge status-${job.status}`}>{job.status}</span>
-          </li>
-        ))}
-      </ul>
+          )}
+
+          {jobs.length === 0 ? (
+            <EmptyState
+              title="No awarded jobs yet"
+              description="Playbook: browse open jobs → bid with a clear quote + visit window → reply fast on counters → keep availability heat healthy."
+              action={
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Link to="/professional" className="btn-primary no-underline">Browse jobs</Link>
+                  <Link to="/professional/profile" className="btn-secondary no-underline">Portfolio & rates</Link>
+                </div>
+              }
+            />
+          ) : (
+            <ul className="grid gap-3">
+              {jobs.map((job) => (
+                <li key={job.id}>
+                  <Link
+                    to={`/professional/jobs/${job.id}`}
+                    className="card flex flex-wrap items-center justify-between gap-4 p-5 no-underline text-inherit transition hover:shadow-lift"
+                  >
+                    <div>
+                      <p className="font-semibold text-slate-900">{job.title}</p>
+                      <p className="mt-0.5 text-sm text-slate-500">
+                        {categoryLabel(job.category)}
+                        {job.area ? ` · ${job.area}` : ""} · {fmtDate(job.createdAt)}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Budget {money(job.budgetMin)} – {money(job.budgetMax)}
+                      </p>
+                    </div>
+                    <Badge status={job.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
     </Shell>
   );
 }

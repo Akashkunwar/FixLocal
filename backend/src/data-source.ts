@@ -6,6 +6,13 @@ import {
   Job,
   Bid,
   Dispute,
+  Review,
+  Message,
+  Notification,
+  Favorite,
+  PaymentMilestone,
+  AuditLog,
+  AppConfig,
 } from "./entities";
 
 export const AppDataSource = new DataSource({
@@ -17,5 +24,18 @@ export const AppDataSource = new DataSource({
   database: process.env.DB_NAME || "fixlocal",
   synchronize: process.env.NODE_ENV !== "production",
   logging: process.env.NODE_ENV === "development",
-  entities: [User, TradespersonProfile, Job, Bid, Dispute],
+  entities: [
+    User,
+    TradespersonProfile,
+    Job,
+    Bid,
+    Dispute,
+    Review,
+    Message,
+    Notification,
+    Favorite,
+    PaymentMilestone,
+    AuditLog,
+    AppConfig,
+  ],
 });

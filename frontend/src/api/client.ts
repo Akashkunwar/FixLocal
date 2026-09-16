@@ -9,6 +9,35 @@ export type User = {
   id: string;
   email: string;
   role: Role;
+  name?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  notificationPrefs?: Record<string, boolean> | null;
+  inviteTemplates?: { id: string; label: string; body: string; createdAt?: string }[] | null;
+  counterTemplates?: { id: string; label: string; body: string; createdAt?: string }[] | null;
+  homeownerCounterTemplates?: { id: string; label: string; body: string; createdAt?: string }[] | null;
+  introTemplates?: { id: string; label: string; body: string; createdAt?: string }[] | null;
+  namedJobTemplates?: {
+    id: string;
+    name: string;
+    title: string;
+    description?: string;
+    category?: string;
+    siteType?: string;
+    cadence?: string;
+    cadenceNote?: string;
+    budgetMin?: string;
+    budgetMax?: string;
+    address?: string;
+    city?: string;
+    area?: string;
+    pincode?: string;
+    lat?: string;
+    lng?: string;
+    sourceJobId?: string;
+    createdAt?: string;
+  }[] | null;
+  quoteViewNudgeHours?: number | null;
   createdAt?: string;
 };
 
@@ -39,18 +68,22 @@ export function clearSession() {
 export class ApiError extends Error {
   status: number;
   code?: string;
+  details?: Record<string, unknown>;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    details?: Record<string, unknown>
+  ) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
-export async function api<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
+export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
@@ -65,7 +98,8 @@ export async function api<T>(
     throw new ApiError(
       data.message || res.statusText || "Request failed",
       res.status,
-      data.code
+      data.code,
+      data && typeof data === "object" ? (data as Record<string, unknown>) : undefined
     );
   }
   return data as T;
@@ -81,11 +115,12 @@ export function login(email: string, password: string) {
 export function register(
   email: string,
   password: string,
-  role: "HOMEOWNER" | "TRADESPERSON"
+  role: "HOMEOWNER" | "TRADESPERSON",
+  extras?: { name?: string; phone?: string }
 ) {
   return api<{ token: string; user: User }>("/api/auth/register", {
     method: "POST",
-    body: JSON.stringify({ email, password, role }),
+    body: JSON.stringify({ email, password, role, ...extras }),
   });
 }
 
@@ -93,8 +128,47 @@ export function me() {
   return api<{ user: User }>("/api/auth/me");
 }
 
+export function updateMe(body: {
+  name?: string;
+  phone?: string;
+  avatarUrl?: string;
+  notificationPrefs?: Record<string, boolean>;
+  inviteTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+  counterTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+  homeownerCounterTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+  introTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+  namedJobTemplates?: {
+    id: string;
+    name: string;
+    title: string;
+    description?: string;
+    category?: string;
+    siteType?: string;
+    cadence?: string;
+    cadenceNote?: string;
+    budgetMin?: string;
+    budgetMax?: string;
+    address?: string;
+    city?: string;
+    area?: string;
+    pincode?: string;
+    lat?: string;
+    lng?: string;
+    sourceJobId?: string;
+    createdAt?: string;
+  }[];
+  quoteViewNudgeHours?: number | null;
+}) {
+  return api<{ user: User }>("/api/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
 export function dashboardPath(role: Role): string {
   if (role === "ADMIN") return "/admin";
-  if (role === "HOMEOWNER") return "/homeowner";
-  return "/tradesperson";
+  if (role === "HOMEOWNER") return "/client";
+  return "/professional";
 }
+
+export { API_URL };

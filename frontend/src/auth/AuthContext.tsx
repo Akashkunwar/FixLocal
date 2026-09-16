@@ -15,6 +15,7 @@ import {
   me,
   register as apiRegister,
   saveSession,
+  updateMe as apiUpdateMe,
   type Role,
   type User,
 } from "../api/client";
@@ -27,10 +28,41 @@ type AuthState = {
   register: (
     email: string,
     password: string,
-    role: "HOMEOWNER" | "TRADESPERSON"
+    role: "HOMEOWNER" | "TRADESPERSON",
+    extras?: { name?: string; phone?: string }
   ) => Promise<User>;
+  updateProfile: (body: {
+    name?: string;
+    phone?: string;
+    notificationPrefs?: Record<string, boolean>;
+    inviteTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+    counterTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+    homeownerCounterTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+    introTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+    namedJobTemplates?: {
+      id: string;
+      name: string;
+      title: string;
+      description?: string;
+      category?: string;
+      siteType?: string;
+      cadence?: string;
+      cadenceNote?: string;
+      budgetMin?: string;
+      budgetMax?: string;
+      address?: string;
+      city?: string;
+      area?: string;
+      pincode?: string;
+      lat?: string;
+      lng?: string;
+      sourceJobId?: string;
+      createdAt?: string;
+    }[];
+    quoteViewNudgeHours?: number | null;
+  }) => Promise<User>;
   logout: () => void;
-  clearError: () => void;
+  setError: (e: string | null) => void;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -46,11 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-
     me()
-      .then((res) => {
-        saveSession(token, res.user);
-        setUser(res.user);
+      .then((r) => {
+        setUser(r.user);
+        saveSession(token, r.user);
       })
       .catch(() => {
         clearSession();
@@ -61,26 +92,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     setError(null);
-    const res = await apiLogin(email, password);
-    saveSession(res.token, res.user);
-    setUser(res.user);
-    return res.user;
+    const r = await apiLogin(email, password);
+    saveSession(r.token, r.user);
+    setUser(r.user);
+    return r.user;
   }, []);
 
   const register = useCallback(
     async (
       email: string,
       password: string,
-      role: "HOMEOWNER" | "TRADESPERSON"
+      role: "HOMEOWNER" | "TRADESPERSON",
+      extras?: { name?: string; phone?: string }
     ) => {
       setError(null);
-      const res = await apiRegister(email, password, role);
-      saveSession(res.token, res.user);
-      setUser(res.user);
-      return res.user;
+      const r = await apiRegister(email, password, role, extras);
+      saveSession(r.token, r.user);
+      setUser(r.user);
+      return r.user;
     },
     []
   );
+
+  const updateProfile = useCallback(async (body: {
+    name?: string;
+    phone?: string;
+    notificationPrefs?: Record<string, boolean>;
+    inviteTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+    counterTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+    homeownerCounterTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+    introTemplates?: { id: string; label: string; body: string; createdAt?: string }[];
+    namedJobTemplates?: {
+      id: string;
+      name: string;
+      title: string;
+      description?: string;
+      category?: string;
+      siteType?: string;
+      cadence?: string;
+      cadenceNote?: string;
+      budgetMin?: string;
+      budgetMax?: string;
+      address?: string;
+      city?: string;
+      area?: string;
+      pincode?: string;
+      lat?: string;
+      lng?: string;
+      sourceJobId?: string;
+      createdAt?: string;
+    }[];
+    quoteViewNudgeHours?: number | null;
+  }) => {
+    const r = await apiUpdateMe(body);
+    const token = getToken();
+    if (token) saveSession(token, r.user);
+    setUser(r.user);
+    return r.user;
+  }, []);
 
   const logout = useCallback(() => {
     clearSession();
@@ -88,16 +157,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({
-      user,
-      loading,
-      error,
-      login,
-      register,
-      logout,
-      clearError: () => setError(null),
-    }),
-    [user, loading, error, login, register, logout]
+    () => ({ user, loading, error, login, register, updateProfile, logout, setError }),
+    [user, loading, error, login, register, updateProfile, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -105,10 +166,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  if (!ctx) throw new Error("useAuth outside provider");
   return ctx;
 }
 
-export function useRole(): Role | null {
-  return useAuth().user?.role ?? null;
-}
+export type { Role, User };
