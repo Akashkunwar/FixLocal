@@ -1,0 +1,120 @@
+import type { MigrationInterface, QueryRunner } from "typeorm";
+
+export class Baseline1790000000001 implements MigrationInterface {
+    name = 'Baseline1790000000001'
+
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`CREATE TYPE "public"."tradesperson_profiles_verificationstatus_enum" AS ENUM('pending', 'verified', 'rejected', 'suspended')`);
+        await queryRunner.query(`CREATE TABLE "tradesperson_profiles" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "userId" uuid NOT NULL, "skills" text, "serviceAreas" text, "bio" text, "yearsExperience" integer, "hourlyRateMin" numeric(10,2), "hourlyRateMax" numeric(10,2), "city" character varying, "lat" double precision, "lng" double precision, "galleryUrls" jsonb NOT NULL DEFAULT '[]', "weeklyAvailability" jsonb, "blockedDates" jsonb NOT NULL DEFAULT '[]', "notInterestedCategories" jsonb NOT NULL DEFAULT '[]', "customRatePackages" jsonb NOT NULL DEFAULT '[]', "caseStudies" jsonb NOT NULL DEFAULT '[]', "averageRating" numeric(3,2) NOT NULL DEFAULT '0', "reviewCount" integer NOT NULL DEFAULT '0', "verificationStatus" "public"."tradesperson_profiles_verificationstatus_enum" NOT NULL DEFAULT 'pending', "licenseDocUrl" character varying, "verifiedAt" TIMESTAMP WITH TIME ZONE, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_56668286b6dfb93a23e4bb04c85" UNIQUE ("userId"), CONSTRAINT "REL_56668286b6dfb93a23e4bb04c8" UNIQUE ("userId"), CONSTRAINT "PK_41b678833972d1bedea2a5faa08" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TYPE "public"."bids_status_enum" AS ENUM('active', 'withdrawn', 'rejected', 'accepted')`);
+        await queryRunner.query(`CREATE TABLE "bids" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "jobId" uuid NOT NULL, "tradespersonId" uuid NOT NULL, "amount" numeric(10,2) NOT NULL, "message" text, "etaDays" integer, "proposedVisitStart" TIMESTAMP WITH TIME ZONE, "proposedVisitEnd" TIMESTAMP WITH TIME ZONE, "quoteAmount" numeric(10,2), "quoteNotes" text, "quoteAttachmentUrl" character varying, "quoteHistory" jsonb, "counterOffer" jsonb, "counterHistory" jsonb, "quoteViewedAt" TIMESTAMP WITH TIME ZONE, "quoteViewedRevisionCount" integer, "quoteViewedNudgeSentAt" TIMESTAMP WITH TIME ZONE, "status" "public"."bids_status_enum" NOT NULL DEFAULT 'active', "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_7950d066d322aab3a488ac39fe5" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_53c9ea9c92ddbef357bc84c0a4" ON "bids" ("tradespersonId") `);
+        await queryRunner.query(`CREATE INDEX "IDX_b4d6037792f626ab41a3f6609b" ON "bids" ("jobId") `);
+        await queryRunner.query(`CREATE TYPE "public"."disputes_status_enum" AS ENUM('open', 'resolved')`);
+        await queryRunner.query(`CREATE TYPE "public"."disputes_resolution_enum" AS ENUM('favor_homeowner', 'favor_tradesperson', 'no_action')`);
+        await queryRunner.query(`CREATE TABLE "disputes" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "jobId" uuid NOT NULL, "raisedByUserId" uuid NOT NULL, "reason" text NOT NULL, "evidenceUrls" jsonb NOT NULL DEFAULT '[]', "status" "public"."disputes_status_enum" NOT NULL DEFAULT 'open', "resolution" "public"."disputes_resolution_enum", "resolutionNotes" text, "refundMeta" jsonb, "resolvedAt" TIMESTAMP WITH TIME ZONE, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_3c97580d01c1a4b0b345c42a107" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TYPE "public"."payment_milestones_status_enum" AS ENUM('pending', 'held', 'released', 'refunded')`);
+        await queryRunner.query(`CREATE TABLE "payment_milestones" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "jobId" uuid NOT NULL, "label" character varying NOT NULL, "sequence" integer NOT NULL, "amount" numeric(10,2) NOT NULL, "percent" integer NOT NULL, "status" "public"."payment_milestones_status_enum" NOT NULL DEFAULT 'pending', "releasedAt" TIMESTAMP WITH TIME ZONE, "releasedByUserId" uuid, "refundedAt" TIMESTAMP WITH TIME ZONE, "refundedByUserId" uuid, "refundNote" text, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_4c0f5e58e9668a999e7f96151af" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_41f3712be9037e2b91c906ea23" ON "payment_milestones" ("jobId") `);
+        await queryRunner.query(`CREATE TYPE "public"."jobs_category_enum" AS ENUM('plumbing', 'electrical', 'carpentry', 'painting', 'appliance', 'cleaning', 'construction', 'office_facilities', 'tech_services', 'moving', 'other')`);
+        await queryRunner.query(`CREATE TYPE "public"."jobs_status_enum" AS ENUM('open', 'bidding_closed', 'awarded', 'in_progress', 'completed', 'cancelled', 'disputed')`);
+        await queryRunner.query(`CREATE TYPE "public"."jobs_paymentstatus_enum" AS ENUM('pending', 'held', 'partially_released', 'released', 'refunded', 'simulated_paid')`);
+        await queryRunner.query(`CREATE TYPE "public"."jobs_schedulestatus_enum" AS ENUM('none', 'proposed', 'confirmed')`);
+        await queryRunner.query(`CREATE TABLE "jobs" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "title" character varying NOT NULL, "description" text NOT NULL, "category" "public"."jobs_category_enum" NOT NULL, "siteType" character varying(32), "cadence" character varying(24) DEFAULT 'one_time', "cadenceNote" text, "amcProposal" jsonb, "preferredStart" TIMESTAMP WITH TIME ZONE, "preferredEnd" TIMESTAMP WITH TIME ZONE, "maxBids" integer NOT NULL DEFAULT '5', "budgetMin" numeric(10,2), "budgetMax" numeric(10,2), "address" character varying, "area" character varying, "city" character varying, "pincode" character varying, "lat" double precision, "lng" double precision, "photoUrls" jsonb NOT NULL DEFAULT '[]', "beforePhotoUrls" jsonb NOT NULL DEFAULT '[]', "afterPhotoUrls" jsonb NOT NULL DEFAULT '[]', "status" "public"."jobs_status_enum" NOT NULL DEFAULT 'open', "paymentStatus" "public"."jobs_paymentstatus_enum" NOT NULL DEFAULT 'pending', "escrowAmount" numeric(10,2), "escrowSource" character varying(16), "scheduleStatus" "public"."jobs_schedulestatus_enum" NOT NULL DEFAULT 'none', "scheduledStart" TIMESTAMP WITH TIME ZONE, "scheduledEnd" TIMESTAMP WITH TIME ZONE, "scheduleProposedByUserId" uuid, "scheduleNote" text, "homeownerId" uuid NOT NULL, "acceptedBidId" uuid, "completedAt" TIMESTAMP WITH TIME ZONE, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "REL_b30a74a668eae6af88f6d6af46" UNIQUE ("acceptedBidId"), CONSTRAINT "PK_cf0a6c42b72fcc7f7c237def345" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_46cfdfcc6cf4e7d690cdbc3d60" ON "jobs" ("city") `);
+        await queryRunner.query(`CREATE INDEX "IDX_0068642c59f993cea088c23755" ON "jobs" ("area") `);
+        await queryRunner.query(`CREATE INDEX "IDX_656cf816796738c59563a79787" ON "jobs" ("createdAt") `);
+        await queryRunner.query(`CREATE INDEX "IDX_a0c30e3eb9649fe7fbcd336a63" ON "jobs" ("status") `);
+        await queryRunner.query(`CREATE INDEX "IDX_2b6d4fc98010e4fb9c4c4b8e6a" ON "jobs" ("category") `);
+        await queryRunner.query(`CREATE TYPE "public"."users_role_enum" AS ENUM('ADMIN', 'HOMEOWNER', 'TRADESPERSON')`);
+        await queryRunner.query(`CREATE TABLE "users" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "email" character varying NOT NULL, "passwordHash" character varying NOT NULL, "role" "public"."users_role_enum" NOT NULL, "name" character varying, "phone" character varying, "avatarUrl" character varying, "isSuspended" boolean NOT NULL DEFAULT false, "notificationPrefs" jsonb, "inviteTemplates" jsonb, "counterTemplates" jsonb, "homeownerCounterTemplates" jsonb, "introTemplates" jsonb, "namedJobTemplates" jsonb, "quoteViewNudgeHours" integer, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_97672ac88f789774dd47f7c8be3" UNIQUE ("email"), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TABLE "reviews" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "jobId" uuid NOT NULL, "reviewerId" uuid NOT NULL, "tradespersonId" uuid NOT NULL, "rating" integer NOT NULL, "comment" text, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_c3c015435fedbf60baee6eac0ec" UNIQUE ("jobId"), CONSTRAINT "PK_231ae565c273ee700b283f15c1d" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_3e97fc6b61e44728573c2e3015" ON "reviews" ("tradespersonId") `);
+        await queryRunner.query(`CREATE TABLE "messages" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "jobId" uuid NOT NULL, "senderId" uuid NOT NULL, "body" text NOT NULL DEFAULT '', "attachmentUrls" jsonb NOT NULL DEFAULT '[]', "quote" jsonb, "readAt" TIMESTAMP WITH TIME ZONE, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_18325f38ae6de43878487eff986" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_d3fd57118e2f036e9c2ab6a7ab" ON "messages" ("jobId", "createdAt") `);
+        await queryRunner.query(`CREATE TYPE "public"."notifications_type_enum" AS ENUM('new_bid', 'bid_accepted', 'bid_rejected', 'job_status', 'dispute', 'message', 'review', 'system', 'pro_available', 'match')`);
+        await queryRunner.query(`CREATE TABLE "notifications" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "userId" uuid NOT NULL, "type" "public"."notifications_type_enum" NOT NULL, "title" character varying NOT NULL, "body" text NOT NULL, "link" character varying, "read" boolean NOT NULL DEFAULT false, "meta" jsonb, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_6a72c3c0f683f6462415e653c3a" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_b055cfdba5009facbb972837dd" ON "notifications" ("userId", "read", "createdAt") `);
+        await queryRunner.query(`CREATE TYPE "public"."favorites_targettype_enum" AS ENUM('job', 'pro')`);
+        await queryRunner.query(`CREATE TABLE "favorites" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "userId" uuid NOT NULL, "targetType" "public"."favorites_targettype_enum" NOT NULL, "targetId" uuid NOT NULL, "notes" text, "tags" jsonb, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_0fee0d2ed431ff97cf4253b388c" UNIQUE ("userId", "targetType", "targetId"), CONSTRAINT "PK_890818d27523748dd36a4d1bdc8" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_e747534006c6e3c2f09939da60" ON "favorites" ("userId") `);
+        await queryRunner.query(`CREATE TYPE "public"."audit_logs_action_enum" AS ENUM('user_suspend', 'user_unsuspend', 'dispute_resolve', 'force_cancel', 'verify_tradesperson', 'admin_note', 'match_weights_update', 'best_value_blend_update')`);
+        await queryRunner.query(`CREATE TABLE "audit_logs" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "actorUserId" uuid NOT NULL, "actorEmail" character varying, "action" "public"."audit_logs_action_enum" NOT NULL, "targetType" character varying, "targetId" uuid, "summary" text, "meta" jsonb, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_1bb179d048bbc581caa3b013439" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_cee5459245f652b75eb2759b4c" ON "audit_logs" ("action") `);
+        await queryRunner.query(`CREATE INDEX "IDX_c69efb19bf127c97e6740ad530" ON "audit_logs" ("createdAt") `);
+        await queryRunner.query(`CREATE TABLE "app_configs" ("key" character varying(64) NOT NULL, "value" jsonb NOT NULL, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_25cc0d867a0a6854c68e43224d0" PRIMARY KEY ("key"))`);
+        await queryRunner.query(`ALTER TABLE "tradesperson_profiles" ADD CONSTRAINT "FK_56668286b6dfb93a23e4bb04c85" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "bids" ADD CONSTRAINT "FK_b4d6037792f626ab41a3f6609b5" FOREIGN KEY ("jobId") REFERENCES "jobs"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "bids" ADD CONSTRAINT "FK_53c9ea9c92ddbef357bc84c0a42" FOREIGN KEY ("tradespersonId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "disputes" ADD CONSTRAINT "FK_d424abda2f57327eb459d23d518" FOREIGN KEY ("jobId") REFERENCES "jobs"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "disputes" ADD CONSTRAINT "FK_747b43fbe9acdac10fd4bf41492" FOREIGN KEY ("raisedByUserId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "payment_milestones" ADD CONSTRAINT "FK_41f3712be9037e2b91c906ea239" FOREIGN KEY ("jobId") REFERENCES "jobs"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "jobs" ADD CONSTRAINT "FK_6844e296d0e48ca24bf876e77b2" FOREIGN KEY ("homeownerId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "jobs" ADD CONSTRAINT "FK_b30a74a668eae6af88f6d6af46b" FOREIGN KEY ("acceptedBidId") REFERENCES "bids"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "reviews" ADD CONSTRAINT "FK_c3c015435fedbf60baee6eac0ec" FOREIGN KEY ("jobId") REFERENCES "jobs"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "reviews" ADD CONSTRAINT "FK_f9238c3e3739dc40322f577fc46" FOREIGN KEY ("reviewerId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "reviews" ADD CONSTRAINT "FK_3e97fc6b61e44728573c2e30159" FOREIGN KEY ("tradespersonId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "messages" ADD CONSTRAINT "FK_a0e8732e3c1a616f4424e1d461c" FOREIGN KEY ("jobId") REFERENCES "jobs"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "messages" ADD CONSTRAINT "FK_2db9cf2b3ca111742793f6c37ce" FOREIGN KEY ("senderId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "notifications" ADD CONSTRAINT "FK_692a909ee0fa9383e7859f9b406" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "favorites" ADD CONSTRAINT "FK_e747534006c6e3c2f09939da60f" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "favorites" DROP CONSTRAINT "FK_e747534006c6e3c2f09939da60f"`);
+        await queryRunner.query(`ALTER TABLE "notifications" DROP CONSTRAINT "FK_692a909ee0fa9383e7859f9b406"`);
+        await queryRunner.query(`ALTER TABLE "messages" DROP CONSTRAINT "FK_2db9cf2b3ca111742793f6c37ce"`);
+        await queryRunner.query(`ALTER TABLE "messages" DROP CONSTRAINT "FK_a0e8732e3c1a616f4424e1d461c"`);
+        await queryRunner.query(`ALTER TABLE "reviews" DROP CONSTRAINT "FK_3e97fc6b61e44728573c2e30159"`);
+        await queryRunner.query(`ALTER TABLE "reviews" DROP CONSTRAINT "FK_f9238c3e3739dc40322f577fc46"`);
+        await queryRunner.query(`ALTER TABLE "reviews" DROP CONSTRAINT "FK_c3c015435fedbf60baee6eac0ec"`);
+        await queryRunner.query(`ALTER TABLE "jobs" DROP CONSTRAINT "FK_b30a74a668eae6af88f6d6af46b"`);
+        await queryRunner.query(`ALTER TABLE "jobs" DROP CONSTRAINT "FK_6844e296d0e48ca24bf876e77b2"`);
+        await queryRunner.query(`ALTER TABLE "payment_milestones" DROP CONSTRAINT "FK_41f3712be9037e2b91c906ea239"`);
+        await queryRunner.query(`ALTER TABLE "disputes" DROP CONSTRAINT "FK_747b43fbe9acdac10fd4bf41492"`);
+        await queryRunner.query(`ALTER TABLE "disputes" DROP CONSTRAINT "FK_d424abda2f57327eb459d23d518"`);
+        await queryRunner.query(`ALTER TABLE "bids" DROP CONSTRAINT "FK_53c9ea9c92ddbef357bc84c0a42"`);
+        await queryRunner.query(`ALTER TABLE "bids" DROP CONSTRAINT "FK_b4d6037792f626ab41a3f6609b5"`);
+        await queryRunner.query(`ALTER TABLE "tradesperson_profiles" DROP CONSTRAINT "FK_56668286b6dfb93a23e4bb04c85"`);
+        await queryRunner.query(`DROP TABLE "app_configs"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_c69efb19bf127c97e6740ad530"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_cee5459245f652b75eb2759b4c"`);
+        await queryRunner.query(`DROP TABLE "audit_logs"`);
+        await queryRunner.query(`DROP TYPE "public"."audit_logs_action_enum"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_e747534006c6e3c2f09939da60"`);
+        await queryRunner.query(`DROP TABLE "favorites"`);
+        await queryRunner.query(`DROP TYPE "public"."favorites_targettype_enum"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_b055cfdba5009facbb972837dd"`);
+        await queryRunner.query(`DROP TABLE "notifications"`);
+        await queryRunner.query(`DROP TYPE "public"."notifications_type_enum"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_d3fd57118e2f036e9c2ab6a7ab"`);
+        await queryRunner.query(`DROP TABLE "messages"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_3e97fc6b61e44728573c2e3015"`);
+        await queryRunner.query(`DROP TABLE "reviews"`);
+        await queryRunner.query(`DROP TABLE "users"`);
+        await queryRunner.query(`DROP TYPE "public"."users_role_enum"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_2b6d4fc98010e4fb9c4c4b8e6a"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_a0c30e3eb9649fe7fbcd336a63"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_656cf816796738c59563a79787"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_0068642c59f993cea088c23755"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_46cfdfcc6cf4e7d690cdbc3d60"`);
+        await queryRunner.query(`DROP TABLE "jobs"`);
+        await queryRunner.query(`DROP TYPE "public"."jobs_schedulestatus_enum"`);
+        await queryRunner.query(`DROP TYPE "public"."jobs_paymentstatus_enum"`);
+        await queryRunner.query(`DROP TYPE "public"."jobs_status_enum"`);
+        await queryRunner.query(`DROP TYPE "public"."jobs_category_enum"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_41f3712be9037e2b91c906ea23"`);
+        await queryRunner.query(`DROP TABLE "payment_milestones"`);
+        await queryRunner.query(`DROP TYPE "public"."payment_milestones_status_enum"`);
+        await queryRunner.query(`DROP TABLE "disputes"`);
+        await queryRunner.query(`DROP TYPE "public"."disputes_resolution_enum"`);
+        await queryRunner.query(`DROP TYPE "public"."disputes_status_enum"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_b4d6037792f626ab41a3f6609b"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_53c9ea9c92ddbef357bc84c0a4"`);
+        await queryRunner.query(`DROP TABLE "bids"`);
+        await queryRunner.query(`DROP TYPE "public"."bids_status_enum"`);
+        await queryRunner.query(`DROP TABLE "tradesperson_profiles"`);
+        await queryRunner.query(`DROP TYPE "public"."tradesperson_profiles_verificationstatus_enum"`);
+    }
+
+}

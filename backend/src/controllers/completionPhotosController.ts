@@ -1,93 +1,90 @@
-import { Request, Response } from "express";
-import { param } from "../utils/params";
+import type { NextFunction, Request, Response } from "express";
 import { AppDataSource } from "../data-source";
-import { Bid } from "../entities/Bid";
 import { Job, JobStatus } from "../entities/Job";
+import { Upload, UploadKind } from "../entities/Upload";
 import { UserRole } from "../entities/User";
+import { toJob } from "../serializers";
+import { assertPrivateAccess, loadJobContext } from "../policies/jobPolicy";
+import { viewer } from "./jobController";
+import { filesOf } from "../middleware/upload";
+import { deleteUploadByRef, discardFiles, fileRef, nameFromRef, storeUploads } from "../services/files";
+import { badRequest, conflict, forbidden } from "../http/errors";
 
-const jobRepo = () => AppDataSource.getRepository(Job);
-const bidRepo = () => AppDataSource.getRepository(Bid);
-
-async function canEditCompletionPhotos(job: Job, userId: string, role: UserRole) {
-  if (role === UserRole.ADMIN) return true;
-  if (job.homeownerId === userId) return true;
-  if (job.acceptedBidId) {
-    const accepted = await bidRepo().findOne({ where: { id: job.acceptedBidId } });
-    if (accepted && accepted.tradespersonId === userId) return true;
-  }
-  return false;
-}
-
-const EDITABLE = [
+const EDITABLE: JobStatus[] = [
   JobStatus.AWARDED,
   JobStatus.IN_PROGRESS,
+  JobStatus.PENDING_CONFIRMATION,
   JobStatus.COMPLETED,
   JobStatus.DISPUTED,
 ];
+const MAX_PER_SIDE = 8;
 
-export async function uploadCompletionPhotos(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
+/** Runs before multer so nothing is written for people who can't upload here. */
+export async function authorizeCompletionUpload(req: Request, _res: Response, next: NextFunction) {
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertPrivateAccess(ctx, viewer(req));
+  if (!EDITABLE.includes(ctx.job.status)) {
+    throw conflict("Completion photos can only be added once the job is awarded", "INVALID_STATUS");
   }
-  if (!(await canEditCompletionPhotos(job, req.user!.id, req.user!.role))) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-  if (!EDITABLE.includes(job.status)) {
-    return res.status(400).json({
-      message: "Completion photos can only be added on awarded, in-progress, completed, or disputed jobs",
-      code: "INVALID_STATUS",
-    });
-  }
-
-  const files = req.files as
-    | { [fieldname: string]: Express.Multer.File[] }
-    | undefined;
-
-  const beforeFiles = files?.before || [];
-  const afterFiles = files?.after || [];
-
-  const beforeUrls = beforeFiles.map((f) => `/uploads/${f.filename}`);
-  const afterUrls = afterFiles.map((f) => `/uploads/${f.filename}`);
-
-  if (!beforeUrls.length && !afterUrls.length) {
-    return res.status(400).json({
-      message: "Attach at least one before or after image (fields: before, after)",
-      code: "NO_FILES",
-    });
-  }
-
-  job.beforePhotoUrls = [...(job.beforePhotoUrls || []), ...beforeUrls].slice(0, 8);
-  job.afterPhotoUrls = [...(job.afterPhotoUrls || []), ...afterUrls].slice(0, 8);
-  await jobRepo().save(job);
-
-  return res.json({
-    job,
-    added: { before: beforeUrls, after: afterUrls },
-  });
+  next();
 }
 
-/** Remove a single completion photo by URL + kind. */
+export async function uploadCompletionPhotos(req: Request, res: Response) {
+  const before = filesOf(req, "before");
+  const after = filesOf(req, "after");
+  if (!before.length && !after.length) {
+    throw badRequest("Attach at least one before or after image (fields: before, after)", "NO_FILES");
+  }
+  const jobId = req.valid.params.id;
+  let stored: string[] = [];
+  const result = await AppDataSource.transaction(async (m) => {
+    const current = await m.query(
+      `SELECT "beforePhotoUrls", "afterPhotoUrls", "status" FROM "jobs" WHERE "id" = $1 FOR UPDATE`,
+      [jobId]
+    );
+    const job = current[0] as { beforePhotoUrls: string[]; afterPhotoUrls: string[]; status: JobStatus };
+    if (!EDITABLE.includes(job.status)) throw conflict("This job no longer accepts photos", "INVALID_STATUS");
+    if (job.beforePhotoUrls.length + before.length > MAX_PER_SIDE || job.afterPhotoUrls.length + after.length > MAX_PER_SIDE) {
+      throw badRequest(`Each side can have at most ${MAX_PER_SIDE} photos`, "TOO_MANY_FILES");
+    }
+    const ctx = { kind: UploadKind.COMPLETION, ownerUserId: req.user!.id, jobId };
+    const b = (await storeUploads(before, ctx, m)).map((u) => fileRef(u.name));
+    stored = [...b];
+    const a = (await storeUploads(after, ctx, m)).map((u) => fileRef(u.name));
+    stored.push(...a);
+    await m.update(Job, { id: jobId }, {
+      beforePhotoUrls: [...job.beforePhotoUrls, ...b],
+      afterPhotoUrls: [...job.afterPhotoUrls, ...a],
+    });
+    return { before: b, after: a };
+  }).catch(async (err) => {
+    await discardFiles(stored);
+    throw err;
+  });
+  const job = await AppDataSource.getRepository(Job).findOneOrFail({ where: { id: jobId } });
+  return res.json({ job: toJob(job, "private"), added: result });
+}
+
+/** Photos are evidence: they can't be removed during a dispute, and only by whoever uploaded them. */
 export async function removeCompletionPhoto(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertPrivateAccess(ctx, viewer(req));
+  const { url, kind } = req.valid.body;
+  if (ctx.job.status === JobStatus.DISPUTED) {
+    throw conflict("Photos can't be removed while the job is in dispute", "EVIDENCE_LOCKED");
   }
-  if (!(await canEditCompletionPhotos(job, req.user!.id, req.user!.role))) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
+  const list = kind === "before" ? ctx.job.beforePhotoUrls : ctx.job.afterPhotoUrls;
+  if (!list.includes(url)) throw badRequest("That photo isn't on this job", "NOT_ON_JOB");
+  const upload = await AppDataSource.getRepository(Upload).findOne({ where: { name: nameFromRef(url)! } });
+  if (upload && upload.ownerUserId !== req.user!.id && req.user!.role !== UserRole.ADMIN) {
+    throw forbidden("Only the person who uploaded a photo can remove it", "NOT_UPLOADER");
   }
-
-  const url = String(req.body?.url || "").trim();
-  const kind = String(req.body?.kind || "").toLowerCase();
-  if (!url || (kind !== "before" && kind !== "after")) {
-    return res.status(400).json({ message: "url and kind (before|after) are required" });
-  }
-
-  if (kind === "before") {
-    job.beforePhotoUrls = (job.beforePhotoUrls || []).filter((u) => u !== url);
-  } else {
-    job.afterPhotoUrls = (job.afterPhotoUrls || []).filter((u) => u !== url);
-  }
-  await jobRepo().save(job);
-  return res.json({ job });
+  const next = list.filter((u) => u !== url);
+  await AppDataSource.getRepository(Job).update(
+    { id: ctx.job.id },
+    kind === "before" ? { beforePhotoUrls: next } : { afterPhotoUrls: next }
+  );
+  await deleteUploadByRef(url);
+  const job = await AppDataSource.getRepository(Job).findOneOrFail({ where: { id: ctx.job.id } });
+  return res.json({ job: toJob(job, "private") });
 }

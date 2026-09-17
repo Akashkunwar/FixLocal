@@ -1,364 +1,155 @@
-import { Request, Response } from "express";
-import { param } from "../utils/params";
+import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
-import { Bid } from "../entities/Bid";
 import { Job, JobStatus } from "../entities/Job";
-import { UserRole } from "../entities/User";
 import { NotificationType } from "../entities/Notification";
 import { createNotification } from "../utils/notifications";
+import { toJob } from "../serializers";
+import {
+  assertAwardedProOrAdmin,
+  assertOwnerOrAdmin,
+  loadJobContext,
+  type JobContext,
+} from "../policies/jobPolicy";
+import { viewer } from "./jobController";
+import { badRequest, conflict } from "../http/errors";
 
-const jobRepo = () => AppDataSource.getRepository(Job);
-const bidRepo = () => AppDataSource.getRepository(Bid);
+const ACTIVE: JobStatus[] = [JobStatus.AWARDED, JobStatus.IN_PROGRESS, JobStatus.PENDING_CONFIRMATION, JobStatus.COMPLETED];
 
-const ALLOWED_CADENCE = new Set(["weekly", "monthly", "amc"]);
-const ACTIVE = [JobStatus.AWARDED, JobStatus.IN_PROGRESS, JobStatus.COMPLETED];
-
-async function getAwardedProId(job: Job): Promise<string | undefined> {
-  if (!job.acceptedBidId) return undefined;
-  const accepted = await bidRepo().findOne({ where: { id: job.acceptedBidId } });
-  return accepted?.tradespersonId;
-}
-
-function normalizeCadence(raw: unknown): string {
-  const v = String(raw || "").toLowerCase().trim();
-  return ALLOWED_CADENCE.has(v) ? v : "monthly";
-}
-
-function normalizeProposalBody(body: any) {
-  const packageLabel = String(body?.packageLabel || "").trim().slice(0, 80);
-  const amountMin = Number(body?.amountMin);
-  if (!packageLabel || !Number.isFinite(amountMin) || amountMin < 0) {
-    return { error: "packageLabel and amountMin are required" as const };
+function assertActive(ctx: JobContext) {
+  if (!ACTIVE.includes(ctx.job.status)) {
+    throw conflict("Recurring packages are available on awarded, in-progress or completed jobs", "INVALID_STATUS");
   }
-  let amountMax: number | null | undefined = undefined;
-  if (body?.amountMax != null && body?.amountMax !== "") {
-    const n = Number(body.amountMax);
-    if (Number.isFinite(n) && n >= amountMin) amountMax = Math.round(n);
-  }
-  const unit =
-    body?.unit != null && String(body.unit).trim()
-      ? String(body.unit).trim().slice(0, 40)
-      : undefined;
-  const note =
-    body?.note != null && String(body.note).trim()
-      ? String(body.note).trim().slice(0, 500)
-      : undefined;
-  return {
-    cadence: normalizeCadence(body?.cadence),
-    packageLabel,
-    amountMin: Math.round(amountMin),
-    amountMax,
-    unit,
-    note,
-  };
 }
 
-/** Professional proposes a soft AMC / recurring package on an awarded job. */
+async function saveProposal(ctx: JobContext, proposal: Job["amcProposal"]) {
+  await AppDataSource.getRepository(Job).update({ id: ctx.job.id }, { amcProposal: proposal });
+  return AppDataSource.getRepository(Job).findOneOrFail({ where: { id: ctx.job.id } });
+}
+
+const statusFor = (action: string) =>
+  action === "accept" ? ("accepted" as const) : action === "decline" ? ("declined" as const) : ("countered" as const);
+
 export async function proposeAmc(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertAwardedProOrAdmin(ctx, viewer(req), "Only the hired professional can propose a recurring package");
+  assertActive(ctx);
+  if (ctx.job.amcProposal?.status === "requested") {
+    throw badRequest("The client already requested a package — reply to their request first", "CLIENT_REQUEST_OPEN");
   }
-  if (!ACTIVE.includes(job.status)) {
-    return res.status(400).json({
-      message: "AMC proposals are available on awarded, in-progress, or completed jobs",
-      code: "INVALID_STATUS",
-    });
-  }
-
-  const proId = await getAwardedProId(job);
-  const isPro = proId === req.user!.id;
-  const isAdmin = req.user!.role === UserRole.ADMIN;
-  if (!isPro && !isAdmin) {
-    return res.status(403).json({
-      message: "Only the awarded professional can propose an AMC package",
-      code: "FORBIDDEN",
-    });
-  }
-
-
-  const open = job.amcProposal;
-  if (open && open.status === "requested") {
-    return res.status(400).json({
-      message: "Client already requested AMC — reply to their request first",
-      code: "CLIENT_REQUEST_OPEN",
-    });
-  }
-
-  const parsed = normalizeProposalBody(req.body ?? {});
-  if ("error" in parsed) {
-    return res.status(400).json({ message: parsed.error, code: "INVALID_BODY" });
-  }
-
-  const now = new Date().toISOString();
-  job.amcProposal = {
+  const b = req.valid.body;
+  const job = await saveProposal(ctx, {
     status: "proposed",
-    cadence: parsed.cadence,
-    packageLabel: parsed.packageLabel,
-    amountMin: parsed.amountMin,
-    ...(parsed.amountMax != null ? { amountMax: parsed.amountMax } : {}),
-    ...(parsed.unit ? { unit: parsed.unit } : {}),
-    ...(parsed.note ? { note: parsed.note } : {}),
+    cadence: b.cadence,
+    packageLabel: b.packageLabel,
+    amountMin: b.amountMin,
+    ...(b.amountMax != null ? { amountMax: b.amountMax } : {}),
+    ...(b.unit ? { unit: b.unit } : {}),
+    ...(b.note ? { note: b.note } : {}),
     proposedByUserId: req.user!.id,
-    proposedAt: now,
-  };
-  await jobRepo().save(job);
-
-  await createNotification({
-    userId: job.homeownerId,
-    type: NotificationType.JOB_STATUS,
-    title: "Recurring / AMC proposal",
-    body: `${parsed.packageLabel} (${parsed.cadence}) proposed on "${job.title}". Soft only — reply on the job.`,
-    link: `/homeowner/jobs/${job.id}`,
-    meta: { jobId: job.id, amc: true },
+    proposedAt: new Date().toISOString(),
   });
-
-  return res.json({ job, message: "AMC / recurring proposal sent" });
+  await createNotification({
+    userId: ctx.job.homeownerId,
+    type: NotificationType.JOB_STATUS,
+    title: "Recurring package proposal",
+    body: `${b.packageLabel} (${b.cadence}) proposed on "${ctx.job.title}". Reply on the job.`,
+    link: `/client/jobs/${ctx.job.id}`,
+    meta: { jobId: ctx.job.id, amc: true },
+  });
+  return res.json({ job: toJob(job, "private"), message: "Recurring package proposal sent" });
 }
 
-/**
- * Client replies to a soft AMC proposal: accept | decline | counter.
- * Counter may include replyCadence + replyNote (no price engine).
- */
 export async function replyAmc(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-
-  const isOwner = job.homeownerId === req.user!.id;
-  const isAdmin = req.user!.role === UserRole.ADMIN;
-  if (!isOwner && !isAdmin) {
-    return res.status(403).json({
-      message: "Only the client can reply to an AMC proposal",
-      code: "FORBIDDEN",
-    });
-  }
-
-  const existing = job.amcProposal;
-  if (!existing || existing.status !== "proposed") {
-    return res.status(400).json({
-      message: "No open AMC proposal to reply to",
-      code: "NO_PROPOSAL",
-    });
-  }
-
-  const action = String(req.body?.action || "").toLowerCase().trim();
-  if (!["accept", "decline", "counter"].includes(action)) {
-    return res.status(400).json({
-      message: "action must be accept, decline, or counter",
-      code: "INVALID_ACTION",
-    });
-  }
-
-  const replyNote =
-    req.body?.replyNote != null && String(req.body.replyNote).trim()
-      ? String(req.body.replyNote).trim().slice(0, 500)
-      : undefined;
-  const replyCadence =
-    req.body?.replyCadence != null
-      ? normalizeCadence(req.body.replyCadence)
-      : undefined;
-
-  const now = new Date().toISOString();
-  const status =
-    action === "accept" ? "accepted" : action === "decline" ? "declined" : "countered";
-
-  job.amcProposal = {
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertOwnerOrAdmin(ctx, viewer(req), "Only the client can reply to this proposal");
+  assertActive(ctx);
+  const existing = ctx.job.amcProposal;
+  if (!existing || existing.status !== "proposed") throw badRequest("No open proposal to reply to", "NO_PROPOSAL");
+  const b = req.valid.body;
+  const status = statusFor(b.action);
+  const job = await saveProposal(ctx, {
     ...existing,
     status,
-    ...(replyNote ? { replyNote } : { replyNote: existing.replyNote }),
-    ...(replyCadence ? { replyCadence } : {}),
-    repliedAt: now,
-  };
-  await jobRepo().save(job);
-
-  const proId = await getAwardedProId(job);
-  if (proId) {
-    const title =
-      action === "accept"
-        ? "AMC proposal accepted"
-        : action === "decline"
-          ? "AMC proposal declined"
-          : "AMC counter reply";
-    await createNotification({
-      userId: proId,
-      type: NotificationType.JOB_STATUS,
-      title,
-      body: `Client replied to your recurring proposal on "${job.title}".`,
-      link: `/tradesperson/jobs/${job.id}`,
-      meta: { jobId: job.id, amc: true, action },
-    });
-  }
-
-  return res.json({ job, message: `AMC proposal ${status}` });
-}
-
-
-/** Client requests a soft AMC / recurring package (inverse of pro propose). */
-export async function requestAmc(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-  if (!ACTIVE.includes(job.status)) {
-    return res.status(400).json({
-      message: "AMC requests are available on awarded, in-progress, or completed jobs",
-      code: "INVALID_STATUS",
-    });
-  }
-
-  const isOwner = job.homeownerId === req.user!.id;
-  const isAdmin = req.user!.role === UserRole.ADMIN;
-  if (!isOwner && !isAdmin) {
-    return res.status(403).json({
-      message: "Only the client can request an AMC package",
-      code: "FORBIDDEN",
-    });
-  }
-
-  const existing = job.amcProposal;
-  if (existing && (existing.status === "proposed" || existing.status === "requested")) {
-    return res.status(400).json({
-      message: "An open AMC proposal or request already exists — reply or wait",
-      code: "ALREADY_OPEN",
-    });
-  }
-
-  const parsed = normalizeProposalBody(req.body ?? {});
-  if ("error" in parsed) {
-    return res.status(400).json({ message: parsed.error, code: "INVALID_BODY" });
-  }
-
-  const now = new Date().toISOString();
-  job.amcProposal = {
-    status: "requested",
-    cadence: parsed.cadence,
-    packageLabel: parsed.packageLabel,
-    amountMin: parsed.amountMin,
-    ...(parsed.amountMax != null ? { amountMax: parsed.amountMax } : {}),
-    ...(parsed.unit ? { unit: parsed.unit } : {}),
-    ...(parsed.note ? { note: parsed.note } : {}),
-    proposedByUserId: req.user!.id,
-    proposedAt: now,
-  };
-  await jobRepo().save(job);
-
-  const proId = await getAwardedProId(job);
-  if (proId) {
-    await createNotification({
-      userId: proId,
-      type: NotificationType.JOB_STATUS,
-      title: "Client requested AMC / recurring",
-      body: `${parsed.packageLabel} (${parsed.cadence}) requested on "${job.title}". Soft only — reply on the job.`,
-      link: `/tradesperson/jobs/${job.id}`,
-      meta: { jobId: job.id, amc: true, action: "request" },
-    });
-  }
-
-  return res.json({ job, message: "AMC / recurring request sent" });
-}
-
-/**
- * Professional replies to a client AMC request: accept | decline | counter.
- */
-export async function replyAmcRequest(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-
-  const proId = await getAwardedProId(job);
-  const isPro = proId === req.user!.id;
-  const isAdmin = req.user!.role === UserRole.ADMIN;
-  if (!isPro && !isAdmin) {
-    return res.status(403).json({
-      message: "Only the awarded professional can reply to an AMC request",
-      code: "FORBIDDEN",
-    });
-  }
-
-  const existing = job.amcProposal;
-  if (!existing || existing.status !== "requested") {
-    return res.status(400).json({
-      message: "No open AMC request to reply to",
-      code: "NO_REQUEST",
-    });
-  }
-
-  const action = String(req.body?.action || "").toLowerCase().trim();
-  if (!["accept", "decline", "counter"].includes(action)) {
-    return res.status(400).json({
-      message: "action must be accept, decline, or counter",
-      code: "INVALID_ACTION",
-    });
-  }
-
-  const replyNote =
-    req.body?.replyNote != null && String(req.body.replyNote).trim()
-      ? String(req.body.replyNote).trim().slice(0, 500)
-      : undefined;
-  const replyCadence =
-    req.body?.replyCadence != null
-      ? normalizeCadence(req.body.replyCadence)
-      : undefined;
-
-  // Optional: pro may refine package amounts when accepting / countering
-  let amountMin = existing.amountMin;
-  let amountMax = existing.amountMax;
-  let packageLabel = existing.packageLabel;
-  let unit = existing.unit;
-  let cadence = existing.cadence;
-  if (req.body?.packageLabel != null && String(req.body.packageLabel).trim()) {
-    packageLabel = String(req.body.packageLabel).trim().slice(0, 80);
-  }
-  if (req.body?.amountMin != null && req.body?.amountMin !== "") {
-    const n = Number(req.body.amountMin);
-    if (Number.isFinite(n) && n >= 0) amountMin = Math.round(n);
-  }
-  if (req.body?.amountMax != null && req.body?.amountMax !== "") {
-    const n = Number(req.body.amountMax);
-    if (Number.isFinite(n) && n >= amountMin) amountMax = Math.round(n);
-  }
-  if (req.body?.unit != null && String(req.body.unit).trim()) {
-    unit = String(req.body.unit).trim().slice(0, 40);
-  }
-  if (req.body?.cadence != null) {
-    cadence = normalizeCadence(req.body.cadence);
-  }
-
-  const now = new Date().toISOString();
-  const status =
-    action === "accept" ? "accepted" : action === "decline" ? "declined" : "countered";
-
-  job.amcProposal = {
-    ...existing,
-    status,
-    packageLabel,
-    amountMin,
-    ...(amountMax != null ? { amountMax } : {}),
-    ...(unit ? { unit } : {}),
-    cadence,
-    ...(replyNote ? { replyNote } : { replyNote: existing.replyNote }),
-    ...(replyCadence ? { replyCadence } : {}),
-    repliedAt: now,
-  };
-  await jobRepo().save(job);
-
-  const title =
-    action === "accept"
-      ? "AMC request accepted"
-      : action === "decline"
-        ? "AMC request declined"
-        : "AMC counter from professional";
-  await createNotification({
-    userId: job.homeownerId,
-    type: NotificationType.JOB_STATUS,
-    title,
-    body: `Your professional replied to the recurring request on "${job.title}".`,
-    link: `/homeowner/jobs/${job.id}`,
-    meta: { jobId: job.id, amc: true, action },
+    replyNote: b.replyNote ?? existing.replyNote ?? null,
+    ...(b.replyCadence ? { replyCadence: b.replyCadence } : {}),
+    repliedAt: new Date().toISOString(),
   });
+  if (ctx.acceptedProId) {
+    await createNotification({
+      userId: ctx.acceptedProId,
+      type: NotificationType.JOB_STATUS,
+      title: status === "accepted" ? "Recurring package accepted" : status === "declined" ? "Recurring package declined" : "Client replied to your package",
+      body: `The client replied to your recurring package on "${ctx.job.title}".`,
+      link: `/professional/jobs/${ctx.job.id}`,
+      meta: { jobId: ctx.job.id, amc: true, action: b.action },
+    });
+  }
+  return res.json({ job: toJob(job, "private"), message: `Proposal ${status}` });
+}
 
-  return res.json({ job, message: `AMC request ${status}` });
+export async function requestAmc(req: Request, res: Response) {
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertOwnerOrAdmin(ctx, viewer(req), "Only the client can request a recurring package");
+  assertActive(ctx);
+  const existing = ctx.job.amcProposal;
+  if (existing && (existing.status === "proposed" || existing.status === "requested")) {
+    throw badRequest("A proposal or request is already open — reply or wait", "ALREADY_OPEN");
+  }
+  const b = req.valid.body;
+  const job = await saveProposal(ctx, {
+    status: "requested",
+    cadence: b.cadence,
+    packageLabel: b.packageLabel,
+    amountMin: b.amountMin,
+    ...(b.amountMax != null ? { amountMax: b.amountMax } : {}),
+    ...(b.unit ? { unit: b.unit } : {}),
+    ...(b.note ? { note: b.note } : {}),
+    proposedByUserId: req.user!.id,
+    proposedAt: new Date().toISOString(),
+  });
+  if (ctx.acceptedProId) {
+    await createNotification({
+      userId: ctx.acceptedProId,
+      type: NotificationType.JOB_STATUS,
+      title: "Client requested a recurring package",
+      body: `${b.packageLabel} (${b.cadence}) requested on "${ctx.job.title}". Reply on the job.`,
+      link: `/professional/jobs/${ctx.job.id}`,
+      meta: { jobId: ctx.job.id, amc: true, action: "request" },
+    });
+  }
+  return res.json({ job: toJob(job, "private"), message: "Recurring package request sent" });
+}
+
+export async function replyAmcRequest(req: Request, res: Response) {
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertAwardedProOrAdmin(ctx, viewer(req), "Only the hired professional can reply to this request");
+  assertActive(ctx);
+  const existing = ctx.job.amcProposal;
+  if (!existing || existing.status !== "requested") throw badRequest("No open request to reply to", "NO_REQUEST");
+  const b = req.valid.body;
+  const amountMin = b.amountMin != null ? Math.round(b.amountMin) : existing.amountMin;
+  let amountMax = b.amountMax != null ? Math.round(b.amountMax) : existing.amountMax;
+  if (amountMax != null && amountMax < amountMin) amountMax = null;
+  const status = statusFor(b.action);
+  const job = await saveProposal(ctx, {
+    ...existing,
+    status,
+    packageLabel: b.packageLabel || existing.packageLabel,
+    amountMin,
+    amountMax: amountMax ?? null,
+    unit: b.unit || existing.unit || null,
+    cadence: b.cadence || existing.cadence,
+    replyNote: b.replyNote ?? existing.replyNote ?? null,
+    ...(b.replyCadence ? { replyCadence: b.replyCadence } : {}),
+    repliedAt: new Date().toISOString(),
+  });
+  await createNotification({
+    userId: ctx.job.homeownerId,
+    type: NotificationType.JOB_STATUS,
+    title: status === "accepted" ? "Recurring request accepted" : status === "declined" ? "Recurring request declined" : "Professional countered your request",
+    body: `Your professional replied to the recurring request on "${ctx.job.title}".`,
+    link: `/client/jobs/${ctx.job.id}`,
+    meta: { jobId: ctx.job.id, amc: true, action: b.action },
+  });
+  return res.json({ job: toJob(job, "private"), message: `Request ${status}` });
 }

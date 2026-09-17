@@ -1,4 +1,6 @@
+import { numeric } from "../db/numeric";
 import {
+  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -34,6 +36,8 @@ export enum JobStatus {
   BIDDING_CLOSED = "bidding_closed",
   AWARDED = "awarded",
   IN_PROGRESS = "in_progress",
+  /** Pro marked the work done; waiting for the client to confirm (auto-confirms after N days). */
+  PENDING_CONFIRMATION = "pending_confirmation",
   COMPLETED = "completed",
   CANCELLED = "cancelled",
   DISPUTED = "disputed",
@@ -62,6 +66,15 @@ export enum ScheduleStatus {
 @Index(["createdAt"])
 @Index(["area"])
 @Index(["city"])
+@Index(["homeownerId", "createdAt"])
+@Index(["status", "createdAt"])
+@Check("CHK_job_max_bids", `"maxBids" >= 1 AND "maxBids" <= 50`)
+@Check("CHK_job_budget_min", `"budgetMin" IS NULL OR "budgetMin" >= 0`)
+@Check("CHK_job_budget_max", `"budgetMax" IS NULL OR "budgetMax" >= 0`)
+@Check("CHK_job_budget_order", `"budgetMin" IS NULL OR "budgetMax" IS NULL OR "budgetMin" <= "budgetMax"`)
+@Check("CHK_job_lat", `"lat" IS NULL OR ("lat" >= -90 AND "lat" <= 90)`)
+@Check("CHK_job_lng", `"lng" IS NULL OR ("lng" >= -180 AND "lng" <= 180)`)
+@Check("CHK_job_escrow", `"escrowAmount" IS NULL OR "escrowAmount" >= 0`)
 export class Job {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -122,10 +135,10 @@ export class Job {
   @Column({ type: "int", default: 5 })
   maxBids!: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric, nullable: true })
   budgetMin?: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric, nullable: true })
   budgetMax?: number;
 
   @Column({ type: "varchar", nullable: true })
@@ -169,7 +182,7 @@ export class Job {
   })
   paymentStatus!: PaymentStatus;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric, nullable: true })
   escrowAmount?: number;
 
   /** How escrow was funded on accept: structured quote vs bid amount. */
@@ -184,10 +197,10 @@ export class Job {
   scheduleStatus!: ScheduleStatus;
 
   @Column({ type: "timestamptz", nullable: true })
-  scheduledStart?: Date;
+  scheduledStart?: Date | null;
 
   @Column({ type: "timestamptz", nullable: true })
-  scheduledEnd?: Date;
+  scheduledEnd?: Date | null;
 
   @Column({ type: "uuid", nullable: true })
   scheduleProposedByUserId?: string;
@@ -218,12 +231,20 @@ export class Job {
   @OneToMany(() => PaymentMilestone, (m) => m.job)
   milestones!: PaymentMilestone[];
 
+  /** When the pro marked work done (drives auto-confirm). */
+  @Column({ type: "timestamptz", nullable: true })
+  pendingConfirmationAt?: Date | null;
+
+  /** Client allowed completion photos to be published on the pro's portfolio. */
+  @Column({ type: "boolean", default: false })
+  photoConsent!: boolean;
+
   @Column({ type: "timestamptz", nullable: true })
   completedAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

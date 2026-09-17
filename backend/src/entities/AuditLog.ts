@@ -15,6 +15,9 @@ export enum AuditAction {
   ADMIN_NOTE = "admin_note",
   MATCH_WEIGHTS_UPDATE = "match_weights_update",
   BEST_VALUE_BLEND_UPDATE = "best_value_blend_update",
+  REPORT_RESOLVE = "report_resolve",
+  USER_DELETE = "user_delete",
+  AUTO_CONFIRM = "auto_confirm",
 }
 
 @Entity("audit_logs")
@@ -45,6 +48,6 @@ export class AuditLog {
   @Column({ type: "jsonb", nullable: true })
   meta?: Record<string, unknown>;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

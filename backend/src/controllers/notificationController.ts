@@ -1,51 +1,57 @@
-import { Request, Response } from "express";
-import { param } from "../utils/params";
+import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { Notification } from "../entities/Notification";
-import { sseInit, sseSubscribe } from "../utils/sse";
+import { JobInvite } from "../entities/JobInvite";
+import { openStream } from "../utils/sse";
+import { toNotification } from "../serializers";
+import { notFound } from "../http/errors";
+
+const repo = () => AppDataSource.getRepository(Notification);
 
 export async function listNotifications(req: Request, res: Response) {
-  const unreadOnly = String(req.query.unread || "") === "1";
-  const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || "30"), 10) || 30));
-
-  const qb = AppDataSource.getRepository(Notification)
+  const { unread, limit, before } = req.valid.query;
+  const qb = repo()
     .createQueryBuilder("n")
     .where("n.userId = :userId", { userId: req.user!.id })
     .orderBy("n.createdAt", "DESC")
-    .take(limit);
-
-  if (unreadOnly) qb.andWhere("n.read = false");
-
-  const [notifications, total] = await qb.getManyAndCount();
-  const unreadCount = await AppDataSource.getRepository(Notification).count({
-    where: { userId: req.user!.id, read: false },
-  });
-
-  return res.json({ notifications, unreadCount, total });
+    .take(limit ?? 30);
+  if (unread) qb.andWhere("n.read = false");
+  if (before) qb.andWhere("n.createdAt < :before", { before });
+  const [rows, total] = await qb.getManyAndCount();
+  const unreadCount = await repo().count({ where: { userId: req.user!.id, read: false } });
+  return res.json({ notifications: rows.map(toNotification), unreadCount, total });
 }
 
 export async function markNotificationRead(req: Request, res: Response) {
-  const repo = AppDataSource.getRepository(Notification);
-  const n = await repo.findOne({ where: { id: param(req, "id"), userId: req.user!.id } });
-  if (!n) return res.status(404).json({ message: "Not found", code: "NOT_FOUND" });
-  n.read = true;
-  await repo.save(n);
-  return res.json({ notification: n });
+  const n = await repo().findOne({ where: { id: req.valid.params.id, userId: req.user!.id } });
+  if (!n) throw notFound("Notification not found");
+  if (!n.read) {
+    await repo().update({ id: n.id }, { read: true });
+    n.read = true;
+    // Opening an invite notification counts as a click for invite analytics.
+    const inviteId = typeof n.meta?.inviteId === "string" ? n.meta.inviteId : null;
+    if (inviteId) {
+      await AppDataSource.getRepository(JobInvite)
+        .createQueryBuilder()
+        .update()
+        .set({ clickedAt: () => `COALESCE("clickedAt", now())`, openedAt: () => `COALESCE("openedAt", now())` })
+        .where("id = :id AND tradespersonId = :uid", { id: inviteId, uid: req.user!.id })
+        .execute();
+    }
+  }
+  return res.json({ notification: toNotification(n) });
 }
 
 export async function markAllNotificationsRead(req: Request, res: Response) {
-  await AppDataSource.getRepository(Notification)
+  await repo()
     .createQueryBuilder()
     .update(Notification)
     .set({ read: true })
-    .where("userId = :userId AND read = false", { userId: req.user!.id })
+    .where(`"userId" = :userId AND "read" = false`, { userId: req.user!.id })
     .execute();
   return res.json({ ok: true });
 }
 
-/** SSE stream for the notification bell. Auth via Bearer or ?token=. */
 export async function streamNotifications(req: Request, res: Response) {
-  sseInit(res);
-  sseSubscribe(res, req.user!.id);
-  // Keep request open; heartbeat handled in sseSubscribe
+  openStream(res, req.user!.id);
 }

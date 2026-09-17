@@ -1,976 +1,476 @@
-import { Request, Response } from "express";
-import { param } from "../utils/params";
+import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { TradespersonProfile, VerificationStatus } from "../entities/TradespersonProfile";
 import { User, UserRole } from "../entities/User";
-import { Review } from "../entities/Review";
+import { Review, ReviewDirection } from "../entities/Review";
 import { Bid, BidStatus } from "../entities/Bid";
-import { JobStatus } from "../entities/Job";
-import { notifyFavoritersProAvailable } from "../utils/matchAlerts";
-import { haversineKm, parseCoordPair } from "../utils/geo";
+import { Job, JobStatus } from "../entities/Job";
+import { JobInvite } from "../entities/JobInvite";
+import { Notification, NotificationType } from "../entities/Notification";
+import { Favorite, FavoriteTargetType } from "../entities/Favorite";
+import { Upload, UploadKind } from "../entities/Upload";
 import { buildResponseSla, buildSlaTrends, hoursBetween, maxHoursForTier } from "../utils/responseSla";
 import { slaMapForPros } from "../utils/proSlaBatch";
-import { Notification, NotificationType } from "../entities/Notification";
 import { buildAvailabilityHeat, DAY_KEYS } from "../utils/availabilityHeat";
+import { createNotifications } from "../utils/notifications";
+import { toProfile, toReview } from "../serializers";
+import { releasedTotalsByJob } from "../domain/escrow";
+import { median, mean, rate } from "../domain/analytics";
+import { localDatesAhead, monthKeyInZone } from "../domain/time";
+import { filesOf } from "../middleware/upload";
+import { assertOwnedRefs, deleteUploadByRef, fileRef, nameFromRef, storeUploads } from "../services/files";
+import { badRequest, forbidden, notFound } from "../http/errors";
+import { viewer } from "./jobController";
 
+const profiles = () => AppDataSource.getRepository(TradespersonProfile);
+const MAX_GALLERY = 12;
 
-
-function normalizeTime(raw: unknown, fallback: string) {
-  const s = String(raw || fallback).slice(0, 5);
-  return /^\d{2}:\d{2}$/.test(s) ? s : fallback;
+async function ownProfile(userId: string) {
+  const existing = await profiles().findOne({ where: { userId }, relations: ["user"] });
+  if (existing) return existing;
+  await profiles().save(profiles().create({ userId, galleryUrls: [] }));
+  return profiles().findOneOrFail({ where: { userId }, relations: ["user"] });
 }
 
-function normalizeWeeklyAvailability(raw: unknown) {
-  if (!raw || typeof raw !== "object") return null;
-  const src = raw as Record<string, any>;
-  const out: Record<
-    string,
-    { enabled: boolean; start: string; end: string; slots?: { start: string; end: string }[] }
-  > = {};
+function normalizeWeekly(raw: Record<string, { enabled: boolean; start?: string; end?: string; slots?: { start: string; end: string }[] }>) {
+  const out: NonNullable<TradespersonProfile["weeklyAvailability"]> = {};
   for (const day of DAY_KEYS) {
-    const slot = src[day];
-    if (!slot || typeof slot !== "object") {
-      out[day] = { enabled: false, start: "09:00", end: "17:00", slots: [] };
+    const slot = raw[day];
+    if (!slot) {
+      out[day] = { enabled: false, start: "09:00", end: "17:00", slots: [{ start: "09:00", end: "17:00" }] };
       continue;
     }
-    const start = normalizeTime(slot.start, "09:00");
-    const end = normalizeTime(slot.end, "17:00");
-    let slots: { start: string; end: string }[] = [];
-    if (Array.isArray(slot.slots)) {
-      slots = slot.slots
-        .filter((s: any) => s && typeof s === "object")
-        .map((s: any) => ({
-          start: normalizeTime(s.start, start),
-          end: normalizeTime(s.end, end),
-        }))
-        .slice(0, 4);
-    }
-    // Ensure primary window is represented in slots for multi-slot UI
-    if (slots.length === 0 && Boolean(slot.enabled)) {
-      slots = [{ start, end }];
-    } else if (slots.length === 0) {
-      slots = [{ start, end }];
-    }
-    const primary = slots[0] || { start, end };
-    out[day] = {
-      enabled: Boolean(slot.enabled),
-      start: primary.start,
-      end: primary.end,
-      slots,
-    };
+    const start = slot.start || "09:00";
+    const end = slot.end || "17:00";
+    const slots = (slot.slots && slot.slots.length ? slot.slots : [{ start, end }]).slice(0, 4);
+    out[day] = { enabled: slot.enabled, start: slots[0].start, end: slots[0].end, slots };
   }
   return out;
 }
 
-function normalizeBlockedDates(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  const dates = raw
-    .map((d) => String(d).slice(0, 10))
-    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
-  return [...new Set(dates)].sort().slice(0, 60);
+/** "Available this week": an enabled, unblocked day in the next 7 days (pro's own time zone). */
+function availableThisWeek(p: TradespersonProfile, timezone: string) {
+  const blocked = new Set(p.blockedDates || []);
+  return localDatesAhead(7, timezone).some(({ date, dayKey }) => !blocked.has(date) && !!p.weeklyAvailability?.[dayKey]?.enabled);
 }
 
-
-/** True if pro has at least one enabled day in the next 7 days that is not blocked. */
-function isAvailableThisWeek(
-  weekly: Record<string, { enabled?: boolean }> | null | undefined,
-  blockedDates?: string[] | null
-): boolean {
-  const blocked = new Set((blockedDates || []).map((d) => String(d).slice(0, 10)));
-  const jsToKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-  const now = new Date();
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    const key = `${y}-${m}-${day}`;
-    if (blocked.has(key)) continue;
-    const dayKey = jsToKey[d.getDay()];
-    const slot = weekly?.[dayKey];
-    if (slot && slot.enabled) return true;
-  }
-  // No weekly schedule set → treat as unknown/not matching the filter
-  return false;
-}
-
-/** Soft "best time to invite" from the next open window, only when schedule is clean. */
-function buildBestInviteHint(
-  weekly: Record<string, any> | null | undefined,
-  blockedDates?: string[] | null
-): {
-  dayKey: string;
-  dayLabel: string;
-  date: string;
-  start: string;
-  end: string;
-  reason: string;
-} | null {
-  const heat = buildAvailabilityHeat(weekly, blockedDates);
+function bestInviteHint(p: TradespersonProfile, timezone: string) {
+  const heat = buildAvailabilityHeat(p.weeklyAvailability, p.blockedDates, timezone);
   if (!heat.clean) return null;
-  const fullLabels: Record<string, string> = {
-    mon: "Monday",
-    tue: "Tuesday",
-    wed: "Wednesday",
-    thu: "Thursday",
-    fri: "Friday",
-    sat: "Saturday",
-    sun: "Sunday",
-  };
-  // Prefer soonest day with highest hours; skip blocked/empty
-  const candidates = heat.days
-    .map((d: any, idx: number) => ({ ...d, idx }))
-    .filter((d: any) => d.enabled && d.hours > 0 && !d.blocked);
+  const labels: Record<string, string> = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" };
+  const candidates = heat.days.map((d, idx) => ({ ...d, idx })).filter((d) => d.enabled && d.hours > 0 && !d.blocked);
   if (!candidates.length) return null;
-  candidates.sort((a: any, b: any) => b.hours - a.hours || a.idx - b.idx);
+  candidates.sort((a, b) => b.hours - a.hours || a.idx - b.idx);
   const best = candidates[0];
-  const slot = weekly?.[best.key];
-  const windows =
-    Array.isArray(slot?.slots) && slot.slots.length
-      ? slot.slots
-      : [{ start: slot?.start || "09:00", end: slot?.end || "17:00" }];
-  // Prefer morning-ish window if multiple
-  const win = [...windows].sort((a, b) => String(a.start).localeCompare(String(b.start)))[0];
-  const start = String(win.start || "09:00").slice(0, 5);
-  const end = String(win.end || "17:00").slice(0, 5);
-  const when = best.idx === 0 ? "today" : best.idx === 1 ? "tomorrow" : fullLabels[best.key];
+  const slot = p.weeklyAvailability?.[best.key];
+  const windows = slot?.slots?.length ? slot.slots : [{ start: slot?.start || "09:00", end: slot?.end || "17:00" }];
+  const win = [...windows].sort((a, b) => a.start.localeCompare(b.start))[0];
+  const when = best.idx === 0 ? "today" : best.idx === 1 ? "tomorrow" : labels[best.key];
   return {
     dayKey: best.key,
-    dayLabel: fullLabels[best.key] || best.key,
+    dayLabel: labels[best.key] || best.key,
     date: best.date,
-    start,
-    end,
-    reason: `Best time to invite: ${when} ${start}–${end} (pro usually free then)`,
-  };
-}
-
-function normalizeCustomRatePackages(raw: unknown): {
-  id: string;
-  label: string;
-  hint?: string;
-  amountMin: number;
-  amountMax?: number | null;
-  unit?: string | null;
-}[] {
-  if (!Array.isArray(raw)) return [];
-  const out: {
-    id: string;
-    label: string;
-    hint?: string;
-    amountMin: number;
-    amountMax?: number | null;
-    unit?: string | null;
-  }[] = [];
-  for (let i = 0; i < raw.length && out.length < 12; i++) {
-    const t: any = raw[i];
-    const label = String(t?.label || "").trim().slice(0, 80);
-    const amountMin = Number(t?.amountMin);
-    if (!label || !Number.isFinite(amountMin) || amountMin < 0) continue;
-    let amountMax: number | null | undefined = undefined;
-    if (t?.amountMax != null && t?.amountMax !== "") {
-      const n = Number(t.amountMax);
-      if (Number.isFinite(n) && n >= amountMin) amountMax = n;
-    }
-    const hint = t?.hint != null ? String(t.hint).trim().slice(0, 160) : undefined;
-    const unit = t?.unit != null ? String(t.unit).trim().slice(0, 40) : undefined;
-    out.push({
-      id: String(t?.id || `pkg-${i}-${Date.now()}`).slice(0, 64),
-      label,
-      ...(hint ? { hint } : {}),
-      amountMin: Math.round(amountMin),
-      ...(amountMax != null ? { amountMax } : {}),
-      ...(unit ? { unit } : {}),
-    });
-  }
-  return out;
-}
-
-
-function normalizeCaseStudies(raw: unknown): {
-  id: string;
-  title: string;
-  notes?: string;
-  beforeUrl?: string | null;
-  afterUrl?: string | null;
-  category?: string | null;
-}[] {
-  if (!Array.isArray(raw)) return [];
-  const out: {
-    id: string;
-    title: string;
-    notes?: string;
-    beforeUrl?: string | null;
-    afterUrl?: string | null;
-    category?: string | null;
-  }[] = [];
-  for (let i = 0; i < raw.length && out.length < 12; i++) {
-    const t: any = raw[i];
-    const title = String(t?.title || "").trim().slice(0, 120);
-    if (!title) continue;
-    const notes = t?.notes != null ? String(t.notes).trim().slice(0, 800) : undefined;
-    const beforeUrl =
-      t?.beforeUrl != null && String(t.beforeUrl).trim()
-        ? String(t.beforeUrl).trim().slice(0, 500)
-        : undefined;
-    const afterUrl =
-      t?.afterUrl != null && String(t.afterUrl).trim()
-        ? String(t.afterUrl).trim().slice(0, 500)
-        : undefined;
-    const category =
-      t?.category != null && String(t.category).trim()
-        ? String(t.category).trim().slice(0, 40)
-        : undefined;
-    out.push({
-      id: String(t?.id || `case-${i}-${Date.now()}`).slice(0, 64),
-      title,
-      ...(notes ? { notes } : {}),
-      ...(beforeUrl ? { beforeUrl } : {}),
-      ...(afterUrl ? { afterUrl } : {}),
-      ...(category ? { category } : {}),
-    });
-  }
-  return out;
-}
-
-function serializeProfile(profile: TradespersonProfile, user?: User | null) {
-  return {
-    id: profile.id,
-    userId: profile.userId,
-    email: user?.email,
-    name: user?.name,
-    phone: user?.phone,
-    avatarUrl: user?.avatarUrl,
-    skills: profile.skills,
-    serviceAreas: profile.serviceAreas,
-    bio: profile.bio,
-    yearsExperience: profile.yearsExperience,
-    hourlyRateMin: profile.hourlyRateMin,
-    hourlyRateMax: profile.hourlyRateMax,
-    city: profile.city,
-    lat: profile.lat,
-    lng: profile.lng,
-    galleryUrls: profile.galleryUrls || [],
-    averageRating: Number(profile.averageRating || 0),
-    reviewCount: profile.reviewCount || 0,
-    verificationStatus: profile.verificationStatus,
-    verifiedAt: profile.verifiedAt,
-    licenseDocUrl: profile.licenseDocUrl,
-    weeklyAvailability: profile.weeklyAvailability || null,
-    blockedDates: profile.blockedDates || [],
-    notInterestedCategories: profile.notInterestedCategories || [],
-    customRatePackages: Array.isArray(profile.customRatePackages)
-      ? profile.customRatePackages
-      : [],
-    caseStudies: Array.isArray(profile.caseStudies) ? profile.caseStudies : [],
+    start: win.start,
+    end: win.end,
+    reason: `Best time to invite: ${when} ${win.start}–${win.end} (usually free then)`,
   };
 }
 
 export async function getMyProfile(req: Request, res: Response) {
-  if (req.user!.role !== UserRole.TRADESPERSON) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-
-  const profileRepo = AppDataSource.getRepository(TradespersonProfile);
-  let profile = await profileRepo.findOne({ where: { userId: req.user!.id } });
-  if (!profile) {
-    profile = await profileRepo.save(
-      profileRepo.create({ userId: req.user!.id, galleryUrls: [] })
-    );
-  }
-
-  const user = await AppDataSource.getRepository(User).findOne({
-    where: { id: req.user!.id },
-  });
-
-  return res.json({ profile: serializeProfile(profile, user) });
+  const p = await ownProfile(req.user!.id);
+  return res.json({ profile: toProfile(p, p.user, "owner") });
 }
 
 export async function updateMyProfile(req: Request, res: Response) {
-  if (req.user!.role !== UserRole.TRADESPERSON) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
+  const p = await ownProfile(req.user!.id);
+  const b = req.valid.body;
+  const heatBefore = buildAvailabilityHeat(p.weeklyAvailability, p.blockedDates, p.user.timezone).score;
+  const simple = ["skills", "serviceAreas", "bio", "city", "lat", "lng", "yearsExperience", "hourlyRateMin", "hourlyRateMax"] as const;
+  for (const key of simple) {
+    if (b[key] !== undefined) (p as unknown as Record<string, unknown>)[key] = b[key];
   }
+  if (p.hourlyRateMin != null && p.hourlyRateMax != null && Number(p.hourlyRateMin) > Number(p.hourlyRateMax)) {
+    throw badRequest("Minimum rate can't be above the maximum", "VALIDATION");
+  }
+  if (b.galleryUrls !== undefined) {
+    // Only reordering/removing existing gallery images; new images come through the upload endpoint.
+    const current = new Set(p.galleryUrls || []);
+    const next: string[] = b.galleryUrls;
+    if (next.some((u) => !current.has(u))) throw badRequest("Upload new gallery photos with the gallery upload", "INVALID_FILE_REF");
+    for (const removed of [...current].filter((u) => !next.includes(u))) await deleteUploadByRef(removed);
+    p.galleryUrls = next;
+  }
+  if (b.weeklyAvailability !== undefined) p.weeklyAvailability = b.weeklyAvailability ? normalizeWeekly(b.weeklyAvailability) : null;
+  if (b.blockedDates !== undefined) p.blockedDates = [...new Set<string>(b.blockedDates)].sort().slice(0, 60);
+  if (b.notInterestedCategories !== undefined) p.notInterestedCategories = [...new Set<string>(b.notInterestedCategories)];
+  if (b.customRatePackages !== undefined) p.customRatePackages = b.customRatePackages;
+  if (b.caseStudies !== undefined) {
+    const refs = (b.caseStudies as { beforeUrl?: string | null; afterUrl?: string | null }[])
+      .flatMap((c) => [c.beforeUrl, c.afterUrl])
+      .filter((r): r is string => !!r);
+    await assertOwnedRefs(refs, { ownerUserId: p.userId, kinds: [UploadKind.CASE_STUDY, UploadKind.GALLERY] });
+    const previousIds = new Map((p.caseStudies || []).map((c) => [c.id, c as { sourceJobId?: string }]));
+    p.caseStudies = (b.caseStudies as typeof p.caseStudies).map((c) => ({
+      ...c,
+      ...(previousIds.get(c.id)?.sourceJobId ? { sourceJobId: previousIds.get(c.id)!.sourceJobId } : {}),
+    }));
+  }
+  await profiles().save(p);
 
-  const profileRepo = AppDataSource.getRepository(TradespersonProfile);
-  let profile = await profileRepo.findOne({ where: { userId: req.user!.id } });
-  if (!profile) {
-    profile = profileRepo.create({ userId: req.user!.id, galleryUrls: [] });
+  const availabilityTouched = b.weeklyAvailability !== undefined || b.blockedDates !== undefined;
+  const heatAfter = buildAvailabilityHeat(p.weeklyAvailability, p.blockedDates, p.user.timezone).score;
+  if (availabilityTouched && heatAfter > heatBefore && p.verificationStatus === VerificationStatus.VERIFIED) {
+    await notifyFavoritersOfAvailability(p.userId, p.user.name);
   }
+  return res.json({ profile: toProfile(p, p.user, "owner") });
+}
 
-  const {
-    skills,
-    serviceAreas,
-    bio,
-    yearsExperience,
-    hourlyRateMin,
-    hourlyRateMax,
-    city,
-    lat,
-    lng,
-    galleryUrls,
-    weeklyAvailability,
-    blockedDates,
-    notInterestedCategories,
-    customRatePackages,
-    caseStudies,
-  } = req.body ?? {};
+/** At most one "saved pro has more availability" alert per client per day. */
+async function notifyFavoritersOfAvailability(proId: string, proName?: string | null) {
+  const favs = await AppDataSource.getRepository(Favorite).find({ where: { targetType: FavoriteTargetType.PRO, targetId: proId } });
+  if (!favs.length) return;
+  const recent = await AppDataSource.getRepository(Notification)
+    .createQueryBuilder("n")
+    .select("n.userId", "userId")
+    .where("n.userId IN (:...ids)", { ids: favs.map((f) => f.userId) })
+    .andWhere("n.type = :type AND n.meta->>'proUserId' = :pid AND n.meta->>'availability' = 'true'", {
+      type: NotificationType.PRO_AVAILABLE,
+      pid: proId,
+    })
+    .andWhere("n.createdAt > :since", { since: new Date(Date.now() - 86400_000) })
+    .getRawMany<{ userId: string }>();
+  const skip = new Set(recent.map((r) => r.userId));
+  await createNotifications(
+    favs
+      .filter((f) => !skip.has(f.userId))
+      .map((f) => ({
+        userId: f.userId,
+        type: NotificationType.PRO_AVAILABLE,
+        title: "Saved professional has more availability",
+        body: `${proName || "A saved professional"} opened up more time this week.`,
+        link: `/pros/${proId}`,
+        meta: { proUserId: proId, availability: true },
+      }))
+  );
+}
 
-  const availabilityTouched =
-    weeklyAvailability !== undefined || blockedDates !== undefined;
-
-  if (skills !== undefined) profile.skills = String(skills);
-  if (serviceAreas !== undefined) profile.serviceAreas = String(serviceAreas);
-  if (bio !== undefined) profile.bio = String(bio);
-  if (city !== undefined) profile.city = String(city);
-  if (lat !== undefined) {
-    const n = Number(lat);
-    profile.lat = Number.isFinite(n) ? n : undefined;
-  }
-  if (lng !== undefined) {
-    const n = Number(lng);
-    profile.lng = Number.isFinite(n) ? n : undefined;
-  }
-  if (yearsExperience !== undefined) {
-    const n = Number(yearsExperience);
-    profile.yearsExperience = Number.isFinite(n) ? n : undefined;
-  }
-  if (hourlyRateMin !== undefined) {
-    const n = Number(hourlyRateMin);
-    profile.hourlyRateMin = Number.isFinite(n) ? n : undefined;
-  }
-  if (hourlyRateMax !== undefined) {
-    const n = Number(hourlyRateMax);
-    profile.hourlyRateMax = Number.isFinite(n) ? n : undefined;
-  }
-  if (galleryUrls !== undefined) {
-    profile.galleryUrls = Array.isArray(galleryUrls)
-      ? galleryUrls.map(String).slice(0, 12)
-      : [];
-  }
-  if (weeklyAvailability !== undefined) {
-    profile.weeklyAvailability = normalizeWeeklyAvailability(weeklyAvailability);
-  }
-  if (blockedDates !== undefined) {
-    profile.blockedDates = normalizeBlockedDates(blockedDates);
-  }
-  if (notInterestedCategories !== undefined) {
-    const allowed = new Set([
-      "plumbing",
-      "electrical",
-      "carpentry",
-      "painting",
-      "appliance",
-      "cleaning",
-      "construction",
-      "office_facilities",
-      "tech_services",
-      "moving",
-      "other",
-    ]);
-    const raw = Array.isArray(notInterestedCategories) ? notInterestedCategories : [];
-    profile.notInterestedCategories = [
-      ...new Set(
-        raw
-          .map((c) => String(c || "").toLowerCase().trim())
-          .filter((c) => allowed.has(c))
-      ),
-    ];
-  }
-  if (customRatePackages !== undefined) {
-    profile.customRatePackages = normalizeCustomRatePackages(customRatePackages);
-  }
-  if (caseStudies !== undefined) {
-    profile.caseStudies = normalizeCaseStudies(caseStudies);
-  }
-
-  await profileRepo.save(profile);
-
-  if (availabilityTouched) {
-    try {
-      await notifyFavoritersProAvailable(
-        req.user!.id,
-        "updated availability — they may be free soon"
-      );
-    } catch (e) {
-      console.warn("pro available alerts failed", e);
-    }
-  }
-
-  const user = await AppDataSource.getRepository(User).findOne({
-    where: { id: req.user!.id },
+async function inviteHoursForPro(proId: string, bids: Bid[]) {
+  const invites = await AppDataSource.getRepository(JobInvite).find({
+    where: { tradespersonId: proId },
+    select: { jobId: true, createdAt: true },
   });
-  return res.json({ profile: serializeProfile(profile, user) });
+  const at = new Map(invites.map((i) => [i.jobId, new Date(i.createdAt)]));
+  const out: number[] = [];
+  for (const bid of bids) {
+    const invitedAt = at.get(bid.jobId);
+    if (!invitedAt) continue;
+    const h = hoursBetween(invitedAt, bid.createdAt);
+    if (h != null) out.push(h);
+  }
+  return out;
 }
 
 export async function getPublicProfile(req: Request, res: Response) {
-  const userId = param(req, "userId");
-  const user = await AppDataSource.getRepository(User).findOne({
-    where: { id: userId, role: UserRole.TRADESPERSON },
-  });
-  if (!user) {
-    return res.status(404).json({ message: "Tradesperson not found", code: "NOT_FOUND" });
+  const userId = req.valid.params.userId;
+  const v = viewer(req);
+  const user = await AppDataSource.getRepository(User).findOne({ where: { id: userId, role: UserRole.TRADESPERSON } });
+  const profile = user && !user.deletedAt ? await profiles().findOne({ where: { userId } }) : null;
+  if (!user || !profile) throw notFound("Professional not found");
+  const self = v.id === userId;
+  const admin = v.role === UserRole.ADMIN;
+  if (profile.verificationStatus !== VerificationStatus.VERIFIED && !self && !admin) {
+    throw notFound("Professional not found");
   }
-
-  const profile = await AppDataSource.getRepository(TradespersonProfile).findOne({
-    where: { userId },
-  });
-  if (!profile) {
-    return res.status(404).json({ message: "Profile not found", code: "NOT_FOUND" });
+  // Contact details only once this client has hired this professional.
+  let revealContact = false;
+  if (v.role === UserRole.HOMEOWNER) {
+    const hired = await AppDataSource.getRepository(Job)
+      .createQueryBuilder("j")
+      .innerJoin(Bid, "b", "b.id = j.acceptedBidId")
+      .where("j.homeownerId = :me AND b.tradespersonId = :pro", { me: v.id, pro: userId })
+      .getExists();
+    revealContact = hired;
   }
-
   const reviews = await AppDataSource.getRepository(Review).find({
-    where: { tradespersonId: userId },
+    where: { revieweeId: userId, direction: ReviewDirection.CLIENT_TO_PRO },
     relations: ["reviewer", "job"],
     order: { createdAt: "DESC" },
     take: 20,
   });
-
-  // Response SLA: invite→bid and job→bid history for this pro
   const bids = await AppDataSource.getRepository(Bid).find({
     where: { tradespersonId: userId },
     relations: ["job"],
     order: { createdAt: "DESC" },
     take: 80,
   });
-  const invites = await AppDataSource.getRepository(Notification)
-    .createQueryBuilder("n")
-    .where("n.userId = :uid", { uid: userId })
-    .andWhere("n.type = :type", { type: NotificationType.MATCH })
-    .andWhere("n.meta->>'invite' = 'true'")
-    .orderBy("n.createdAt", "DESC")
-    .take(120)
-    .getMany();
-  const invitesByJob: Record<string, Date> = {};
-  for (const n of invites) {
-    const jid = String((n.meta as any)?.jobId || "");
-    if (!jid) continue;
-    const t = new Date(n.createdAt);
-    if (!invitesByJob[jid] || t < invitesByJob[jid]) invitesByJob[jid] = t;
-  }
-  const jobHours: number[] = [];
-  const inviteHours: number[] = [];
-  for (const bid of bids) {
-    const jh = hoursBetween(bid.job?.createdAt, bid.createdAt);
-    if (jh != null) jobHours.push(jh);
-    const invAt = invitesByJob[bid.jobId];
-    if (invAt) {
-      const ih = hoursBetween(invAt, bid.createdAt);
-      if (ih != null) inviteHours.push(ih);
-    }
-  }
-  const responseSla = buildResponseSla({ inviteHours, jobHours });
-
+  const jobHours = bids.map((b) => hoursBetween(b.job?.createdAt, b.createdAt)).filter((h): h is number => h != null);
+  const responseSla = buildResponseSla({ inviteHours: await inviteHoursForPro(userId, bids), jobHours });
+  const view = admin ? "admin" : self ? "owner" : "public";
   return res.json({
     profile: {
-      ...serializeProfile(profile, user),
+      ...toProfile(profile, user, view, { revealContact }),
       responseSla,
+      availabilityHeat: buildAvailabilityHeat(profile.weeklyAvailability, profile.blockedDates, user.timezone),
     },
     responseSla,
-    reviews: reviews.map((r) => ({
-      id: r.id,
-      rating: r.rating,
-      comment: r.comment,
-      createdAt: r.createdAt,
-      jobTitle: r.job?.title,
-      reviewerName: r.reviewer?.name || "Homeowner",
-    })),
+    contactRevealed: revealContact || view !== "public",
+    reviews: reviews.map((r) => ({ ...toReview(r), reviewerName: r.reviewer?.name || "Client" })),
   });
 }
 
+const OFFICE_TERMS = ["%office%", "%facilit%", "%amc%", "%cctv%", "%network%"];
+const HOME_TERMS = ["%home%", "%plumb%", "%electric%", "%carpent%", "%paint%", "%appliance%", "%clean%", "%mov%"];
+
 export async function browsePros(req: Request, res: Response) {
-  const {
-    q,
-    city,
-    neighborhood,
-    area,
-    skill,
-    category,
-    verified,
-    ratingMin,
-    rateMax,
-    nearLat,
-    nearLng,
-    maxKm,
-    sort,
-  } = req.query;
-  const cityQ = String(city || "").trim();
-  const nbhQ = String(neighborhood || area || "").trim();
-  const origin = parseCoordPair(nearLat, nearLng);
-  const maxDistance = Number(maxKm);
-  const wantDistance = String(sort) === "distance";
-
-  const qb = AppDataSource.getRepository(TradespersonProfile)
+  const q = req.valid.query;
+  const v = viewer(req);
+  if (q.verified === "0" && v.role !== UserRole.ADMIN) throw forbidden("Only admins can list unverified professionals");
+  const limit = q.limit ?? 40;
+  const qb = profiles()
     .createQueryBuilder("p")
-    .leftJoinAndSelect("p.user", "user");
-  if (!wantDistance) qb.take(40);
+    .innerJoinAndSelect("p.user", "user")
+    .where("user.deletedAt IS NULL AND user.isSuspended = false");
+  if (q.verified !== "0") qb.andWhere("p.verificationStatus = :vs", { vs: VerificationStatus.VERIFIED });
 
-  if (String(verified) !== "0") {
-    qb.andWhere("p.verificationStatus = :vs", { vs: VerificationStatus.VERIFIED });
+  const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  if (q.city) {
+    qb.andWhere("(p.city ILIKE :cityQ OR p.serviceAreas ILIKE :cityQ)", { cityQ: like(q.city) });
   }
-
-  if (cityQ) {
-    qb.andWhere("(p.city ILIKE :cityQ OR p.serviceAreas ILIKE :cityQ)", {
-      cityQ: `%${cityQ}%`,
-    });
-    qb.addSelect(
-      `CASE WHEN LOWER(COALESCE(p.city, '')) = LOWER(:cityExact) THEN 0 WHEN p.city ILIKE :cityLike OR p.serviceAreas ILIKE :cityLike THEN 1 ELSE 2 END`,
-      "city_rank"
-    );
-    qb.setParameter("cityExact", cityQ);
-    qb.setParameter("cityLike", `%${cityQ}%`);
-    qb.orderBy("city_rank", "ASC");
+  const nbh = q.neighborhood || q.area;
+  if (nbh) qb.andWhere("p.serviceAreas ILIKE :nbh", { nbh: like(nbh) });
+  const skill = q.skill || q.category;
+  if (skill) qb.andWhere("p.skills ILIKE :skill", { skill: like(String(skill).replace(/_/g, " ")) });
+  if (q.siteType) {
+    const terms = q.siteType === "office" ? OFFICE_TERMS : HOME_TERMS;
+    const clauses = terms.map((_, i) => `p.skills ILIKE :st${i} OR p.bio ILIKE :st${i}`);
+    if (q.siteType === "residential") clauses.push(`COALESCE(p.skills, '') = ''`);
+    qb.andWhere(`(${clauses.join(" OR ")})`, Object.fromEntries(terms.map((t, i) => [`st${i}`, t])));
   }
-  if (nbhQ) {
-    qb.andWhere("p.serviceAreas ILIKE :nbh", { nbh: `%${nbhQ}%` });
-  }
-  const skillOrCat = String(skill || category || "").trim();
-  if (skillOrCat) {
-    qb.andWhere("p.skills ILIKE :skill", { skill: `%${skillOrCat}%` });
-  }
-
-  // Soft site-type preference (skills/bio keywords) — no scoring/match math
-  const siteTypeQ = String(req.query.siteType || "").trim().toLowerCase();
-  if (siteTypeQ) {
-    if (!["residential", "office"].includes(siteTypeQ)) {
-      return res
-        .status(400)
-        .json({ message: "Invalid siteType", code: "INVALID_SITE_TYPE" });
-    }
-    if (siteTypeQ === "office") {
-      qb.andWhere(
-        `(p.skills ILIKE :stOffice OR p.bio ILIKE :stOffice OR p.skills ILIKE :stFac OR p.skills ILIKE :stAmc OR p.skills ILIKE :stCctv OR p.skills ILIKE :stNet)`,
-        {
-          stOffice: "%office%",
-          stFac: "%facilit%",
-          stAmc: "%AMC%",
-          stCctv: "%CCTV%",
-          stNet: "%network%",
-        }
-      );
-    } else {
-      qb.andWhere(
-        `(p.skills ILIKE :stHome OR p.bio ILIKE :stHome OR p.skills ILIKE :stPlumb OR p.skills ILIKE :stElec OR p.skills ILIKE :stCarp OR p.skills ILIKE :stPaint OR p.skills ILIKE :stAppl OR p.skills ILIKE :stClean OR p.skills ILIKE :stMove OR COALESCE(p.skills, '') = '')`,
-        {
-          stHome: "%home%",
-          stPlumb: "%plumb%",
-          stElec: "%electric%",
-          stCarp: "%carpent%",
-          stPaint: "%paint%",
-          stAppl: "%appliance%",
-          stClean: "%clean%",
-          stMove: "%mov%",
-        }
-      );
-    }
-  }
-  const rMin = Number(ratingMin);
-  if (Number.isFinite(rMin) && rMin > 0) {
-    qb.andWhere("p.averageRating >= :rMin", { rMin });
-  }
-  const rMax = Number(rateMax);
-  if (Number.isFinite(rMax) && rMax > 0) {
-    qb.andWhere("(p.hourlyRateMin IS NULL OR p.hourlyRateMin <= :rMax)", { rMax });
-  }
-  if (q) {
-    const search = `%${String(q)}%`;
+  if (q.ratingMin) qb.andWhere("p.averageRating >= :rMin", { rMin: q.ratingMin });
+  if (q.rateMax) qb.andWhere("(p.hourlyRateMin IS NULL OR p.hourlyRateMin <= :rMax)", { rMax: q.rateMax });
+  if (q.q) {
     qb.andWhere(
       "(p.skills ILIKE :search OR p.bio ILIKE :search OR p.serviceAreas ILIKE :search OR user.name ILIKE :search OR p.city ILIKE :search)",
-      { search }
+      { search: like(q.q) }
     );
   }
-
-  if (!wantDistance) {
-    qb.addOrderBy("p.averageRating", "DESC").addOrderBy("p.reviewCount", "DESC");
+  const hasOrigin = q.nearLat !== undefined && q.nearLng !== undefined;
+  if (hasOrigin && q.maxKm) {
+    const dLat = q.maxKm / 111;
+    const dLng = q.maxKm / (111 * Math.max(0.1, Math.cos((q.nearLat * Math.PI) / 180)));
+    qb.andWhere("p.lat BETWEEN :minLat AND :maxLat AND p.lng BETWEEN :minLng AND :maxLng", {
+      minLat: q.nearLat - dLat,
+      maxLat: q.nearLat + dLat,
+      minLng: q.nearLng - dLng,
+      maxLng: q.nearLng + dLng,
+    });
   }
+  qb.orderBy("p.averageRating", "DESC").addOrderBy("p.reviewCount", "DESC").take(200);
+  const rows = await qb.getMany();
 
-  const profiles = await qb.getMany();
-  let shaped = profiles.map((p) => {
-    const base = serializeProfile(p, p.user);
-    const distanceKm = origin
-      ? haversineKm(origin.lat, origin.lng, p.lat, p.lng)
-      : null;
-    return { ...base, distanceKm };
+  const hav = (p: TradespersonProfile) => {
+    if (!hasOrigin || p.lat == null || p.lng == null) return null;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(p.lat - q.nearLat);
+    const dLng = toRad(p.lng - q.nearLng);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(q.nearLat)) * Math.cos(toRad(p.lat)) * Math.sin(dLng / 2) ** 2;
+    return Math.round(2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h))) * 10) / 10;
+  };
+  let list = rows.map((p) => ({ p, distanceKm: hav(p) }));
+  if (hasOrigin && q.maxKm) list = list.filter((x) => x.distanceKm != null && x.distanceKm <= q.maxKm);
+
+  const sla = await slaMapForPros(list.map((x) => x.p.userId));
+  let shaped = list.map(({ p, distanceKm }) => {
+    const heat = buildAvailabilityHeat(p.weeklyAvailability, p.blockedDates, p.user.timezone);
+    return {
+      ...toProfile(p, p.user, v.role === UserRole.ADMIN ? "admin" : "public"),
+      distanceKm,
+      responseSla: sla[p.userId] || null,
+      availableThisWeek: availableThisWeek(p, p.user.timezone),
+      availabilityHeat: heat,
+      bestInviteHint: bestInviteHint(p, p.user.timezone),
+    };
   });
 
-  if (Number.isFinite(maxDistance) && maxDistance > 0 && origin) {
-    shaped = shaped.filter((p) => p.distanceKm != null && p.distanceKm <= maxDistance);
-  }
-
-  if (wantDistance && origin) {
-    shaped.sort((a, b) => {
-      const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
-      const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
-      if (da !== db) return da - db;
-      return Number(b.averageRating || 0) - Number(a.averageRating || 0);
-    });
-  } else {
-    shaped.sort((a, b) => {
-      const r = Number(b.averageRating || 0) - Number(a.averageRating || 0);
-      if (r !== 0) return r;
-      return (b.reviewCount || 0) - (a.reviewCount || 0);
-    });
-  }
-
-  // Attach response SLA (job→bid) and optional tier / max-hours filter
-  const slaTierQ = String(req.query.slaTier || "").trim().toLowerCase();
-  const maxRespH = Number(req.query.maxResponseHours);
-  const wantSlaFilter =
-    (slaTierQ && slaTierQ !== "any" && slaTierQ !== "unknown") ||
-    (Number.isFinite(maxRespH) && maxRespH > 0);
-
-  const ids = shaped.map((p) => p.userId);
-  const slaMap = ids.length ? await slaMapForPros(ids) : {};
-  let withSla = shaped.map((p) => ({
-    ...p,
-    responseSla: slaMap[p.userId] || null,
-  }));
-
-  if (wantSlaFilter) {
-    withSla = withSla.filter((p) => {
-      const sla = p.responseSla;
-      if (!sla || sla.tier === "unknown" || sla.hours == null) return false;
-      if (Number.isFinite(maxRespH) && maxRespH > 0 && sla.hours > maxRespH) return false;
-      if (slaTierQ && slaTierQ !== "any") {
-        // "fast_or_better" = lightning|fast; otherwise exact tier or maxHours ceiling
-        if (slaTierQ === "fast_or_better") {
-          return sla.tier === "lightning" || sla.tier === "fast";
-        }
-        if (slaTierQ === "same_day_or_better") {
-          return ["lightning", "fast", "same_day"].includes(sla.tier);
-        }
-        const ceiling = maxHoursForTier(slaTierQ);
-        if (ceiling != null && Number.isFinite(ceiling)) {
-          return sla.hours <= ceiling;
-        }
-        return sla.tier === slaTierQ;
+  const tier = q.slaTier && q.slaTier !== "any" && q.slaTier !== "unknown" ? q.slaTier : null;
+  if (tier || q.maxResponseHours) {
+    shaped = shaped.filter((p) => {
+      const s = p.responseSla;
+      if (!s || s.tier === "unknown" || s.hours == null) return false;
+      if (q.maxResponseHours && s.hours > q.maxResponseHours) return false;
+      if (tier === "fast_or_better") return s.tier === "lightning" || s.tier === "fast";
+      if (tier === "same_day_or_better") return ["lightning", "fast", "same_day"].includes(s.tier);
+      if (tier) {
+        const ceiling = maxHoursForTier(tier);
+        return ceiling != null ? s.hours <= ceiling : s.tier === tier;
       }
       return true;
     });
   }
+  if (q.availableThisWeek) shaped = shaped.filter((p) => p.availableThisWeek);
+  if (q.minHeat) shaped = shaped.filter((p) => p.availabilityHeat.clean && p.availabilityHeat.score >= q.minHeat);
 
-
-  const availableThisWeek =
-    String(req.query.availableThisWeek || "").trim() === "1" ||
-    String(req.query.availableThisWeek || "").toLowerCase() === "true";
-
-  if (availableThisWeek) {
-    // Need profile weeklyAvailability / blockedDates — re-fetch from shaped ids
-    const fullProfiles = ids.length
-      ? await AppDataSource.getRepository(TradespersonProfile)
-          .createQueryBuilder("p")
-          .where("p.userId IN (:...ids)", { ids })
-          .getMany()
-      : [];
-    const availMap = Object.fromEntries(
-      fullProfiles.map((p) => [
-        p.userId,
-        isAvailableThisWeek(p.weeklyAvailability as any, p.blockedDates),
-      ])
-    );
-    withSla = withSla.filter((p) => availMap[p.userId]);
-  }
-
-  // Attach availability flags, 7-day heat, and soft best-invite hint
-  {
-    const fullProfiles = withSla.length
-      ? await AppDataSource.getRepository(TradespersonProfile)
-          .createQueryBuilder("p")
-          .where("p.userId IN (:...ids)", { ids: withSla.map((p) => p.userId) })
-          .getMany()
-      : [];
-    const pmap = Object.fromEntries(fullProfiles.map((p) => [p.userId, p]));
-    withSla = withSla.map((p) => {
-      const prof = pmap[p.userId];
-      const weekly = (prof?.weeklyAvailability as any) || null;
-      const blocked = prof?.blockedDates || [];
-      const available = prof ? isAvailableThisWeek(weekly, blocked) : false;
-      const heat = buildAvailabilityHeat(weekly, blocked);
-      const bestInviteHint = buildBestInviteHint(weekly, blocked);
-      return {
-        ...p,
-        availableThisWeek: available,
-        weeklyAvailability: weekly,
-        blockedDates: blocked,
-        availabilityHeat: heat,
-        bestInviteHint,
-      };
-    });
-  }
-
-  // Min availability heat score (0–100 from free hours / 40h week)
-  const minHeatRaw = req.query.minHeat ?? req.query.minAvailabilityScore;
-  const minHeat = Number(minHeatRaw);
-  if (Number.isFinite(minHeat) && minHeat > 0) {
-    withSla = withSla.filter((p: any) => {
-      const heat = p.availabilityHeat;
-      if (!heat || !heat.clean) return false;
-      return Number(heat.score || 0) >= minHeat;
-    });
-  }
-
-  // Wave 18: sort by availability heat (clean + higher score first)
-  const wantHeatSort = String(sort || "").toLowerCase() === "heat";
-  if (wantHeatSort) {
-    withSla = [...withSla].sort((a: any, b: any) => {
-      const ha = a.availabilityHeat;
-      const hb = b.availabilityHeat;
-      const ca = ha?.clean ? 1 : 0;
-      const cb = hb?.clean ? 1 : 0;
-      if (cb !== ca) return cb - ca;
-      const sa = Number(ha?.score || 0);
-      const sb = Number(hb?.score || 0);
-      if (sb !== sa) return sb - sa;
-      return Number(b.averageRating || 0) - Number(a.averageRating || 0);
-    });
-  }
-
-  return res.json({
-    pros: withSla.slice(0, 40),
-    sort: wantHeatSort ? "heat" : wantDistance ? "distance" : "rating",
+  const sort = q.sort === "distance" && hasOrigin ? "distance" : q.sort === "heat" ? "heat" : "rating";
+  shaped.sort((a, b) => {
+    if (sort === "distance") {
+      const d = (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity);
+      if (d !== 0) return d;
+    } else if (sort === "heat") {
+      const c = Number(b.availabilityHeat.clean) - Number(a.availabilityHeat.clean);
+      if (c !== 0) return c;
+      const s = b.availabilityHeat.score - a.availabilityHeat.score;
+      if (s !== 0) return s;
+    }
+    return b.averageRating - a.averageRating || b.reviewCount - a.reviewCount;
   });
+  return res.json({ pros: shaped.slice(0, limit), sort });
 }
 
 export async function uploadGallery(req: Request, res: Response) {
-  if (req.user!.role !== UserRole.TRADESPERSON) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
+  const files = filesOf(req, "photos");
+  if (!files.length) throw badRequest("Choose at least one photo", "NO_FILES");
+  const p = await ownProfile(req.user!.id);
+  if ((p.galleryUrls || []).length + files.length > MAX_GALLERY) {
+    throw badRequest(`A gallery can have at most ${MAX_GALLERY} photos`, "TOO_MANY_FILES");
   }
-
-  const files = req.files as Express.Multer.File[] | undefined;
-  if (!files?.length) {
-    return res.status(400).json({ message: "At least one photo is required", code: "NO_FILES" });
-  }
-
-  const profileRepo = AppDataSource.getRepository(TradespersonProfile);
-  let profile = await profileRepo.findOne({ where: { userId: req.user!.id } });
-  if (!profile) {
-    profile = profileRepo.create({ userId: req.user!.id, galleryUrls: [] });
-  }
-
-  const newUrls = files.map((f) => `/uploads/${f.filename}`);
-  const existing = profile.galleryUrls || [];
-  profile.galleryUrls = [...existing, ...newUrls].slice(0, 12);
-  await profileRepo.save(profile);
-
-  const user = await AppDataSource.getRepository(User).findOne({
-    where: { id: req.user!.id },
-  });
-  return res.json({ profile: serializeProfile(profile, user) });
+  const uploads = await storeUploads(files, { kind: UploadKind.GALLERY, ownerUserId: req.user!.id });
+  p.galleryUrls = [...(p.galleryUrls || []), ...uploads.map((u) => fileRef(u.name))];
+  await profiles().save(p);
+  return res.json({ profile: toProfile(p, p.user, "owner") });
 }
 
 export async function removeGalleryImage(req: Request, res: Response) {
-  if (req.user!.role !== UserRole.TRADESPERSON) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-
-  const url = String(req.body?.url || "").trim();
-  if (!url) {
-    return res.status(400).json({ message: "url is required" });
-  }
-
-  const profileRepo = AppDataSource.getRepository(TradespersonProfile);
-  const profile = await profileRepo.findOne({ where: { userId: req.user!.id } });
-  if (!profile) {
-    return res.status(404).json({ message: "Profile not found", code: "NOT_FOUND" });
-  }
-
-  profile.galleryUrls = (profile.galleryUrls || []).filter((u) => u !== url);
-  await profileRepo.save(profile);
-
-  const user = await AppDataSource.getRepository(User).findOne({
-    where: { id: req.user!.id },
-  });
-  return res.json({ profile: serializeProfile(profile, user) });
+  const p = await ownProfile(req.user!.id);
+  const url = req.valid.body.url as string;
+  if (!(p.galleryUrls || []).includes(url)) throw notFound("That photo isn't in your gallery");
+  p.galleryUrls = p.galleryUrls.filter((u) => u !== url);
+  await profiles().save(p);
+  await deleteUploadByRef(url);
+  return res.json({ profile: toProfile(p, p.user, "owner") });
 }
 
-export async function getMyEarnings(req: Request, res: Response) {
-  if (req.user!.role !== UserRole.TRADESPERSON) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
+/** Licence / ID document for verification (visible only to the pro and admins). */
+export async function uploadLicense(req: Request, res: Response) {
+  const files = filesOf(req, "file");
+  if (!files.length) throw badRequest("Choose a document to upload", "NO_FILES");
+  const p = await ownProfile(req.user!.id);
+  const [u] = await storeUploads(files, { kind: UploadKind.LICENSE, ownerUserId: req.user!.id, allowPdf: true });
+  const previous = p.licenseDocUrl;
+  p.licenseDocUrl = fileRef(u.name);
+  await profiles().save(p);
+  if (previous && nameFromRef(previous)) {
+    const old = await AppDataSource.getRepository(Upload).findOne({ where: { name: nameFromRef(previous)! } });
+    if (old?.kind === UploadKind.LICENSE) await deleteUploadByRef(previous);
   }
+  return res.json({ profile: toProfile(p, p.user, "owner") });
+}
 
-  const userId = req.user!.id;
-  const bidRepo = AppDataSource.getRepository(Bid);
-  const acceptedBids = await bidRepo.find({
-    where: { tradespersonId: userId, status: BidStatus.ACCEPTED },
+async function wonBids(proId: string) {
+  return AppDataSource.getRepository(Bid).find({
+    where: { tradespersonId: proId, status: BidStatus.ACCEPTED },
     relations: ["job"],
     order: { createdAt: "DESC" },
   });
+}
 
-  let totalEarned = 0;
-  let completedCount = 0;
-  let inProgressCount = 0;
-  let awardedCount = 0;
-  const recent: {
-    jobId: string;
-    title: string;
-    amount: number;
-    status: string;
-    completedAt?: Date | null;
-  }[] = [];
-
-  for (const bid of acceptedBids) {
-    const amount = Number(bid.amount || 0);
-    const status = bid.job?.status || "unknown";
-    if (status === JobStatus.COMPLETED) {
-      totalEarned += amount;
-      completedCount += 1;
-    } else if (status === JobStatus.IN_PROGRESS) {
-      inProgressCount += 1;
-    } else if (status === JobStatus.AWARDED) {
-      awardedCount += 1;
-    }
-    recent.push({
-      jobId: bid.jobId,
-      title: bid.job?.title || "Job",
-      amount,
-      status,
-      completedAt: bid.job?.completedAt || null,
-    });
-  }
-
-  const activeBids = await bidRepo.count({
-    where: { tradespersonId: userId, status: BidStatus.ACTIVE },
-  });
-
+/** Earnings = escrow actually released to this professional (ledger), not bid amounts. */
+export async function getMyEarnings(req: Request, res: Response) {
+  const proId = req.user!.id;
+  const released = await releasedTotalsByJob(AppDataSource.manager, proId);
+  const won = await wonBids(proId);
+  const count = (s: JobStatus) => won.filter((b) => b.job?.status === s).length;
+  const totalEarned = Math.round([...released.values()].reduce((s, r) => s + r.total, 0) * 100) / 100;
+  const activeBids = await AppDataSource.getRepository(Bid).count({ where: { tradespersonId: proId, status: BidStatus.ACTIVE } });
   return res.json({
     earnings: {
       totalEarned,
-      completedJobs: completedCount,
-      inProgressJobs: inProgressCount,
-      awardedJobs: awardedCount,
+      completedJobs: count(JobStatus.COMPLETED),
+      inProgressJobs: count(JobStatus.IN_PROGRESS) + count(JobStatus.PENDING_CONFIRMATION),
+      awardedJobs: count(JobStatus.AWARDED),
       activeBids,
-      recent: recent.slice(0, 10),
+      recent: won.slice(0, 10).map((b) => ({
+        jobId: b.jobId,
+        title: b.job?.title || "Job",
+        amount: released.get(b.jobId)?.total ?? 0,
+        agreedAmount: Number(b.job?.escrowAmount ?? b.amount),
+        status: b.job?.status || "unknown",
+        completedAt: b.job?.completedAt || null,
+      })),
     },
   });
 }
 
-
 export async function getMyAnalytics(req: Request, res: Response) {
-  if (req.user!.role !== UserRole.TRADESPERSON) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-
-  const userId = req.user!.id;
+  const proId = req.user!.id;
+  const user = await AppDataSource.getRepository(User).findOneOrFail({ where: { id: proId } });
+  const tz = user.timezone;
   const bidRepo = AppDataSource.getRepository(Bid);
-  const profileRepo = AppDataSource.getRepository(TradespersonProfile);
+  const allBids = await bidRepo.find({ where: { tradespersonId: proId }, relations: ["job"], order: { createdAt: "ASC" } });
+  const won = allBids.filter((b) => b.status === BidStatus.ACCEPTED);
+  const lost = allBids.filter((b) => b.status === BidStatus.REJECTED || b.status === BidStatus.WITHDRAWN);
+  const released = await releasedTotalsByJob(AppDataSource.manager, proId);
 
-  const allBids = await bidRepo.find({
-    where: { tradespersonId: userId },
-    relations: ["job"],
-    order: { createdAt: "ASC" },
-  });
-
-  const totalBids = allBids.length;
-  const wonBids = allBids.filter((b) => b.status === BidStatus.ACCEPTED);
-  const lostBids = allBids.filter(
-    (b) => b.status === BidStatus.REJECTED || b.status === BidStatus.WITHDRAWN
-  );
-  const activeBids = allBids.filter((b) => b.status === BidStatus.ACTIVE).length;
-  const jobsWon = wonBids.length;
-  const winRate = totalBids > 0 ? Math.round((jobsWon / totalBids) * 1000) / 10 : 0;
-
-  let totalEarned = 0;
-  const earningsByMonth: Record<string, number> = {};
-  const categoryMixMap: Record<string, { category: string; count: number; earned: number }> = {};
-
-  for (const bid of wonBids) {
-    const amount = Number(bid.amount || 0);
-    const cat = bid.job?.category || "other";
-    if (!categoryMixMap[cat]) categoryMixMap[cat] = { category: cat, count: 0, earned: 0 };
-    categoryMixMap[cat].count += 1;
-    if (bid.job?.status === JobStatus.COMPLETED) {
-      totalEarned += amount;
-      categoryMixMap[cat].earned += amount;
-      const when = bid.job.completedAt || bid.job.updatedAt || bid.createdAt;
-      const d = new Date(when);
-      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-      earningsByMonth[key] = (earningsByMonth[key] || 0) + amount;
+  const byMonth = new Map<string, number>();
+  const mix = new Map<string, { category: string; count: number; earned: number }>();
+  for (const b of won) {
+    const cat = b.job?.category || "other";
+    const row = mix.get(cat) || { category: cat, count: 0, earned: 0 };
+    row.count += 1;
+    const r = released.get(b.jobId);
+    if (r) {
+      row.earned += r.total;
+      const key = monthKeyInZone(r.lastAt, tz);
+      byMonth.set(key, (byMonth.get(key) || 0) + r.total);
     }
+    mix.set(cat, row);
   }
-
   const months: { month: string; amount: number }[] = [];
   const now = new Date();
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    months.push({ month: key, amount: earningsByMonth[key] || 0 });
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 15));
+    const key = monthKeyInZone(d, tz);
+    months.push({ month: key, amount: Math.round((byMonth.get(key) || 0) * 100) / 100 });
   }
 
-  // Response-ish: hours from job post → this pro's bid (with timestamps for trends)
-  const responseSamples: { hours: number; at: Date }[] = [];
-  for (const bid of allBids) {
-    if (!bid.job?.createdAt) continue;
-    const h = hoursBetween(bid.job.createdAt, bid.createdAt);
-    if (h == null) continue;
-    responseSamples.push({ hours: h, at: bid.createdAt });
-  }
-  const responseHours = responseSamples.map((s) => s.hours).sort((a, b) => a - b);
-  const avgResponseHours =
-    responseHours.length > 0
-      ? Math.round((responseHours.reduce((a, b) => a + b, 0) / responseHours.length) * 10) / 10
-      : null;
-  const medianResponseHours =
-    responseHours.length > 0
-      ? Math.round(responseHours[Math.floor(responseHours.length / 2)] * 10) / 10
-      : null;
-
-  const dayAgo30 = Date.now() - 30 * 86400000;
-  const bidsLast30Days = allBids.filter(
-    (b) => new Date(b.createdAt).getTime() >= dayAgo30
-  ).length;
-
-  const categoryMix = Object.values(categoryMixMap).sort((a, b) => b.count - a.count);
-  const slaTrends = buildSlaTrends(responseSamples);
-
-  const profile = await profileRepo.findOne({ where: { userId } });
-
+  const samples = allBids
+    .map((b) => ({ hours: hoursBetween(b.job?.createdAt, b.createdAt), at: b.createdAt }))
+    .filter((s): s is { hours: number; at: Date } => s.hours != null);
+  const hours = samples.map((s) => s.hours);
+  const trends = buildSlaTrends(samples);
+  const profile = await profiles().findOne({ where: { userId: proId } });
+  const nowMs = Date.now();
+  const weeks = [5, 4, 3, 2, 1, 0].map((w) => {
+    const end = nowMs - w * 7 * 86400_000;
+    const slice = samples.filter((s) => {
+      const t = new Date(s.at).getTime();
+      return t >= end - 7 * 86400_000 && t < end;
+    });
+    return { label: w === 0 ? "now" : `-${w}w`, hours: mean(slice.map((s) => s.hours)), n: slice.length };
+  });
+  const totalEarned = Math.round([...released.values()].reduce((s, r) => s + r.total, 0) * 100) / 100;
   return res.json({
     analytics: {
-      jobsWon,
-      totalBids,
-      activeBids,
-      lostOrWithdrawn: lostBids.length,
-      winRate,
+      jobsWon: won.length,
+      totalBids: allBids.length,
+      activeBids: allBids.filter((b) => b.status === BidStatus.ACTIVE).length,
+      lostOrWithdrawn: lost.length,
+      winRate: rate(won.length, allBids.length),
       averageRating: Number(profile?.averageRating || 0),
       reviewCount: profile?.reviewCount || 0,
       totalEarned,
-      completedJobs: wonBids.filter((b) => b.job?.status === JobStatus.COMPLETED).length,
-      inProgressJobs: wonBids.filter((b) => b.job?.status === JobStatus.IN_PROGRESS).length,
-      awardedJobs: wonBids.filter((b) => b.job?.status === JobStatus.AWARDED).length,
+      completedJobs: won.filter((b) => b.job?.status === JobStatus.COMPLETED).length,
+      inProgressJobs: won.filter((b) => b.job?.status === JobStatus.IN_PROGRESS || b.job?.status === JobStatus.PENDING_CONFIRMATION).length,
+      awardedJobs: won.filter((b) => b.job?.status === JobStatus.AWARDED).length,
       earningsOverTime: months,
-      categoryMix,
-      avgResponseHours,
-      medianResponseHours,
-      bidsLast30Days,
-      responseSampleSize: responseHours.length,
-      responseSla: buildResponseSla({ jobHours: responseHours }),
-      slaTrends: {
-        d7: slaTrends.d7,
-        d30: slaTrends.d30,
-        clean: slaTrends.clean,
-      },
-      slaSparkline: (() => {
-        const weeks: { label: string; hours: number | null; n: number }[] = [];
-        const nowMs = Date.now();
-        for (let w = 5; w >= 0; w--) {
-          const end = nowMs - w * 7 * 86400000;
-          const start = end - 7 * 86400000;
-          const slice = responseSamples.filter((s) => {
-            const t = new Date(s.at).getTime();
-            return t >= start && t < end;
-          });
-          const label =
-            w === 0 ? "now" : w === 1 ? "-1w" : `-${w}w`;
-          if (!slice.length) {
-            weeks.push({ label, hours: null, n: 0 });
-          } else {
-            const avg =
-              Math.round(
-                (slice.reduce((a, b) => a + b.hours, 0) / slice.length) * 10
-              ) / 10;
-            weeks.push({ label, hours: avg, n: slice.length });
-          }
-        }
-        return weeks;
-      })(),
+      categoryMix: [...mix.values()].sort((a, b) => b.count - a.count),
+      avgResponseHours: mean(hours),
+      medianResponseHours: median(hours),
+      bidsLast30Days: allBids.filter((b) => new Date(b.createdAt).getTime() >= nowMs - 30 * 86400_000).length,
+      responseSampleSize: hours.length,
+      responseSla: buildResponseSla({ jobHours: hours }),
+      slaTrends: { d7: trends.d7, d30: trends.d30, clean: trends.clean },
+      slaSparkline: weeks,
     },
   });
 }
+

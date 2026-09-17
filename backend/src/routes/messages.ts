@@ -1,21 +1,27 @@
-import { Router, Request, Response, NextFunction } from "express";
-import { requireAuth } from "../middleware/auth";
-import { listMessages, sendMessage, streamMessages } from "../controllers/messageController";
-import { uploadMessageAttachments } from "../middleware/upload";
+import { Router } from "express";
+import { requireAuth, requireStreamAuth } from "../middleware/auth";
+import { validate } from "../middleware/validate";
+import { limiter } from "../middleware/rateLimit";
+import { optionalMultipart, uploadMessageAttachments } from "../middleware/upload";
+import * as messages from "../controllers/messageController";
+import { jobIdOnlyParams, sendMessageBody, threadQuery } from "../validation/misc";
 
 const router = Router();
+const thread = validate({ params: jobIdOnlyParams, query: threadQuery });
 
-function handleMessageUpload(req: Request, res: Response, next: NextFunction) {
-  uploadMessageAttachments(req, res, (err: any) => {
-    if (err) {
-      return res.status(400).json({ message: err.message || "Upload failed", code: "UPLOAD_ERROR" });
-    }
-    next();
-  });
-}
-
-router.get("/:jobId/stream", requireAuth, streamMessages);
-router.get("/:jobId", requireAuth, listMessages);
-router.post("/:jobId", requireAuth, handleMessageUpload, sendMessage);
+router.get("/:jobId/stream", thread, requireStreamAuth, messages.streamMessages);
+router.use(requireAuth);
+router.get("/:jobId/threads", thread, messages.listThreads);
+router.get("/:jobId", thread, messages.listMessages);
+router.post("/:jobId/read", thread, messages.markThreadRead);
+router.post(
+  "/:jobId",
+  thread,
+  limiter("messages"),
+  messages.authorizeSend,
+  optionalMultipart(uploadMessageAttachments),
+  validate({ params: jobIdOnlyParams, query: threadQuery, body: sendMessageBody }),
+  messages.sendMessage
+);
 
 export default router;

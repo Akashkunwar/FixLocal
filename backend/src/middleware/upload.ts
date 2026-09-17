@@ -1,91 +1,89 @@
-import fs from "fs";
-import path from "path";
+import crypto from "crypto";
+import type { NextFunction, Request, RequestHandler, Response } from "express";
 import multer from "multer";
+import { ensureUploadDirs, removeTempFiles, tmpDir } from "../services/files";
+import { badRequest } from "../http/errors";
 
-export const uploadsDir = path.join(process.cwd(), "uploads");
-
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+const MB = 1024 * 1024;
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsDir),
-  filename: (_req, file, cb) => {
-    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
-    cb(null, `${Date.now()}-${safe}`);
+  destination: (_req, _file, cb) => {
+    ensureUploadDirs();
+    cb(null, tmpDir());
   },
+  // Temp names are random; the final name is chosen after the content is verified.
+  filename: (_req, _file, cb) => cb(null, `${crypto.randomUUID()}.upload`),
 });
 
-function imageOrPdfFilter(
-  _req: unknown,
-  file: Express.Multer.File,
-  cb: multer.FileFilterCallback
-) {
-  if (file.mimetype.startsWith("image/") || file.mimetype === "application/pdf") {
-    cb(null, true);
-  } else {
-    cb(new Error("Only images or PDF allowed"));
-  }
+type Accept = "images" | "images_or_pdf";
+
+function declaredTypeFilter(accept: Accept) {
+  return (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    const ok =
+      file.mimetype.startsWith("image/") || (accept === "images_or_pdf" && file.mimetype === "application/pdf");
+    if (ok) cb(null, true);
+    else cb(badRequest(accept === "images" ? "Only JPG, PNG or WebP images are allowed" : "Only JPG, PNG, WebP or PDF files are allowed", "UNSUPPORTED_FILE"));
+  };
 }
 
-function imageOnlyFilter(
-  _req: unknown,
-  file: Express.Multer.File,
-  cb: multer.FileFilterCallback
-) {
-  if (file.mimetype.startsWith("image/")) {
-    cb(null, true);
-  } else {
-    cb(new Error("Only images allowed"));
-  }
+function build(
+  accept: Accept,
+  fields: { name: string; maxCount: number }[],
+  maxFiles: number
+): RequestHandler {
+  const handler = multer({
+    storage,
+    limits: { fileSize: 5 * MB, files: maxFiles, fields: 30, fieldSize: 64 * 1024, parts: maxFiles + 30 },
+    fileFilter: declaredTypeFilter(accept),
+  }).fields(fields);
+  return (req: Request, res: Response, next: NextFunction) => {
+    handler(req, res, async (err?: unknown) => {
+      if (err) {
+        await removeTempFiles(filesOf(req));
+        return next(err);
+      }
+      // If the request fails later, don't leave temp files behind.
+      res.on("finish", () => void removeTempFiles(filesOf(req)));
+      next();
+    });
+  };
 }
 
-export const uploadJobPhotos = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024, files: 5 },
-  fileFilter: imageOrPdfFilter,
-}).array("photos", 5);
-
-export const uploadGalleryPhotos = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024, files: 8 },
-  fileFilter: imageOnlyFilter,
-}).array("photos", 8);
-
-export const uploadEvidence = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024, files: 5 },
-  fileFilter: imageOrPdfFilter,
-}).array("evidence", 5);
-
-export const uploadCompletionPhotos = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024, files: 8 },
-  fileFilter: imageOnlyFilter,
-}).fields([
-  { name: "before", maxCount: 4 },
-  { name: "after", maxCount: 4 },
-]);
-
-/** Job chat: images or PDFs (max 4) + optional quote attachment. */
-export const uploadMessageAttachments = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024, files: 5 },
-  fileFilter: imageOrPdfFilter,
-}).fields([
-  { name: "attachments", maxCount: 4 },
-  { name: "quoteAttachment", maxCount: 1 },
-]);
-
-export function uploadedPaths(files: Express.Multer.File[] | undefined): string[] {
-  if (!files?.length) return [];
-  return files.map((f) => `/uploads/${f.filename}`);
+/** Only accepts multipart bodies; JSON requests pass straight through. */
+export function optionalMultipart(handler: RequestHandler): RequestHandler {
+  return (req, res, next) => {
+    if (!String(req.headers["content-type"] || "").includes("multipart/form-data")) return next();
+    return handler(req, res, next);
+  };
 }
 
+export function filesOf(req: Request, field?: string): Express.Multer.File[] {
+  const f = req.files as Record<string, Express.Multer.File[]> | Express.Multer.File[] | undefined;
+  if (!f) return [];
+  if (Array.isArray(f)) return field ? f.filter((x) => x.fieldname === field) : f;
+  if (field) return f[field] || [];
+  return Object.values(f).flat();
+}
 
-/** Single quote/estimate attachment (image or PDF). */
-export const uploadQuoteAttachment = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
-  fileFilter: imageOrPdfFilter,
-}).single("quoteAttachment");
+export const uploadJobPhotos = build("images_or_pdf", [{ name: "photos", maxCount: 5 }], 5);
+export const uploadGalleryPhotos = build("images", [{ name: "photos", maxCount: 8 }], 8);
+export const uploadEvidence = build("images_or_pdf", [{ name: "evidence", maxCount: 5 }], 5);
+export const uploadCompletionPhotos = build(
+  "images",
+  [
+    { name: "before", maxCount: 4 },
+    { name: "after", maxCount: 4 },
+  ],
+  8
+);
+export const uploadMessageAttachments = build(
+  "images_or_pdf",
+  [
+    { name: "attachments", maxCount: 4 },
+    { name: "quoteAttachment", maxCount: 1 },
+  ],
+  5
+);
+export const uploadQuoteAttachment = build("images_or_pdf", [{ name: "quoteAttachment", maxCount: 1 }], 1);
+export const uploadSingleImage = build("images", [{ name: "file", maxCount: 1 }], 1);
+export const uploadLicenseDoc = build("images_or_pdf", [{ name: "file", maxCount: 1 }], 1);

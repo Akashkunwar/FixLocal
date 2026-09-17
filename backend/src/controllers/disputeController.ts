@@ -1,329 +1,218 @@
-import { Request, Response } from "express";
-import { param } from "../utils/params";
+import type { NextFunction, Request, Response } from "express";
 import { AppDataSource } from "../data-source";
-import { NotificationType } from "../entities/Notification";
-import { createNotification } from "../utils/notifications";
-import { writeAudit, AuditAction } from "../utils/audit";
-import {
-  Dispute,
-  DisputeResolution,
-  DisputeStatus,
-} from "../entities/Dispute";
-import { Bid } from "../entities/Bid";
-import { Job, JobStatus, PaymentStatus } from "../entities/Job";
-import { refundMilestonesForJob } from "./paymentController";
+import { Dispute, DisputeResolution, DisputeStatus } from "../entities/Dispute";
+import { Job, JobStatus } from "../entities/Job";
 import { User, UserRole } from "../entities/User";
+import { NotificationType } from "../entities/Notification";
+import { UploadKind } from "../entities/Upload";
+import { AuditAction, writeAudit } from "../utils/audit";
+import { createNotifications } from "../utils/notifications";
+import { toDispute, toJob } from "../serializers";
+import { assertPrivateAccess, isAwardedPro, isOwner, loadJobContext, type JobContext } from "../policies/jobPolicy";
+import { restoreJobStatus, transitionJob } from "../domain/jobStateMachine";
+import { refundMilestones, releaseRemaining } from "../domain/escrow";
+import { viewer } from "./jobController";
+import { filesOf } from "../middleware/upload";
+import { discardFiles, fileRef, storeUploads } from "../services/files";
+import { badRequest, conflict, forbidden, notFound } from "../http/errors";
 
-const disputeRepo = () => AppDataSource.getRepository(Dispute);
-const jobRepo = () => AppDataSource.getRepository(Job);
-const bidRepo = () => AppDataSource.getRepository(Bid);
+export const DISPUTE_WINDOW_DAYS = 14;
 
-const RESOLUTIONS = Object.values(DisputeResolution);
-
-async function isPartyToJob(job: Job, userId: string): Promise<boolean> {
-  if (job.homeownerId === userId) return true;
-  if (!job.acceptedBidId) return false;
-  const accepted = await bidRepo().findOne({ where: { id: job.acceptedBidId } });
-  return !!accepted && accepted.tradespersonId === userId;
+function assertCanDispute(ctx: JobContext, req: Request) {
+  const v = viewer(req);
+  if (!isOwner(ctx, v) && !isAwardedPro(ctx, v)) {
+    throw forbidden("Only the client or the hired professional can open a dispute");
+  }
+  const s = ctx.job.status;
+  if (s === JobStatus.DISPUTED) throw conflict("An open dispute already exists for this job", "DISPUTE_OPEN");
+  if (![JobStatus.AWARDED, JobStatus.IN_PROGRESS, JobStatus.PENDING_CONFIRMATION, JobStatus.COMPLETED].includes(s)) {
+    throw conflict("Disputes can only be opened on awarded, in-progress or completed jobs", "INVALID_STATUS");
+  }
+  if (s === JobStatus.COMPLETED && ctx.job.completedAt) {
+    const age = Date.now() - new Date(ctx.job.completedAt).getTime();
+    if (age > DISPUTE_WINDOW_DAYS * 86400_000) {
+      throw conflict(`Disputes must be opened within ${DISPUTE_WINDOW_DAYS} days of completion`, "DISPUTE_WINDOW_CLOSED");
+    }
+  }
 }
 
-function serializeDispute(d: Dispute) {
-  return {
-    id: d.id,
-    jobId: d.jobId,
-    raisedByUserId: d.raisedByUserId,
-    reason: d.reason,
-    evidenceUrls: d.evidenceUrls || [],
-    status: d.status,
-    resolution: d.resolution,
-    resolutionNotes: d.resolutionNotes,
-    refundMeta: d.refundMeta || null,
-    resolvedAt: d.resolvedAt,
-    createdAt: d.createdAt,
-    updatedAt: d.updatedAt,
-    job: d.job
-      ? {
-          id: d.job.id,
-          title: d.job.title,
-          status: d.job.status,
-          homeownerId: d.job.homeownerId,
-          category: d.job.category,
-        }
-      : undefined,
-    raisedBy: d.raisedBy
-      ? {
-          id: d.raisedBy.id,
-          email: d.raisedBy.email,
-          name: d.raisedBy.name,
-          role: d.raisedBy.role,
-        }
-      : undefined,
-  };
+/** Runs before multer: nobody else can write evidence files. */
+export async function authorizeDispute(req: Request, _res: Response, next: NextFunction) {
+  assertCanDispute(await loadJobContext(req.valid.params.id), req);
+  next();
 }
 
 export async function createDispute(req: Request, res: Response) {
-  const body = req.body ?? {};
-  const jobId = body.jobId;
-  const reason = body.reason;
-  let evidenceUrls: string[] = [];
-
-  if (Array.isArray(body.evidenceUrls)) {
-    evidenceUrls = body.evidenceUrls.map(String);
-  } else if (typeof body.evidenceUrls === "string" && body.evidenceUrls.trim()) {
-    try {
-      const parsed = JSON.parse(body.evidenceUrls);
-      if (Array.isArray(parsed)) evidenceUrls = parsed.map(String);
-    } catch {
-      evidenceUrls = [body.evidenceUrls];
-    }
-  }
-
-  const files = req.files as Express.Multer.File[] | undefined;
-  if (files?.length) {
-    evidenceUrls = [...evidenceUrls, ...files.map((f) => `/uploads/${f.filename}`)];
-  }
-  evidenceUrls = evidenceUrls.slice(0, 8);
-
-  if (!jobId || !reason) {
-    return res.status(400).json({ message: "jobId and reason are required" });
-  }
-
-  const job = await jobRepo().findOne({ where: { id: jobId } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-
-  const allowedStatuses = [
-    JobStatus.AWARDED,
-    JobStatus.IN_PROGRESS,
-    JobStatus.COMPLETED,
-    JobStatus.DISPUTED,
-  ];
-  if (!allowedStatuses.includes(job.status)) {
-    return res.status(400).json({
-      message: "Disputes can only be opened on awarded, in-progress, or completed jobs",
-      code: "INVALID_STATUS",
-    });
-  }
-
-  if (!(await isPartyToJob(job, req.user!.id))) {
-    return res.status(403).json({
-      message: "Only the homeowner or awarded tradesperson can open a dispute",
-      code: "FORBIDDEN",
-    });
-  }
-
-  const openExisting = await disputeRepo().findOne({
-    where: { jobId: job.id, status: DisputeStatus.OPEN },
+  const jobId: string = req.valid.params.id ?? req.valid.body.jobId;
+  const ctx = await loadJobContext(jobId);
+  assertCanDispute(ctx, req);
+  const files = filesOf(req, "evidence");
+  let stored: string[] = [];
+  const dispute = await AppDataSource.transaction(async (m) => {
+    const previous = await transitionJob(m, jobId, "dispute");
+    const uploads = await storeUploads(files, { kind: UploadKind.EVIDENCE, ownerUserId: req.user!.id, jobId, allowPdf: true }, m);
+    stored = uploads.map((u) => fileRef(u.name));
+    return m.save(
+      m.create(Dispute, {
+        jobId,
+        raisedByUserId: req.user!.id,
+        reason: req.valid.body.reason,
+        evidenceUrls: stored,
+        previousJobStatus: previous,
+        status: DisputeStatus.OPEN,
+      })
+    );
+  }).catch(async (err) => {
+    await discardFiles(stored);
+    throw err;
   });
-  if (openExisting) {
-    return res.status(409).json({
-      message: "An open dispute already exists for this job",
-      code: "DISPUTE_OPEN",
-    });
-  }
 
-  const dispute = disputeRepo().create({
-    jobId: job.id,
-    raisedByUserId: req.user!.id,
-    reason: String(reason).trim(),
-    evidenceUrls,
-    status: DisputeStatus.OPEN,
-  });
-  await disputeRepo().save(dispute);
-
-  if (job.status !== JobStatus.DISPUTED) {
-    job.status = JobStatus.DISPUTED;
-    await jobRepo().save(job);
-  }
-
-  const admins = await AppDataSource.getRepository(User).find({ where: { role: UserRole.ADMIN } });
-  for (const admin of admins) {
-    await createNotification({
-      userId: admin.id,
+  const admins = await AppDataSource.getRepository(User).find({ where: { role: UserRole.ADMIN }, select: { id: true } });
+  const others = [ctx.job.homeownerId, ctx.acceptedProId].filter((id): id is string => !!id && id !== req.user!.id);
+  await createNotifications([
+    ...admins.map((a) => ({
+      userId: a.id,
       type: NotificationType.DISPUTE,
       title: "New dispute opened",
-      body: `Dispute on "${job.title}"${evidenceUrls.length ? ` · ${evidenceUrls.length} evidence file(s)` : ""}`,
+      body: `Dispute on "${ctx.job.title}"${stored.length ? ` · ${stored.length} evidence file(s)` : ""}`,
       link: "/admin/disputes",
-      meta: { jobId: job.id, disputeId: dispute.id },
-    });
-  }
-
-  // Notify the other party
-  const otherIds = new Set<string>();
-  if (job.homeownerId !== req.user!.id) otherIds.add(job.homeownerId);
-  if (job.acceptedBidId) {
-    const accepted = await bidRepo().findOne({ where: { id: job.acceptedBidId } });
-    if (accepted && accepted.tradespersonId !== req.user!.id) {
-      otherIds.add(accepted.tradespersonId);
-    }
-  }
-  for (const userId of otherIds) {
-    await createNotification({
+      meta: { jobId, disputeId: dispute.id },
+    })),
+    ...others.map((userId) => ({
       userId,
       type: NotificationType.DISPUTE,
       title: "Dispute opened on your job",
-      body: `A dispute was opened on "${job.title}"`,
-      link:
-        job.homeownerId === userId
-          ? `/homeowner/jobs/${job.id}`
-          : `/tradesperson/jobs/${job.id}`,
-      meta: { jobId: job.id, disputeId: dispute.id },
-    });
-  }
-
-  return res.status(201).json({ dispute: serializeDispute(dispute), job });
+      body: `A dispute was opened on "${ctx.job.title}". An admin will review it.`,
+      link: userId === ctx.job.homeownerId ? `/client/jobs/${jobId}` : `/professional/jobs/${jobId}`,
+      meta: { jobId, disputeId: dispute.id },
+    })),
+  ]);
+  const job = await AppDataSource.getRepository(Job).findOneOrFail({ where: { id: jobId } });
+  return res.status(201).json({ dispute: toDispute(dispute), job: toJob(job, "private") });
 }
 
 export async function listDisputes(req: Request, res: Response) {
   const { role, id: userId } = req.user!;
-  const qb = disputeRepo()
+  const q = req.valid.query;
+  const qb = AppDataSource.getRepository(Dispute)
     .createQueryBuilder("d")
     .leftJoinAndSelect("d.job", "job")
     .leftJoinAndSelect("d.raisedBy", "raisedBy")
-    .orderBy("d.createdAt", "DESC");
-
+    .orderBy("d.createdAt", "DESC")
+    .take(q.limit ?? 50)
+    .skip(((q.page ?? 1) - 1) * (q.limit ?? 50));
   if (role !== UserRole.ADMIN) {
-    const myAcceptedBids = await bidRepo().find({
-      where: { tradespersonId: userId },
-      select: ["id"],
-    });
-    const acceptedIds = myAcceptedBids.map((b) => b.id);
-
-    if (acceptedIds.length) {
-      qb.andWhere(
-        "(d.raisedByUserId = :userId OR job.homeownerId = :userId OR job.acceptedBidId IN (:...acceptedIds))",
-        { userId, acceptedIds }
-      );
-    } else {
-      qb.andWhere("(d.raisedByUserId = :userId OR job.homeownerId = :userId)", {
-        userId,
-      });
-    }
+    qb.leftJoin("bids", "accepted", `accepted."id" = job."acceptedBidId"`).andWhere(
+      `(job."homeownerId" = :userId OR accepted."tradespersonId" = :userId)`,
+      { userId }
+    );
   }
-
-  if (req.query.status) {
-    qb.andWhere("d.status = :status", { status: String(req.query.status) });
-  }
-
+  if (q.status) qb.andWhere("d.status = :status", { status: q.status });
+  if (q.jobId) qb.andWhere("d.jobId = :jobId", { jobId: q.jobId });
   const disputes = await qb.getMany();
-  return res.json({ disputes: disputes.map(serializeDispute) });
+  return res.json({ disputes: disputes.map(toDispute) });
 }
 
+/**
+ * Resolve a dispute. Each outcome maps to a specific money movement:
+ * - favor_homeowner: job cancelled, everything not yet released is refunded
+ * - favor_tradesperson: job completed, everything left is released
+ * - no_action: job returns to where it was; money untouched
+ * `refundMilestoneIds` refunds specific unreleased milestones first (partial outcomes).
+ */
 export async function resolveDispute(req: Request, res: Response) {
-  const dispute = await disputeRepo().findOne({
-    where: { id: param(req, "id") },
-    relations: ["job", "raisedBy"],
-  });
-  if (!dispute) {
-    return res.status(404).json({ message: "Dispute not found", code: "NOT_FOUND" });
-  }
-  if (dispute.status !== DisputeStatus.OPEN) {
-    return res.status(400).json({ message: "Dispute is already resolved", code: "ALREADY_RESOLVED" });
-  }
+  const { resolution, resolutionNotes, refundMilestoneIds, jobStatus } = req.valid.body;
+  const disputeId = req.valid.params.id;
+  const existing = await AppDataSource.getRepository(Dispute).findOne({ where: { id: disputeId } });
+  if (!existing) throw notFound("Dispute not found");
+  const ctx = await loadJobContext(existing.jobId);
+  assertPrivateAccess(ctx, viewer(req));
 
-  const { resolution, resolutionNotes, jobStatus, refundMilestoneIds } = req.body ?? {};
-  if (!resolution || !RESOLUTIONS.includes(resolution)) {
-    return res.status(400).json({
-      message: `resolution must be one of: ${RESOLUTIONS.join(", ")}`,
-      code: "INVALID_RESOLUTION",
-    });
-  }
+  const outcome =
+    jobStatus ??
+    (resolution === DisputeResolution.FAVOR_HOMEOWNER
+      ? "cancelled"
+      : resolution === DisputeResolution.FAVOR_TRADESPERSON
+        ? "completed"
+        : "restore");
 
-  dispute.status = DisputeStatus.RESOLVED;
-  dispute.resolution = resolution;
-  dispute.resolutionNotes = resolutionNotes ? String(resolutionNotes).trim() : undefined;
-  dispute.resolvedAt = new Date();
-
-  const job = await jobRepo().findOne({ where: { id: dispute.jobId } });
-  if (job) {
-    if (jobStatus === JobStatus.CANCELLED || jobStatus === "cancelled") {
-      job.status = JobStatus.CANCELLED;
-    } else if (jobStatus === JobStatus.COMPLETED || jobStatus === "completed") {
-      job.status = JobStatus.COMPLETED;
-      if (!job.completedAt) job.completedAt = new Date();
-    } else if (jobStatus === JobStatus.IN_PROGRESS || jobStatus === "in_progress") {
-      job.status = JobStatus.IN_PROGRESS;
-    } else if (resolution === DisputeResolution.FAVOR_HOMEOWNER) {
-      job.status = JobStatus.CANCELLED;
-    } else if (resolution === DisputeResolution.FAVOR_TRADESPERSON) {
-      job.status = JobStatus.COMPLETED;
-      if (!job.completedAt) job.completedAt = new Date();
+  const result = await AppDataSource.transaction(async (m) => {
+    const claimed = await m.update(
+      Dispute,
+      { id: disputeId, status: DisputeStatus.OPEN },
+      { status: DisputeStatus.RESOLVED, resolution, resolutionNotes: resolutionNotes || undefined, resolvedAt: new Date() }
+    );
+    if (!claimed.affected) throw conflict("This dispute is already resolved", "ALREADY_RESOLVED");
+    const job = await m.findOneOrFail(Job, { where: { id: ctx.job.id } });
+    const note = resolutionNotes || `Dispute ${disputeId} resolution`;
+    let refunded: Awaited<ReturnType<typeof refundMilestones>> | null = null;
+    if (refundMilestoneIds?.length) {
+      refunded = await refundMilestones(m, job, refundMilestoneIds, req.user!.id, note);
+    }
+    let released: Awaited<ReturnType<typeof releaseRemaining>> | null = null;
+    let finalStatus: JobStatus;
+    if (outcome === "cancelled") {
+      await transitionJob(m, job.id, "resolve_cancel");
+      const all = await refundMilestones(m, job, "all_unreleased", req.user!.id, note);
+      refunded = refunded
+        ? { ...all, refunded: [...refunded.refunded, ...all.refunded], totalRefunded: refunded.totalRefunded + all.totalRefunded }
+        : all;
+      finalStatus = JobStatus.CANCELLED;
+    } else if (outcome === "completed") {
+      await transitionJob(m, job.id, "resolve_complete", { completedAt: job.completedAt ?? new Date() });
+      released = await releaseRemaining(m, job, req.user!.id);
+      finalStatus = JobStatus.COMPLETED;
     } else {
-      if (job.status === JobStatus.DISPUTED) {
-        job.status = JobStatus.CANCELLED;
-      }
+      const previous = (existing.previousJobStatus as JobStatus) || JobStatus.IN_PROGRESS;
+      finalStatus = await restoreJobStatus(m, job.id, previous);
     }
-    await jobRepo().save(job);
-
-    const ids = Array.isArray(refundMilestoneIds)
-      ? refundMilestoneIds.map(String)
-      : typeof refundMilestoneIds === "string" && refundMilestoneIds
-        ? [refundMilestoneIds]
-        : [];
-    if (ids.length) {
-      const result = await refundMilestonesForJob(
-        job,
-        ids,
-        req.user!.id,
-        dispute.resolutionNotes || `Dispute ${dispute.id} resolution refund`
-      );
-      dispute.refundMeta = {
-        milestoneIds: result.refunded.map((m) => m.id),
-        totalRefunded: result.totalRefunded,
-        labels: result.refunded.map((m) => m.label),
-      };
-      // Prefer refunded payment status when all reverse
-      if (result.paymentStatus === PaymentStatus.REFUNDED) {
-        job.paymentStatus = PaymentStatus.REFUNDED;
-      }
-    }
-
-    await disputeRepo().save(dispute);
-
-    const notifyIds = new Set<string>([dispute.raisedByUserId, job.homeownerId]);
-    if (job.acceptedBidId) {
-      const accepted = await bidRepo().findOne({ where: { id: job.acceptedBidId } });
-      if (accepted) notifyIds.add(accepted.tradespersonId);
-    }
-    for (const userId of notifyIds) {
-      await createNotification({
-        userId,
-        type: NotificationType.DISPUTE,
-        title: "Dispute resolved",
-        body: `Dispute on "${job.title}" resolved: ${String(resolution).replace(/_/g, " ")}${
-          dispute.refundMeta?.totalRefunded
-            ? ` · ₹${Number(dispute.refundMeta.totalRefunded).toFixed(0)} escrow refunded (simulated)`
-            : ""
-        }`,
-        link:
-          userId === job.homeownerId
-            ? `/homeowner/jobs/${job.id}`
-            : `/tradesperson/jobs/${job.id}`,
-        meta: { jobId: job.id, disputeId: dispute.id, resolution },
-      });
-    }
-  }
-
-  if (!job) {
-    await disputeRepo().save(dispute);
-  }
-
-  await writeAudit({
-    actorUserId: req.user!.id,
-    actorEmail: req.user!.email,
-    action: AuditAction.DISPUTE_RESOLVE,
-    targetType: "dispute",
-    targetId: dispute.id,
-    summary: `Resolved dispute on job ${dispute.jobId}: ${resolution}`,
-    meta: {
-      resolution,
-      jobId: dispute.jobId,
-      jobStatus: job?.status,
-      notes: dispute.resolutionNotes,
-      refundMeta: dispute.refundMeta || null,
-    },
+    const refundMeta = {
+      milestoneIds: refunded?.refunded.map((x) => x.id) ?? [],
+      totalRefunded: Math.round((refunded?.totalRefunded ?? 0) * 100) / 100,
+      labels: refunded?.refunded.map((x) => x.label) ?? [],
+      notRefundable: refunded?.notRefundable ?? [],
+      releasedMilestoneIds: released?.released.map((x) => x.id) ?? [],
+      totalReleased: Math.round((released?.released.reduce((s, x) => s + Number(x.amount), 0) ?? 0) * 100) / 100,
+    };
+    await m.update(Dispute, { id: disputeId }, { refundMeta });
+    await writeAudit(
+      {
+        actorUserId: req.user!.id,
+        actorEmail: req.user!.email,
+        action: AuditAction.DISPUTE_RESOLVE,
+        targetType: "job",
+        targetId: job.id,
+        summary: `Resolved dispute on "${job.title}": ${resolution} → job ${finalStatus}`,
+        meta: { disputeId, resolution, outcome, jobStatus: finalStatus, note: resolutionNotes || null, refundMeta },
+      },
+      m
+    );
+    return { finalStatus, refundMeta };
   });
 
-  return res.json({ dispute: serializeDispute(dispute), job });
+  const recipients = new Set([existing.raisedByUserId, ctx.job.homeownerId, ctx.acceptedProId].filter(Boolean) as string[]);
+  const money = [
+    result.refundMeta.totalRefunded ? `₹${result.refundMeta.totalRefunded.toFixed(0)} refunded to the client` : null,
+    result.refundMeta.totalReleased ? `₹${result.refundMeta.totalReleased.toFixed(0)} released to the professional` : null,
+  ].filter(Boolean);
+  await createNotifications(
+    [...recipients].map((userId) => ({
+      userId,
+      type: NotificationType.DISPUTE,
+      title: "Dispute resolved",
+      body: `Dispute on "${ctx.job.title}" resolved: ${String(resolution).replace(/_/g, " ")}${money.length ? ` · ${money.join(" · ")} (simulated)` : ""}`,
+      link: userId === ctx.job.homeownerId ? `/client/jobs/${ctx.job.id}` : `/professional/jobs/${ctx.job.id}`,
+      meta: { jobId: ctx.job.id, disputeId, resolution },
+    }))
+  );
+  const dispute = await AppDataSource.getRepository(Dispute).findOneOrFail({ where: { id: disputeId }, relations: ["job", "raisedBy"] });
+  const job = await AppDataSource.getRepository(Job).findOneOrFail({ where: { id: ctx.job.id } });
+  return res.json({ dispute: toDispute(dispute), job: toJob(job, "private") });
+}
+
+export function rejectLegacyMultipart(req: Request, _res: Response, next: NextFunction) {
+  if (String(req.headers["content-type"] || "").includes("multipart/form-data")) {
+    return next(badRequest("Send evidence files to POST /api/jobs/:id/disputes", "USE_JOB_DISPUTE_ROUTE"));
+  }
+  next();
 }

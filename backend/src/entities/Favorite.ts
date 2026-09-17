@@ -43,6 +43,6 @@ export class Favorite {
   @Column({ type: "jsonb", nullable: true })
   tags?: string[] | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

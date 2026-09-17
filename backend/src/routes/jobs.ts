@@ -1,137 +1,137 @@
-import { Router, Request, Response, NextFunction } from "express";
-import { requireAuth } from "../middleware/auth";
+import { Router } from "express";
+import { requireAuth, requireVerifiedEmail } from "../middleware/auth";
 import { requireRole } from "../middleware/rbac";
+import { validate } from "../middleware/validate";
+import { limiter } from "../middleware/rateLimit";
+import { idempotent } from "../middleware/idempotency";
+import { optionalMultipart, uploadCompletionPhotos, uploadEvidence, uploadJobPhotos, uploadQuoteAttachment } from "../middleware/upload";
 import { UserRole } from "../entities/User";
-import { uploadJobPhotos, uploadCompletionPhotos, uploadQuoteAttachment } from "../middleware/upload";
-import { listJobs, createJob, getJob, updateJob, cancelJob, suggestedProsForJob, inviteSuggestedPro, declineJobInvite, listJobInvites, bulkInviteSuggestedPros, markInviteOpened, getJobInviteAnalytics, getHomeownerInviteAnalytics, shortlistRankedForJob, getShortlistInviteAnalytics, getHomeownerShortlistInviteAnalytics } from "../controllers/jobController";
-import { placeBid, listBids, getCounterAnalytics } from "../controllers/bidController";
-import { startJob, completeJob } from "../controllers/jobStatusController";
-import {
-  listMilestones,
-  releaseMilestone,
-} from "../controllers/paymentController";
-import {
-  proposeSchedule,
-  acceptSchedule,
-  getSchedule,
-} from "../controllers/scheduleController";
-import {
-  uploadCompletionPhotos as uploadCompletionPhotosHandler,
-  removeCompletionPhoto,
-} from "../controllers/completionPhotosController";
-import {
-  proposeAmc,
-  replyAmc,
-  requestAmc,
-  replyAmcRequest,
-} from "../controllers/amcProposalController";
+import * as jobs from "../controllers/jobController";
+import * as invites from "../controllers/inviteController";
+import * as match from "../controllers/matchController";
+import * as status from "../controllers/jobStatusController";
+import * as payments from "../controllers/paymentController";
+import * as schedule from "../controllers/scheduleController";
+import * as photos from "../controllers/completionPhotosController";
+import * as amc from "../controllers/amcProposalController";
+import * as disputes from "../controllers/disputeController";
 import { publishCaseStudyFromJob } from "../controllers/publishCaseStudyController";
+import { getCounterAnalytics, listBids, placeBid } from "../controllers/bidController";
+import { authorizeJobOwner } from "../policies/routeGuards";
+import * as js from "../validation/jobs";
+import { counterAnalyticsQuery, placeBidBody } from "../validation/bids";
+import { createDisputeBody } from "../validation/misc";
+
+const HOMEOWNER = UserRole.HOMEOWNER;
+const PRO = UserRole.TRADESPERSON;
+const ADMIN = UserRole.ADMIN;
+const params = validate({ params: js.jobIdParams });
 
 const router = Router();
+router.use(requireAuth);
 
-function handleUpload(req: Request, res: Response, next: NextFunction) {
-  uploadJobPhotos(req, res, (err) => {
-    if (err) {
-      return res.status(400).json({ message: err.message || "Upload failed", code: "UPLOAD_ERROR" });
-    }
-    next();
-  });
-}
+router.get("/", validate({ query: js.listJobsQuery }), jobs.listJobs);
+router.post(
+  "/",
+  requireRole(HOMEOWNER),
+  requireVerifiedEmail,
+  limiter("uploads"),
+  optionalMultipart(uploadJobPhotos),
+  validate({ body: js.createJobBody }),
+  jobs.createJob
+);
+router.get("/invite-analytics", requireRole(HOMEOWNER, ADMIN), validate({ query: js.analyticsOwnerQuery }), invites.getHomeownerInviteAnalytics);
+router.get(
+  "/shortlist-invite-analytics",
+  requireRole(HOMEOWNER, ADMIN),
+  validate({ query: js.analyticsOwnerQuery }),
+  invites.getHomeownerShortlistInviteAnalytics
+);
+router.get("/counter-analytics", requireRole(HOMEOWNER, ADMIN), validate({ query: counterAnalyticsQuery }), getCounterAnalytics);
 
-function handleCompletionUpload(req: Request, res: Response, next: NextFunction) {
-  uploadCompletionPhotos(req, res, (err) => {
-    if (err) {
-      return res.status(400).json({ message: err.message || "Upload failed", code: "UPLOAD_ERROR" });
-    }
-    next();
-  });
-}
+router.get("/:id", params, jobs.getJob);
+router.patch(
+  "/:id",
+  requireRole(HOMEOWNER),
+  params,
+  authorizeJobOwner,
+  optionalMultipart(uploadJobPhotos),
+  validate({ params: js.jobIdParams, body: js.updateJobBody }),
+  jobs.updateJob
+);
+router.post("/:id/cancel", requireRole(HOMEOWNER), params, jobs.cancelJob);
+router.post("/:id/photo-consent", requireRole(HOMEOWNER), validate({ params: js.jobIdParams, body: js.photoConsentBody }), jobs.setPhotoConsent);
 
+router.get("/:id/suggested-pros", requireRole(HOMEOWNER, ADMIN), validate({ params: js.jobIdParams, query: js.suggestedQuery }), match.suggestedProsForJob);
+router.get("/:id/shortlist-ranked", requireRole(HOMEOWNER, ADMIN), params, match.shortlistRankedForJob);
 
-function handleQuoteUpload(req: Request, res: Response, next: NextFunction) {
-  // JSON body bids skip multer; multipart uses quoteAttachment field
-  const ct = String(req.headers["content-type"] || "");
-  if (!ct.includes("multipart/form-data")) return next();
-  uploadQuoteAttachment(req, res, (err) => {
-    if (err) {
-      return res.status(400).json({ message: err.message || "Upload failed", code: "UPLOAD_ERROR" });
-    }
-    next();
-  });
-}
+router.get("/:id/invites", requireRole(HOMEOWNER, ADMIN), params, invites.listJobInvites);
+router.get("/:id/invite-analytics", requireRole(HOMEOWNER, ADMIN), params, invites.getJobInviteAnalytics);
+router.get("/:id/shortlist-invite-analytics", requireRole(HOMEOWNER, ADMIN), params, invites.getShortlistInviteAnalytics);
+router.post("/:id/invite-pro", requireRole(HOMEOWNER, ADMIN), limiter("invites"), validate({ params: js.jobIdParams, body: js.inviteBody }), invites.inviteSuggestedPro);
+router.post("/:id/invite-pros", requireRole(HOMEOWNER, ADMIN), limiter("invites"), validate({ params: js.jobIdParams, body: js.bulkInviteBody }), invites.bulkInviteSuggestedPros);
+router.post("/:id/invite-opened", requireRole(PRO), params, invites.markInviteOpened);
+router.post("/:id/decline-invite", requireRole(PRO), validate({ params: js.jobIdParams, body: js.declineInviteBody }), invites.declineJobInvite);
 
-router.get("/", requireAuth, listJobs);
-router.get("/invite-analytics", requireAuth, requireRole(UserRole.HOMEOWNER, UserRole.ADMIN), getHomeownerInviteAnalytics);
-router.get("/shortlist-invite-analytics", requireAuth, requireRole(UserRole.HOMEOWNER, UserRole.ADMIN), getHomeownerShortlistInviteAnalytics);
-router.get("/counter-analytics", requireAuth, getCounterAnalytics);
-router.post("/", requireAuth, requireRole(UserRole.HOMEOWNER), handleUpload, createJob);
-router.get("/:id/suggested-pros", requireAuth, requireRole(UserRole.HOMEOWNER, UserRole.ADMIN), suggestedProsForJob);
-router.get("/:id/shortlist-ranked", requireAuth, requireRole(UserRole.HOMEOWNER, UserRole.ADMIN), shortlistRankedForJob);
-router.get("/:id/shortlist-invite-analytics", requireAuth, requireRole(UserRole.HOMEOWNER, UserRole.ADMIN), getShortlistInviteAnalytics);
-router.post("/:id/invite-pro", requireAuth, requireRole(UserRole.HOMEOWNER, UserRole.ADMIN), inviteSuggestedPro);
-router.post("/:id/invite-pros", requireAuth, requireRole(UserRole.HOMEOWNER, UserRole.ADMIN), bulkInviteSuggestedPros);
-router.get("/:id/invites", requireAuth, requireRole(UserRole.HOMEOWNER, UserRole.ADMIN), listJobInvites);
-router.get("/:id/invite-analytics", requireAuth, requireRole(UserRole.HOMEOWNER, UserRole.ADMIN), getJobInviteAnalytics);
-router.post("/:id/invite-opened", requireAuth, requireRole(UserRole.TRADESPERSON), markInviteOpened);
-router.post("/:id/decline-invite", requireAuth, requireRole(UserRole.TRADESPERSON), declineJobInvite);
-router.get("/:id/bids", requireAuth, listBids);
-router.post("/:id/bids", requireAuth, requireRole(UserRole.TRADESPERSON), handleQuoteUpload, placeBid);
-router.post("/:id/start", requireAuth, requireRole(UserRole.TRADESPERSON), startJob);
-router.post("/:id/complete", requireAuth, completeJob);
+router.get("/:id/bids", params, listBids);
+router.post(
+  "/:id/bids",
+  requireRole(PRO),
+  requireVerifiedEmail,
+  params,
+  optionalMultipart(uploadQuoteAttachment),
+  validate({ params: js.jobIdParams, body: placeBidBody }),
+  placeBid
+);
+
+router.post("/:id/start", requireRole(PRO), params, status.startJob);
+router.post("/:id/mark-done", requireRole(PRO), params, status.markDone);
+router.post("/:id/confirm", requireRole(HOMEOWNER, ADMIN), params, idempotent, status.confirmComplete);
+router.post("/:id/complete", params, idempotent, status.completeJob);
+
 router.post(
   "/:id/completion-photos",
-  requireAuth,
-  handleCompletionUpload,
-  uploadCompletionPhotosHandler
+  params,
+  photos.authorizeCompletionUpload,
+  limiter("uploads"),
+  uploadCompletionPhotos,
+  photos.uploadCompletionPhotos
 );
-router.delete("/:id/completion-photos", requireAuth, removeCompletionPhoto);
+router.delete("/:id/completion-photos", validate({ params: js.jobIdParams, body: js.removeCompletionPhotoBody }), photos.removeCompletionPhoto);
 router.post(
   "/:id/publish-case-study",
-  requireAuth,
-  requireRole(UserRole.TRADESPERSON, UserRole.ADMIN),
+  requireRole(PRO, ADMIN),
+  validate({ params: js.jobIdParams, body: js.publishCaseStudyBody }),
   publishCaseStudyFromJob
 );
-router.post(
-  "/:id/amc-proposal",
-  requireAuth,
-  requireRole(UserRole.TRADESPERSON, UserRole.ADMIN),
-  proposeAmc
-);
-router.post(
-  "/:id/amc-proposal/reply",
-  requireAuth,
-  requireRole(UserRole.HOMEOWNER, UserRole.ADMIN),
-  replyAmc
-);
 
-router.post(
-  "/:id/amc-request",
-  requireAuth,
-  requireRole(UserRole.HOMEOWNER, UserRole.ADMIN),
-  requestAmc
-);
-router.post(
-  "/:id/amc-request/reply",
-  requireAuth,
-  requireRole(UserRole.TRADESPERSON, UserRole.ADMIN),
-  replyAmcRequest
-);
+router.post("/:id/amc-proposal", requireRole(PRO, ADMIN), validate({ params: js.jobIdParams, body: js.amcProposalBody }), amc.proposeAmc);
+router.post("/:id/amc-proposal/reply", requireRole(HOMEOWNER, ADMIN), validate({ params: js.jobIdParams, body: js.amcReplyBody }), amc.replyAmc);
+router.post("/:id/amc-request", requireRole(HOMEOWNER, ADMIN), validate({ params: js.jobIdParams, body: js.amcProposalBody }), amc.requestAmc);
+router.post("/:id/amc-request/reply", requireRole(PRO, ADMIN), validate({ params: js.jobIdParams, body: js.amcReplyBody }), amc.replyAmcRequest);
 
-
-router.get("/:id/payments", requireAuth, listMilestones);
+router.get("/:id/payments", params, payments.listMilestones);
 router.post(
   "/:id/payments/:milestoneId/release",
-  requireAuth,
-  requireRole(UserRole.HOMEOWNER, UserRole.ADMIN),
-  releaseMilestone
+  requireRole(HOMEOWNER, ADMIN),
+  validate({ params: js.milestoneParams }),
+  idempotent,
+  payments.releaseMilestone
 );
 
-router.get("/:id/schedule", requireAuth, getSchedule);
-router.post("/:id/schedule/propose", requireAuth, proposeSchedule);
-router.post("/:id/schedule/accept", requireAuth, acceptSchedule);
+router.get("/:id/schedule", params, schedule.getSchedule);
+router.post("/:id/schedule/propose", validate({ params: js.jobIdParams, body: js.scheduleProposeBody }), schedule.proposeSchedule);
+router.post("/:id/schedule/accept", params, schedule.acceptSchedule);
 
-router.get("/:id", requireAuth, getJob);
-router.patch("/:id", requireAuth, requireRole(UserRole.HOMEOWNER), handleUpload, updateJob);
-router.post("/:id/cancel", requireAuth, requireRole(UserRole.HOMEOWNER), cancelJob);
+router.post(
+  "/:id/disputes",
+  requireRole(HOMEOWNER, PRO),
+  params,
+  disputes.authorizeDispute,
+  limiter("uploads"),
+  optionalMultipart(uploadEvidence),
+  validate({ params: js.jobIdParams, body: createDisputeBody }),
+  disputes.createDispute
+);
 
 export default router;

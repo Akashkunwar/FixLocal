@@ -1,37 +1,47 @@
-import { Request, Response } from "express";
-import { param } from "../utils/params";
+import type { Request, Response } from "express";
+import { In, Not } from "typeorm";
 import { AppDataSource } from "../data-source";
 import { Bid, BidStatus } from "../entities/Bid";
 import { Job, JobStatus, PaymentStatus, ScheduleStatus } from "../entities/Job";
 import { User, UserRole } from "../entities/User";
-import {
-  TradespersonProfile,
-  VerificationStatus,
-} from "../entities/TradespersonProfile";
-import { invalidateOpenJobsCache } from "../utils/cache";
-import { createNotification } from "../utils/notifications";
-import { createEscrowForAcceptedBid } from "./paymentController";
-import { haversineKm } from "../utils/geo";
-import { escrowAmountFromBid, scoreProForJob, type ScoreablePro } from "../utils/matchScore";
-import { getMatchWeights, getHeatWeight, computeHeatBoost, getBestValueBlend } from "../utils/matchWeights";
-import { buildAvailabilityHeat } from "../utils/availabilityHeat";
-import { buildEventSla, hoursBetween, isTierImproved } from "../utils/responseSla";
-import { Notification, NotificationType } from "../entities/Notification";
-import { slaTrendsForPros, computeProOverallSla } from "../utils/proSlaBatch";
+import { TradespersonProfile, VerificationStatus } from "../entities/TradespersonProfile";
 import { Favorite, FavoriteTargetType } from "../entities/Favorite";
-import { quoteViewNudgeHours, resolveQuoteViewNudgeHours } from "../utils/availabilityHeat";
-import { previewEscrowSplit } from "./paymentController";
+import { Notification, NotificationType } from "../entities/Notification";
+import { UploadKind } from "../entities/Upload";
+import { invalidateOpenJobsCache } from "../utils/cache";
+import { createNotification, createNotifications } from "../utils/notifications";
+import { revokeThreadStreams } from "../utils/sse";
+import { haversineKm } from "../utils/geo";
+import { scoreProForJob, type ScoreablePro } from "../utils/matchScore";
+import { computeHeatBoost, getBestValueBlend, getHeatWeight, getMatchWeights } from "../utils/matchWeights";
+import { buildAvailabilityHeat, resolveQuoteViewNudgeHours } from "../utils/availabilityHeat";
+import { buildEventSla, hoursBetween, isTierImproved } from "../utils/responseSla";
+import { computeProOverallSla, slaTrendsForPros } from "../utils/proSlaBatch";
+import { createEscrow, escrowAmountFromBid, splitEscrow } from "../domain/escrow";
+import { transitionJob } from "../domain/jobStateMachine";
+import { mean, median, rate } from "../domain/analytics";
+import { roundCoord, toBid, toJob } from "../serializers";
+import {
+  assertOwner,
+  isAdmin,
+  isOwner,
+  loadJobContext,
+  type JobContext,
+} from "../policies/jobPolicy";
+import { viewer } from "./jobController";
+import { firstInviteTimes } from "./inviteController";
+import { filesOf } from "../middleware/upload";
+import { discardFiles, fileRef, storeUploads } from "../services/files";
+import { badRequest, conflict, forbidden, notFound } from "../http/errors";
+import { logger } from "../logger";
 
 const bidRepo = () => AppDataSource.getRepository(Bid);
-const jobRepo = () => AppDataSource.getRepository(Job);
-const profileRepo = () => AppDataSource.getRepository(TradespersonProfile);
 
-function parseOptionalDate(value: unknown): Date | undefined {
-  if (value === undefined || value === null || value === "") return undefined;
-  const d = new Date(String(value));
-  return Number.isNaN(d.getTime()) ? undefined : d;
+async function loadBid(bidId: string) {
+  const bid = await bidRepo().findOne({ where: { id: bidId } });
+  if (!bid) throw notFound("Bid not found");
+  return bid;
 }
-
 
 function archiveCounterOffer(bid: Bid) {
   if (!bid.counterOffer) return;
@@ -49,1180 +59,652 @@ function archiveCounterOffer(bid: Bid) {
   bid.counterHistory = hist.slice(-20);
 }
 
-/** Soft flag + optional one-shot notify when homeowner viewed revised quote with no pro reply. */
-async function applyViewedNoReplyNudge(
-  bid: Bid,
-  job: Job,
-  opts?: { forceNotify?: boolean; thresholdHours?: number | null }
-) {
+/** "Client viewed the revised quote but the pro hasn't followed up" (read-only; nudges run in the worker). */
+export function viewedNoReplyState(bid: Bid, thresholdHours?: number | null, now = Date.now()) {
   const histLen = Array.isArray(bid.quoteHistory) ? bid.quoteHistory.length : 0;
+  const threshold = resolveQuoteViewNudgeHours(thresholdHours);
   const viewedAt = bid.quoteViewedAt ? new Date(bid.quoteViewedAt) : null;
-  const thresholdH = resolveQuoteViewNudgeHours(opts?.thresholdHours);
   if (!viewedAt || histLen < 1) {
-    return {
-      viewedNoReply: {
-        due: false,
-        hoursSinceView: null as number | null,
-        thresholdHours: thresholdH,
-        revisedSinceView: false,
-        nudged: false,
-      },
-    };
+    return { due: false, hoursSinceView: null as number | null, thresholdHours: threshold, revisedSinceView: false, nudged: false };
   }
-  const viewedCount = bid.quoteViewedRevisionCount ?? 0;
-  const revisedSinceView = histLen > viewedCount;
-  const hoursSinceView =
-    Math.round(((Date.now() - viewedAt.getTime()) / 3600000) * 10) / 10;
-  const due = !revisedSinceView && hoursSinceView >= thresholdH;
-  let nudged = false;
-  if (due && bid.status === BidStatus.ACTIVE && (!bid.quoteViewedNudgeSentAt || opts?.forceNotify)) {
-    // Dedupe: only send once unless force
-    if (!bid.quoteViewedNudgeSentAt) {
-      await createNotification({
-        userId: bid.tradespersonId,
-        type: NotificationType.SYSTEM,
-        title: "Viewed but no reply",
-        body: `Homeowner viewed your revised quote on "${job.title}" ~${Math.floor(hoursSinceView)}h ago with no further revise. Consider following up.`,
-        link: `/tradesperson/jobs/${job.id}?nudge=viewed#bid-form`,
-        meta: {
-          jobId: job.id,
-          bidId: bid.id,
-          viewedNoReply: true,
-          hoursSinceView,
-          thresholdHours: thresholdH,
-          quoteViewedAt: viewedAt.toISOString(),
-        },
-      });
-      bid.quoteViewedNudgeSentAt = new Date();
-      await bidRepo().save(bid);
-      nudged = true;
-    }
-  }
+  const revisedSinceView = histLen > (bid.quoteViewedRevisionCount ?? 0);
+  const hoursSinceView = Math.round(((now - viewedAt.getTime()) / 3600_000) * 10) / 10;
   return {
-    viewedNoReply: {
-      due,
-      hoursSinceView,
-      thresholdHours: thresholdH,
-      revisedSinceView,
-      nudged,
-      quoteViewedAt: viewedAt.toISOString(),
-      nudgeSentAt: bid.quoteViewedNudgeSentAt
-        ? new Date(bid.quoteViewedNudgeSentAt).toISOString()
-        : null,
-    },
+    due: !revisedSinceView && hoursSinceView >= threshold,
+    hoursSinceView,
+    thresholdHours: threshold,
+    revisedSinceView,
+    nudged: !!bid.quoteViewedNudgeSentAt,
+    quoteViewedAt: viewedAt.toISOString(),
+    nudgeSentAt: bid.quoteViewedNudgeSentAt ? new Date(bid.quoteViewedNudgeSentAt).toISOString() : null,
   };
 }
 
-
 export async function placeBid(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
+  const ctx = await loadJobContext(req.valid.params.id);
+  if (!req.user!.proVerified) {
+    throw forbidden("Your professional account must be verified before you can bid", "NOT_VERIFIED");
   }
-  if (job.status !== JobStatus.OPEN) {
-    return res.status(400).json({ message: "Job is not open for bidding", code: "JOB_NOT_OPEN" });
+  const b = req.valid.body;
+  if (b.proposedVisitStart && b.proposedVisitEnd && b.proposedVisitEnd <= b.proposedVisitStart) {
+    throw badRequest("Visit end must be after the start", "VALIDATION");
   }
+  const files = filesOf(req, "quoteAttachment");
+  let stored: string[] = [];
+  const bid = await AppDataSource.transaction(async (m) => {
+    const rows: { status: JobStatus; maxBids: number }[] = await m.query(
+      `SELECT "status", "maxBids" FROM "jobs" WHERE "id" = $1 FOR UPDATE`,
+      [ctx.job.id]
+    );
+    const job = rows[0];
+    if (job.status !== JobStatus.OPEN) throw conflict("This job is no longer open for bids", "JOB_NOT_OPEN");
+    if (await m.exists(Bid, { where: { jobId: ctx.job.id, tradespersonId: req.user!.id } })) {
+      throw conflict("You already placed a bid on this job", "DUPLICATE_BID");
+    }
+    const active = await m.count(Bid, { where: { jobId: ctx.job.id, status: BidStatus.ACTIVE } });
+    if (active >= job.maxBids) throw conflict("This job has reached the maximum number of bids", "MAX_BIDS");
 
-  const profile = await profileRepo().findOne({ where: { userId: req.user!.id } });
-  if (!profile || profile.verificationStatus !== VerificationStatus.VERIFIED) {
-    return res.status(403).json({
-      message: "Tradesperson must be verified by admin before bidding",
-      code: "NOT_VERIFIED",
-    });
-  }
-
-  const existing = await bidRepo().findOne({
-    where: { jobId: job.id, tradespersonId: req.user!.id },
+    const created = await m.save(
+      m.create(Bid, {
+        jobId: ctx.job.id,
+        tradespersonId: req.user!.id,
+        amount: b.amount,
+        message: b.message || undefined,
+        etaDays: b.etaDays,
+        proposedVisitStart: b.proposedVisitStart,
+        proposedVisitEnd:
+          b.proposedVisitEnd || (b.proposedVisitStart ? new Date(b.proposedVisitStart.getTime() + 2 * 3600_000) : undefined),
+        quoteAmount: b.quoteAmount,
+        quoteNotes: b.quoteNotes || undefined,
+        status: BidStatus.ACTIVE,
+      })
+    );
+    const uploads = await storeUploads(
+      files,
+      { kind: UploadKind.QUOTE, ownerUserId: req.user!.id, jobId: ctx.job.id, bidId: created.id, allowPdf: true },
+      m
+    );
+    if (uploads.length) {
+      stored = uploads.map((u) => fileRef(u.name));
+      created.quoteAttachmentUrl = stored[0];
+      await m.update(Bid, { id: created.id }, { quoteAttachmentUrl: stored[0] });
+    }
+    return created;
+  }).catch(async (err) => {
+    await discardFiles(stored);
+    throw err;
   });
-  if (existing) {
-    return res.status(409).json({
-      message: "You already placed a bid on this job",
-      code: "DUPLICATE_BID",
-    });
-  }
-
-  const activeCount = await bidRepo().count({
-    where: { jobId: job.id, status: BidStatus.ACTIVE },
-  });
-  if (activeCount >= job.maxBids) {
-    return res.status(400).json({
-      message: "This job has reached the maximum number of bids",
-      code: "MAX_BIDS",
-    });
-  }
-
-  const { amount, message, etaDays, proposedVisitStart, proposedVisitEnd, quoteAmount, quoteNotes } =
-    req.body ?? {};
-  const amt = Number(amount);
-  if (!Number.isFinite(amt) || amt <= 0) {
-    return res.status(400).json({ message: "amount must be a positive number" });
-  }
-
-  const visitStart = parseOptionalDate(proposedVisitStart);
-  const visitEnd = parseOptionalDate(proposedVisitEnd);
-  if (visitStart && visitEnd && visitEnd <= visitStart) {
-    return res.status(400).json({ message: "proposedVisitEnd must be after proposedVisitStart" });
-  }
-
-  const qAmtRaw = quoteAmount !== undefined && quoteAmount !== "" ? Number(quoteAmount) : NaN;
-  const qAmt = Number.isFinite(qAmtRaw) && qAmtRaw > 0 ? qAmtRaw : undefined;
-  const quoteFile = (req as any).file as Express.Multer.File | undefined;
-  const quoteAttachmentUrl = quoteFile
-    ? `/uploads/${quoteFile.filename}`
-    : req.body?.quoteAttachmentUrl
-      ? String(req.body.quoteAttachmentUrl)
-      : undefined;
-
-  const bid = bidRepo().create({
-    jobId: job.id,
-    tradespersonId: req.user!.id,
-    amount: amt,
-    message: message ? String(message) : undefined,
-    etaDays: etaDays !== undefined ? parseInt(String(etaDays), 10) : undefined,
-    proposedVisitStart: visitStart,
-    proposedVisitEnd: visitEnd || (visitStart ? new Date(visitStart.getTime() + 2 * 60 * 60 * 1000) : undefined),
-    quoteAmount: qAmt,
-    quoteNotes: quoteNotes ? String(quoteNotes).slice(0, 4000) : undefined,
-    quoteAttachmentUrl,
-    status: BidStatus.ACTIVE,
-  });
-  await bidRepo().save(bid);
 
   const pro = await AppDataSource.getRepository(User).findOne({ where: { id: req.user!.id } });
   await createNotification({
-    userId: job.homeownerId,
+    userId: ctx.job.homeownerId,
     type: NotificationType.NEW_BID,
     title: "New bid on your job",
-    body: `${pro?.name || "A tradesperson"} bid ₹${amt} on "${job.title}".`,
-    link: `/homeowner/jobs/${job.id}`,
-    meta: { jobId: job.id, bidId: bid.id },
+    body: `${pro?.name || "A professional"} bid ₹${b.amount} on "${ctx.job.title}".`,
+    link: `/client/jobs/${ctx.job.id}`,
+    meta: { jobId: ctx.job.id, bidId: bid.id },
   });
+  await notifyShortlistersOfFasterReplies(req.user!.id, bid.id, ctx.job.homeownerId, pro?.name).catch((err) =>
+    logger.warn({ err }, "sla improve notify skipped")
+  );
+  return res.status(201).json({ bid: toBid(bid) });
+}
 
-  // Soft notify shortlist homeowners when this bid improves the pro's response SLA tier
-  try {
-    const prevSla = await computeProOverallSla(req.user!.id, bid.id);
-    const nextSla = await computeProOverallSla(req.user!.id);
-    if (isTierImproved(prevSla.tier, nextSla.tier)) {
-      const favs = await AppDataSource.getRepository(Favorite).find({
-        where: { targetType: FavoriteTargetType.PRO, targetId: req.user!.id },
-      });
-      const name = pro?.name || "A saved pro";
-      for (const f of favs) {
-        // Skip the job's homeowner (they already got a new-bid ping)
-        if (f.userId === job.homeownerId) continue;
-        // Dedupe: skip if we already sent an SLA-improve note in the last 7 days
-        const recent = await AppDataSource.getRepository(Notification)
-          .createQueryBuilder("n")
-          .where("n.userId = :uid", { uid: f.userId })
-          .andWhere("n.type = :type", { type: NotificationType.PRO_AVAILABLE })
-          .andWhere("n.meta->>'slaImprove' = 'true'")
-          .andWhere("n.meta->>'proUserId' = :pid", { pid: req.user!.id })
-          .andWhere("n.createdAt > :since", {
-            since: new Date(Date.now() - 7 * 86400000),
-          })
-          .getOne();
-        if (recent) continue;
-        await createNotification({
-          userId: f.userId,
-          type: NotificationType.PRO_AVAILABLE,
-          title: "Shortlisted pro replies faster",
-          body: `${name} improved to ${nextSla.label} (was ${prevSla.label}).`,
-          link: `/pros/${req.user!.id}`,
-          meta: {
-            proUserId: req.user!.id,
-            slaImprove: true,
-            fromTier: prevSla.tier,
-            toTier: nextSla.tier,
-          },
-        });
-      }
-    }
-  } catch (e) {
-    console.warn("sla improve notify skipped", e);
-  }
-
-  return res.status(201).json({ bid });
+async function notifyShortlistersOfFasterReplies(proId: string, bidId: string, skipUserId: string, proName?: string | null) {
+  const prev = await computeProOverallSla(proId, bidId);
+  const next = await computeProOverallSla(proId);
+  if (!isTierImproved(prev.tier, next.tier)) return;
+  const favs = await AppDataSource.getRepository(Favorite).find({
+    where: { targetType: FavoriteTargetType.PRO, targetId: proId, userId: Not(skipUserId) },
+  });
+  if (!favs.length) return;
+  const recent = await AppDataSource.getRepository(Notification)
+    .createQueryBuilder("n")
+    .select("n.userId", "userId")
+    .where("n.userId IN (:...ids)", { ids: favs.map((f) => f.userId) })
+    .andWhere("n.type = :type", { type: NotificationType.PRO_AVAILABLE })
+    .andWhere("n.meta->>'slaImprove' = 'true' AND n.meta->>'proUserId' = :pid", { pid: proId })
+    .andWhere("n.createdAt > :since", { since: new Date(Date.now() - 7 * 86400_000) })
+    .getRawMany<{ userId: string }>();
+  const skip = new Set(recent.map((r) => r.userId));
+  await createNotifications(
+    favs
+      .filter((f) => !skip.has(f.userId))
+      .map((f) => ({
+        userId: f.userId,
+        type: NotificationType.PRO_AVAILABLE,
+        title: "Shortlisted professional replies faster",
+        body: `${proName || "A saved professional"} improved to ${next.label} (was ${prev.label}).`,
+        link: `/pros/${proId}`,
+        meta: { proUserId: proId, slaImprove: true, fromTier: prev.tier, toTier: next.tier },
+      }))
+  );
 }
 
 export async function listBids(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
+  const ctx = await loadJobContext(req.valid.params.id);
+  const v = viewer(req);
+  const job = ctx.job;
+
+  if (v.role === UserRole.TRADESPERSON) {
+    const mine = await bidRepo().find({ where: { jobId: job.id, tradespersonId: v.id } });
+    if (!mine.length && ctx.acceptedProId !== v.id) throw forbidden("You don't have access to these bids");
+    const otherActiveBidCount = await bidRepo().count({
+      where: { jobId: job.id, status: BidStatus.ACTIVE, tradespersonId: Not(v.id) },
+    });
+    return res.json({
+      bids: mine.map((b) => ({ ...toBid(b), viewedNoReply: viewedNoReplyState(b) })),
+      otherActiveBidCount,
+    });
   }
+  if (!isOwner(ctx, v) && !isAdmin(v)) throw forbidden("You don't have access to these bids");
 
-  const { role, id: userId } = req.user!;
-  const isOwner = job.homeownerId === userId;
-  const isAdmin = role === UserRole.ADMIN;
-
-  if (!isOwner && !isAdmin && role !== UserRole.TRADESPERSON) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-
-  if (role === UserRole.HOMEOWNER && !isOwner) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-
-  const bids = await bidRepo().find({
-    where: { jobId: job.id },
-    relations: ["tradesperson"],
-    order: { createdAt: "ASC" },
-  });
-
+  const bids = await bidRepo().find({ where: { jobId: job.id }, relations: ["tradesperson"], order: { createdAt: "ASC" } });
   const proIds = [...new Set(bids.map((b) => b.tradespersonId))];
   const profiles = proIds.length
-    ? await profileRepo()
-        .createQueryBuilder("p")
-        .where("p.userId IN (:...ids)", { ids: proIds })
-        .getMany()
+    ? await AppDataSource.getRepository(TradespersonProfile).find({ where: { userId: In(proIds) } })
     : [];
-  const profileMap = Object.fromEntries(profiles.map((p) => [p.userId, p]));
-
-  // Invite notifications for invite→bid latency on this job
-  const inviteRows = await AppDataSource.getRepository(Notification)
-    .createQueryBuilder("n")
-    .where("n.type = :type", { type: NotificationType.MATCH })
-    .andWhere("n.meta->>'invite' = 'true'")
-    .andWhere("n.meta->>'jobId' = :jobId", { jobId: job.id })
-    .getMany();
-  const inviteAtByPro: Record<string, Date> = {};
-  for (const n of inviteRows) {
-    const prev = inviteAtByPro[n.userId];
-    if (!prev || new Date(n.createdAt) < prev) {
-      inviteAtByPro[n.userId] = new Date(n.createdAt);
-    }
-  }
-
-  const shapedBase = bids.map((b) => {
-    const profile = profileMap[b.tradespersonId];
-    const distanceKm =
-      profile && job.lat != null && job.lng != null
-        ? haversineKm(job.lat, job.lng, profile.lat, profile.lng)
-        : null;
-    const jobToBidHours = hoursBetween(job.createdAt, b.createdAt);
-    const inviteAt = inviteAtByPro[b.tradespersonId];
-    const inviteToBidHours = inviteAt ? hoursBetween(inviteAt, b.createdAt) : null;
-    const responseSla = buildEventSla({
-      inviteToBidHours,
-      jobToBidHours,
-    });
-    return {
-      ...b,
-      amount: b.amount,
-      quoteAmount: b.quoteAmount != null ? Number(b.quoteAmount) : null,
-      quoteNotes: b.quoteNotes || null,
-      quoteAttachmentUrl: b.quoteAttachmentUrl || null,
-      quoteHistory: Array.isArray(b.quoteHistory) ? b.quoteHistory : [],
-      counterOffer: b.counterOffer || null,
-      counterHistory: Array.isArray(b.counterHistory) ? b.counterHistory : [],
-      quoteViewedAt: b.quoteViewedAt || null,
-      quoteViewedRevisionCount: b.quoteViewedRevisionCount ?? null,
-      quoteViewedNudgeSentAt: b.quoteViewedNudgeSentAt || null,
-      distanceKm,
-      jobToBidHours,
-      inviteToBidHours,
-      responseSla,
-      tradesperson: b.tradesperson
-        ? {
-            id: b.tradesperson.id,
-            email: b.tradesperson.email,
-            name: b.tradesperson.name,
-          }
-        : undefined,
-      profile: profile
-        ? {
-            averageRating: Number(profile.averageRating || 0),
-            reviewCount: profile.reviewCount || 0,
-            skills: profile.skills,
-            city: profile.city,
-            lat: profile.lat,
-            lng: profile.lng,
-            yearsExperience: profile.yearsExperience,
-            verificationStatus: profile.verificationStatus,
-          }
-        : null,
-    };
-  });
-
-  const trendsMap = proIds.length ? await slaTrendsForPros(proIds) : {};
-  const shapedWithTrends = shapedBase.map((b) => {
-    const trends = trendsMap[b.tradespersonId];
-    if (!trends || !trends.clean) {
-      return { ...b, proSlaTrends: null };
-    }
-    return {
-      ...b,
-      proSlaTrends: {
-        d7: trends.d7,
-        d30: trends.d30,
-        clean: true,
-      },
-    };
-  });
-
-  // Wave 18/19: soft "viewed but no reply" flags (+ one-shot nudge; per-pro nudge hours)
-  const proUsers = proIds.length
-    ? await AppDataSource.getRepository(User)
-        .createQueryBuilder("u")
-        .where("u.id IN (:...ids)", { ids: proIds })
-        .getMany()
-    : [];
-  const nudgeHoursByPro: Record<string, number | null | undefined> = Object.fromEntries(
-    proUsers.map((u) => [u.id, u.quoteViewNudgeHours])
-  );
-  const shapedWithNudge = [];
-  for (const b of shapedWithTrends) {
-    const full = bids.find((x) => x.id === b.id);
-    if (!full) {
-      shapedWithNudge.push({ ...b, viewedNoReply: null });
-      continue;
-    }
-    const { viewedNoReply } = await applyViewedNoReplyNudge(full, job, {
-      thresholdHours: nudgeHoursByPro[full.tradespersonId],
-    });
-    shapedWithNudge.push({ ...b, viewedNoReply });
-  }
-
-  // Wave 21: attach match score (+ heat) for homeowner "best value" bid blend
+  const profileMap = new Map(profiles.map((p) => [p.userId, p]));
+  const inviteAt = await firstInviteTimes(job.id);
+  const trends = proIds.length ? await slaTrendsForPros(proIds) : {};
   const matchWeights = await getMatchWeights();
-  const heatWeightCfg = await getHeatWeight();
+  const heatWeight = await getHeatWeight();
   const bestValueBlend = await getBestValueBlend();
-  // Lightweight response hours from this job's bids only (demo-friendly)
-  const responseHoursByPro: Record<string, number | null> = {};
-  for (const b of bids) {
-    const h = hoursBetween(job.createdAt, b.createdAt);
-    if (h == null) continue;
-    const prev = responseHoursByPro[b.tradespersonId];
-    if (prev == null || h < prev) responseHoursByPro[b.tradespersonId] = h;
-  }
-  const shapedWithMatch = shapedWithNudge.map((b) => {
-    const profile = profileMap[b.tradespersonId];
-    if (!profile) {
-      return {
-        ...b,
-        matchScore: null,
-        heatBoost: 0,
-        rankedScore: null,
-        matchBreakdown: null,
+
+  const shaped = bids.map((b) => {
+    const p = profileMap.get(b.tradespersonId);
+    const jobToBidHours = hoursBetween(job.createdAt, b.createdAt);
+    const invitedAt = inviteAt.get(b.tradespersonId);
+    const inviteToBidHours = invitedAt ? hoursBetween(invitedAt, b.createdAt) : null;
+    const t = trends[b.tradespersonId];
+    let match: Record<string, unknown> = { matchScore: null, heatBoost: 0, rankedScore: null, matchBreakdown: null };
+    if (p) {
+      const input: ScoreablePro = {
+        userId: p.userId,
+        skills: p.skills,
+        city: p.city,
+        serviceAreas: p.serviceAreas,
+        lat: p.lat,
+        lng: p.lng,
+        averageRating: Number(p.averageRating || 0),
+        reviewCount: p.reviewCount || 0,
+        avgResponseHours: jobToBidHours,
+        name: b.tradesperson?.name || null,
+      };
+      const breakdown = scoreProForJob(job, input, matchWeights);
+      const heatBoost = computeHeatBoost(buildAvailabilityHeat(p.weeklyAvailability, p.blockedDates, b.tradesperson?.timezone), heatWeight);
+      match = {
+        matchScore: breakdown.total,
+        heatBoost,
+        rankedScore: Math.round((breakdown.total + heatBoost) * 10) / 10,
+        matchBreakdown: breakdown,
       };
     }
-    const input: ScoreablePro = {
-      userId: profile.userId,
-      skills: profile.skills,
-      city: profile.city,
-      serviceAreas: profile.serviceAreas,
-      lat: profile.lat,
-      lng: profile.lng,
-      averageRating: Number(profile.averageRating || 0),
-      reviewCount: profile.reviewCount || 0,
-      avgResponseHours: responseHoursByPro[b.tradespersonId] ?? null,
-      name: (b as any).tradesperson?.name || null,
-    };
-    const breakdown = scoreProForJob(job, input, matchWeights);
-    const availabilityHeat = buildAvailabilityHeat(
-      profile.weeklyAvailability as any,
-      profile.blockedDates
-    );
-    const heatBoost = computeHeatBoost(availabilityHeat, heatWeightCfg);
-    const rankedScore = Math.round((breakdown.total + heatBoost) * 10) / 10;
     return {
-      ...b,
-      matchScore: breakdown.total,
-      heatBoost,
-      rankedScore,
-      matchBreakdown: breakdown,
+      ...toBid(b),
+      distanceKm: p && job.lat != null && job.lng != null ? haversineKm(job.lat, job.lng, p.lat, p.lng) : null,
+      jobToBidHours,
+      inviteToBidHours,
+      responseSla: buildEventSla({ inviteToBidHours, jobToBidHours }),
+      proSlaTrends: t?.clean ? { d7: t.d7, d30: t.d30, clean: true } : null,
+      viewedNoReply: viewedNoReplyState(b, b.tradesperson?.quoteViewNudgeHours),
+      tradesperson: b.tradesperson ? { id: b.tradesperson.id, name: b.tradesperson.name ?? null } : undefined,
+      profile: p
+        ? {
+            averageRating: Number(p.averageRating || 0),
+            reviewCount: p.reviewCount || 0,
+            skills: p.skills ?? null,
+            city: p.city ?? null,
+            lat: roundCoord(p.lat),
+            lng: roundCoord(p.lng),
+            yearsExperience: p.yearsExperience ?? null,
+            verificationStatus: p.verificationStatus,
+          }
+        : null,
+      ...match,
     };
   });
-
-  const jobAwarded =
-    job.status === JobStatus.AWARDED ||
-    job.status === JobStatus.IN_PROGRESS ||
-    job.status === JobStatus.COMPLETED;
-
-  if (role === UserRole.TRADESPERSON && !isAdmin) {
-    const shaped = shapedWithMatch.map((b) => {
-      if (b.tradespersonId === userId || jobAwarded) return b;
-      const { amount: _a, ...rest } = b as any;
-      return { ...rest, amount: null };
-    });
-    return res.json({ bids: shaped, bestValueBlend });
-  }
-
-  return res.json({ bids: shapedWithMatch, bestValueBlend });
+  return res.json({ bids: shaped, bestValueBlend });
 }
 
 export async function withdrawBid(req: Request, res: Response) {
-  const bid = await bidRepo().findOne({ where: { id: param(req, "id") } });
-  if (!bid) {
-    return res.status(404).json({ message: "Bid not found", code: "NOT_FOUND" });
-  }
-  if (bid.tradespersonId !== req.user!.id) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-  if (bid.status !== BidStatus.ACTIVE) {
-    return res.status(400).json({ message: "Only active bids can be withdrawn", code: "BID_NOT_ACTIVE" });
-  }
-
-  const job = await jobRepo().findOne({ where: { id: bid.jobId } });
-  if (!job || job.status !== JobStatus.OPEN) {
-    return res.status(400).json({ message: "Can only withdraw while job is open", code: "JOB_NOT_OPEN" });
-  }
-
-  bid.status = BidStatus.WITHDRAWN;
-  await bidRepo().save(bid);
-  return res.json({ bid });
+  const bid = await loadBid(req.valid.params.id);
+  if (bid.tradespersonId !== req.user!.id) throw forbidden("You can only withdraw your own bid");
+  await AppDataSource.transaction(async (m) => {
+    const rows = await m.query(`SELECT "status" FROM "jobs" WHERE "id" = $1 FOR UPDATE`, [bid.jobId]);
+    if (rows[0]?.status !== JobStatus.OPEN) throw conflict("Bids can only be withdrawn while the job is open", "JOB_NOT_OPEN");
+    const res2 = await m.update(Bid, { id: bid.id, status: BidStatus.ACTIVE }, { status: BidStatus.WITHDRAWN });
+    if (!res2.affected) throw conflict("Only active bids can be withdrawn", "BID_NOT_ACTIVE");
+  });
+  await revokeThreadStreams(bid.jobId, null).catch(() => undefined);
+  const fresh = await loadBid(bid.id);
+  return res.json({ bid: toBid(fresh) });
 }
 
+/**
+ * Accept a bid. The client must send the amount and quote revision they saw;
+ * if the pro changed the quote in the meantime the request fails with QUOTE_CHANGED.
+ */
 export async function acceptBid(req: Request, res: Response) {
-  const bid = await bidRepo().findOne({ where: { id: param(req, "id") } });
-  if (!bid) {
-    return res.status(404).json({ message: "Bid not found", code: "NOT_FOUND" });
-  }
-  if (bid.status !== BidStatus.ACTIVE) {
-    return res.status(400).json({ message: "Bid is not active", code: "BID_NOT_ACTIVE" });
-  }
+  const bid = await loadBid(req.valid.params.id);
+  const ctx = await loadJobContext(bid.jobId);
+  assertOwner(ctx, viewer(req), "Only the client who posted this job can accept bids");
+  const { expectedAmount, expectedRevision } = req.valid.body;
 
-  const job = await jobRepo().findOne({ where: { id: bid.jobId } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-  if (job.homeownerId !== req.user!.id) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-  if (job.status !== JobStatus.OPEN) {
-    return res.status(400).json({ message: "Can only accept bids on open jobs", code: "JOB_NOT_OPEN" });
-  }
-
-  const rejectedIds: string[] = [];
-
-  await AppDataSource.transaction(async (manager) => {
-    bid.status = BidStatus.ACCEPTED;
-    await manager.save(bid);
-
-    const others = await manager.find(Bid, {
-      where: { jobId: job.id, status: BidStatus.ACTIVE },
-    });
-    for (const other of others) {
-      if (other.id === bid.id) continue;
-      other.status = BidStatus.REJECTED;
-      await manager.save(other);
-      rejectedIds.push(other.tradespersonId);
+  const outcome = await AppDataSource.transaction(async (m) => {
+    const jobRows = await m.query(`SELECT "status" FROM "jobs" WHERE "id" = $1 FOR UPDATE`, [ctx.job.id]);
+    if (jobRows[0]?.status !== JobStatus.OPEN) {
+      throw conflict("Bids can only be accepted while the job is open", "JOB_NOT_OPEN");
+    }
+    const current = await m.findOne(Bid, { where: { id: bid.id } });
+    if (!current || current.status !== BidStatus.ACTIVE) throw conflict("This bid is no longer active", "BID_NOT_ACTIVE");
+    const escrow = escrowAmountFromBid(current);
+    if (current.quoteRevision !== expectedRevision || Math.abs(escrow.amount - expectedAmount) > 0.004) {
+      throw conflict("The quote changed since you last looked. Review the new amount and accept again.", "QUOTE_CHANGED", {
+        currentAmount: escrow.amount,
+        currentRevision: current.quoteRevision,
+        source: escrow.source,
+      });
+    }
+    const pro = await m.findOne(User, { where: { id: current.tradespersonId } });
+    const profile = await m.findOne(TradespersonProfile, { where: { userId: current.tradespersonId } });
+    if (!pro || pro.isSuspended || pro.deletedAt || profile?.verificationStatus !== VerificationStatus.VERIFIED) {
+      throw conflict("This professional can't be hired right now", "PRO_UNAVAILABLE");
     }
 
-    job.status = JobStatus.AWARDED;
-    job.acceptedBidId = bid.id;
-    job.paymentStatus = PaymentStatus.HELD;
-    const escrow = escrowAmountFromBid(bid);
-    job.escrowAmount = escrow.amount;
-    job.escrowSource = escrow.source;
+    await m.update(Bid, { id: current.id }, { status: BidStatus.ACCEPTED });
+    const others = await m.find(Bid, { where: { jobId: ctx.job.id, status: BidStatus.ACTIVE } });
+    if (others.length) await m.update(Bid, { id: In(others.map((o) => o.id)) }, { status: BidStatus.REJECTED });
 
-    // Carry bid's proposed visit into job schedule as a proposal from the pro
-    if (bid.proposedVisitStart) {
-      job.scheduledStart = bid.proposedVisitStart;
-      job.scheduledEnd =
-        bid.proposedVisitEnd ||
-        new Date(bid.proposedVisitStart.getTime() + 2 * 60 * 60 * 1000);
-      job.scheduleStatus = ScheduleStatus.PROPOSED;
-      job.scheduleProposedByUserId = bid.tradespersonId;
+    const patch: Partial<Job> = {
+      acceptedBidId: current.id,
+      paymentStatus: PaymentStatus.HELD,
+      escrowAmount: escrow.amount,
+      escrowSource: escrow.source,
+    };
+    if (current.proposedVisitStart) {
+      patch.scheduledStart = current.proposedVisitStart;
+      patch.scheduledEnd = current.proposedVisitEnd || new Date(current.proposedVisitStart.getTime() + 2 * 3600_000);
+      patch.scheduleStatus = ScheduleStatus.PROPOSED;
+      patch.scheduleProposedByUserId = current.tradespersonId;
     }
-
-    await manager.save(job);
-    await createEscrowForAcceptedBid(job, bid, manager);
+    await transitionJob(m, ctx.job.id, "award", patch);
+    await createEscrow(m, ctx.job, current.tradespersonId, escrow.amount, req.user!.id);
+    return { accepted: current, escrow, rejected: others.map((o) => o.tradespersonId) };
   });
 
   await invalidateOpenJobsCache();
-
-  const escrowInfo = escrowAmountFromBid(bid);
-  const escrowLabel =
-    escrowInfo.source === "quote"
-      ? `₹${escrowInfo.amount.toFixed(0)} (from accepted quote)`
-      : `₹${escrowInfo.amount.toFixed(0)}`;
-  await createNotification({
-    userId: bid.tradespersonId,
-    type: NotificationType.BID_ACCEPTED,
-    title: "Bid accepted!",
-    body: `Your bid on "${job.title}" was accepted. ${escrowLabel} is held in simulated escrow.`,
-    link: `/tradesperson/jobs/${job.id}`,
-    meta: { jobId: job.id, bidId: bid.id, escrowAmount: escrowInfo.amount, escrowSource: escrowInfo.source },
-  });
-
-  for (const tpId of rejectedIds) {
-    await createNotification({
-      userId: tpId,
+  await revokeThreadStreams(ctx.job.id, outcome.accepted.tradespersonId);
+  const label = `₹${outcome.escrow.amount.toFixed(0)}${outcome.escrow.source === "quote" ? " (from the accepted quote)" : ""}`;
+  await createNotifications([
+    {
+      userId: outcome.accepted.tradespersonId,
+      type: NotificationType.BID_ACCEPTED,
+      title: "Bid accepted!",
+      body: `Your bid on "${ctx.job.title}" was accepted. ${label} is held in simulated escrow.`,
+      link: `/professional/jobs/${ctx.job.id}`,
+      meta: { jobId: ctx.job.id, bidId: outcome.accepted.id, escrowAmount: outcome.escrow.amount, escrowSource: outcome.escrow.source },
+    },
+    ...outcome.rejected.map((userId) => ({
+      userId,
       type: NotificationType.BID_REJECTED,
       title: "Bid not selected",
-      body: `Another bid was accepted for "${job.title}".`,
-      link: `/tradesperson`,
-      meta: { jobId: job.id },
-    });
-  }
+      body: `Another bid was accepted for "${ctx.job.title}".`,
+      link: "/professional",
+      meta: { jobId: ctx.job.id },
+    })),
+  ]);
 
-  const updatedJob = await jobRepo().findOne({ where: { id: job.id } });
-  const bids = await bidRepo().find({ where: { jobId: job.id }, order: { createdAt: "ASC" } });
-  const counter = bid.counterOffer || null;
-  const counterAddressed = Boolean(counter && counter.status === "addressed");
+  const job = await AppDataSource.getRepository(Job).findOneOrFail({ where: { id: ctx.job.id } });
+  const bids = await bidRepo().find({ where: { jobId: ctx.job.id }, order: { createdAt: "ASC" } });
+  const counter = outcome.accepted.counterOffer || null;
   const counterSuggested = counter ? Number(counter.suggestedAmount) : null;
-  const amountDiffersFromCounter =
-    counterSuggested != null &&
-    Number.isFinite(counterSuggested) &&
-    Math.abs(escrowInfo.amount - counterSuggested) >= 1;
+  const differs = counterSuggested != null && Math.abs(outcome.escrow.amount - counterSuggested) >= 1;
+  const counterAddressed = counter?.status === "addressed";
   return res.json({
-    job: updatedJob,
-    bids,
+    job: toJob(job, "private"),
+    bids: bids.map(toBid),
     escrow: {
-      amount: escrowInfo.amount,
-      source: escrowInfo.source,
+      amount: outcome.escrow.amount,
+      source: outcome.escrow.source,
       message:
-        escrowInfo.source === "quote"
+        outcome.escrow.source === "quote"
           ? "Simulated escrow funded from the structured quote amount."
           : "Simulated escrow funded from the bid amount.",
       counterAddressed,
       counterSuggested,
-      amountDiffersFromCounter,
+      amountDiffersFromCounter: differs,
       softHoldPreview:
-        counterAddressed && amountDiffersFromCounter
+        counterAddressed && differs
           ? {
-              holdAmount: escrowInfo.amount,
+              holdAmount: outcome.escrow.amount,
               counterSuggested,
-              delta: Math.round((escrowInfo.amount - (counterSuggested || 0)) * 100) / 100,
-              note:
-                "Counter was addressed with a different final amount — simulated escrow will hold the accepted quote/bid amount.",
+              delta: Math.round((outcome.escrow.amount - (counterSuggested || 0)) * 100) / 100,
+              note: "The counter was addressed with a different final amount — escrow holds the accepted amount.",
             }
           : null,
     },
   });
 }
 
+async function openBidForPro(req: Request) {
+  const bid = await loadBid(req.valid.params.id);
+  if (bid.tradespersonId !== req.user!.id) throw forbidden("You can only change your own bid");
+  if (bid.status !== BidStatus.ACTIVE) throw conflict("Only active bids can be changed", "BID_NOT_ACTIVE");
+  const ctx = await loadJobContext(bid.jobId);
+  if (ctx.job.status !== JobStatus.OPEN) throw conflict("Quotes can only be revised while the job is open", "JOB_NOT_OPEN");
+  return { bid, ctx };
+}
+
 export async function updateBidQuote(req: Request, res: Response) {
-  const bid = await bidRepo().findOne({ where: { id: param(req, "id") } });
-  if (!bid) {
-    return res.status(404).json({ message: "Bid not found", code: "NOT_FOUND" });
+  const { bid, ctx } = await openBidForPro(req);
+  const b = req.valid.body;
+  const file = filesOf(req, "quoteAttachment")[0];
+  if (b.quoteAmount === undefined && b.quoteNotes === undefined && !file && !b.clearQuoteAttachment) {
+    throw badRequest("Provide quoteAmount, quoteNotes and/or quoteAttachment", "VALIDATION");
   }
-  if (bid.tradespersonId !== req.user!.id) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-  if (bid.status !== BidStatus.ACTIVE) {
-    return res.status(400).json({ message: "Only active bids can revise quotes", code: "BID_NOT_ACTIVE" });
-  }
-
-  const job = await jobRepo().findOne({ where: { id: bid.jobId } });
-  if (!job || job.status !== JobStatus.OPEN) {
-    return res.status(400).json({ message: "Can only revise quotes while job is open", code: "JOB_NOT_OPEN" });
-  }
-
-  const { quoteAmount, quoteNotes } = req.body ?? {};
-  const hasAmount = quoteAmount !== undefined && quoteAmount !== "";
-  const hasNotes = quoteNotes !== undefined;
-  const quoteFile = (req as any).file as Express.Multer.File | undefined;
-  const clearAttachment = String(req.body?.clearQuoteAttachment || "") === "1";
-
-  if (!hasAmount && !hasNotes && !quoteFile && !clearAttachment) {
-    return res.status(400).json({
-      message: "Provide quoteAmount, quoteNotes, and/or quoteAttachment",
-      code: "VALIDATION",
-    });
-  }
-
-  let nextAmount = bid.quoteAmount != null ? Number(bid.quoteAmount) : undefined;
-  if (hasAmount) {
-    const qAmtRaw = Number(quoteAmount);
-    if (!Number.isFinite(qAmtRaw) || qAmtRaw <= 0) {
-      return res.status(400).json({ message: "quoteAmount must be a positive number" });
-    }
-    nextAmount = qAmtRaw;
-  }
-
-  let nextNotes = bid.quoteNotes;
-  if (hasNotes) {
-    nextNotes = quoteNotes ? String(quoteNotes).slice(0, 4000) : undefined;
-  }
-
-  let nextAttachment = bid.quoteAttachmentUrl;
-  if (quoteFile) {
-    nextAttachment = `/uploads/${quoteFile.filename}`;
-  } else if (clearAttachment) {
-    nextAttachment = undefined;
-  }
-
   const prevAmount = bid.quoteAmount != null ? Number(bid.quoteAmount) : null;
   const prevNotes = bid.quoteNotes || null;
   const prevAttachment = bid.quoteAttachmentUrl || null;
-  const changed =
-    (nextAmount ?? null) !== prevAmount ||
-    (nextNotes || null) !== prevNotes ||
-    (nextAttachment || null) !== prevAttachment;
+  const nextAmount = b.quoteAmount !== undefined ? b.quoteAmount : prevAmount;
+  const nextNotes = b.quoteNotes !== undefined ? b.quoteNotes || null : prevNotes;
 
-  if (!changed) {
-    return res.json({ bid, message: "No quote changes" });
-  }
-
-  const history = Array.isArray(bid.quoteHistory) ? [...bid.quoteHistory] : [];
-  history.push({
-    amount: prevAmount,
-    notes: prevNotes,
-    attachmentUrl: prevAttachment,
-    revisedAt: new Date().toISOString(),
+  let stored: string[] = [];
+  const saved = await AppDataSource.transaction(async (m) => {
+    const rows = await m.query(`SELECT "status" FROM "jobs" WHERE "id" = $1 FOR UPDATE`, [ctx.job.id]);
+    if (rows[0]?.status !== JobStatus.OPEN) throw conflict("Quotes can only be revised while the job is open", "JOB_NOT_OPEN");
+    const current = await m.findOneOrFail(Bid, { where: { id: bid.id } });
+    if (current.status !== BidStatus.ACTIVE) throw conflict("Only active bids can be changed", "BID_NOT_ACTIVE");
+    let nextAttachment = prevAttachment;
+    if (file) {
+      const [u] = await storeUploads([file], {
+        kind: UploadKind.QUOTE,
+        ownerUserId: req.user!.id,
+        jobId: ctx.job.id,
+        bidId: bid.id,
+        allowPdf: true,
+      }, m);
+      nextAttachment = fileRef(u.name);
+      stored = [nextAttachment];
+    } else if (b.clearQuoteAttachment) {
+      nextAttachment = null;
+    }
+    const changed = nextAmount !== prevAmount || nextNotes !== prevNotes || nextAttachment !== prevAttachment;
+    if (!changed) return { bid: current, changed: false };
+    const history = Array.isArray(current.quoteHistory) ? [...current.quoteHistory] : [];
+    history.push({ amount: prevAmount, notes: prevNotes, attachmentUrl: prevAttachment, revisedAt: new Date().toISOString() });
+    current.quoteHistory = history.slice(-20);
+    current.quoteAmount = nextAmount ?? undefined;
+    current.quoteNotes = nextNotes ?? undefined;
+    current.quoteAttachmentUrl = nextAttachment ?? undefined;
+    current.quoteRevision = (current.quoteRevision || 0) + 1;
+    if (current.counterOffer?.status === "pending") {
+      current.counterOffer = { ...current.counterOffer, status: "addressed", addressedAt: new Date().toISOString() };
+    }
+    await m.save(current);
+    if (nextAttachment !== prevAttachment && current.quoteAttachmentUrl == null) {
+      await m.query(`UPDATE "bids" SET "quoteAttachmentUrl" = NULL WHERE "id" = $1`, [current.id]);
+    }
+    return { bid: current, changed: true };
+  }).catch(async (err) => {
+    await discardFiles(stored);
+    throw err;
   });
-  // Keep a reasonable trail
-  bid.quoteHistory = history.slice(-20);
-  bid.quoteAmount = nextAmount;
-  bid.quoteNotes = nextNotes;
-  bid.quoteAttachmentUrl = nextAttachment;
-  if (bid.counterOffer && bid.counterOffer.status === "pending") {
-    bid.counterOffer = {
-      ...bid.counterOffer,
-      status: "addressed",
-      addressedAt: new Date().toISOString(),
-    };
-  }
-  await bidRepo().save(bid);
+
+  if (!saved.changed) return res.json({ bid: toBid(saved.bid), message: "No quote changes" });
 
   const amountDelta =
-    nextAmount != null && prevAmount != null
-      ? Math.round((nextAmount - prevAmount) * 100) / 100
-      : nextAmount != null && prevAmount == null
-        ? nextAmount
-        : null;
-  const notesChanged = (nextNotes || null) !== prevNotes;
-  const deltaParts: string[] = [];
-  if (amountDelta != null && amountDelta !== 0) {
-    const sign = amountDelta > 0 ? "+" : "";
-    deltaParts.push(`amount ${sign}₹${Math.abs(amountDelta).toFixed(0)}`);
-  } else if (prevAmount != null && nextAmount != null && amountDelta === 0) {
-    deltaParts.push("amount unchanged");
-  } else if (nextAmount != null && prevAmount == null) {
-    deltaParts.push(`amount set to ₹${nextAmount.toFixed(0)}`);
+    nextAmount != null && prevAmount != null ? Math.round((nextAmount - prevAmount) * 100) / 100 : nextAmount;
+  const parts: string[] = [];
+  if (amountDelta != null && prevAmount != null && amountDelta !== 0) {
+    parts.push(`amount ${amountDelta > 0 ? "+" : "−"}₹${Math.abs(amountDelta).toFixed(0)}`);
+  } else if (prevAmount == null && nextAmount != null) {
+    parts.push(`amount set to ₹${nextAmount.toFixed(0)}`);
   }
-  if (notesChanged) deltaParts.push(nextNotes ? "notes updated" : "notes cleared");
-  if ((nextAttachment || null) !== prevAttachment) {
-    deltaParts.push(nextAttachment ? "attachment updated" : "attachment cleared");
+  if (nextNotes !== prevNotes) parts.push(nextNotes ? "notes updated" : "notes cleared");
+  if ((saved.bid.quoteAttachmentUrl || null) !== prevAttachment) {
+    parts.push(saved.bid.quoteAttachmentUrl ? "attachment updated" : "attachment cleared");
   }
-  const deltaSummary = deltaParts.length ? deltaParts.join(", ") : "quote updated";
-
   await createNotification({
-    userId: job.homeownerId,
+    userId: ctx.job.homeownerId,
     type: NotificationType.NEW_BID,
     title: "Quote revised on a bid",
-    body: `A tradesperson revised their quote on "${job.title}" (${deltaSummary}).`,
-    link: `/homeowner/jobs/${job.id}?bid=${bid.id}#bid-${bid.id}`,
+    body: `A professional revised their quote on "${ctx.job.title}" (${parts.join(", ") || "quote updated"}).`,
+    link: `/client/jobs/${ctx.job.id}?bid=${bid.id}#bid-${bid.id}`,
     meta: {
-      jobId: job.id,
+      jobId: ctx.job.id,
       bidId: bid.id,
       quoteRevised: true,
+      quoteRevision: saved.bid.quoteRevision,
       previousAmount: prevAmount,
       newAmount: nextAmount ?? null,
       amountDelta,
-      notesChanged,
-      previousNotes: prevNotes,
-      newNotes: nextNotes || null,
     },
   });
-
   return res.json({
-    bid: {
-      ...bid,
-      quoteAmount: bid.quoteAmount != null ? Number(bid.quoteAmount) : null,
-      quoteHistory: bid.quoteHistory || [],
-    },
+    bid: toBid(saved.bid),
     message: "Quote revised",
     quoteDiff: {
       previousAmount: prevAmount,
       newAmount: nextAmount ?? null,
       amountDelta,
-      notesChanged,
+      notesChanged: nextNotes !== prevNotes,
       previousNotes: prevNotes,
-      newNotes: nextNotes || null,
+      newNotes: nextNotes,
     },
   });
 }
 
-/** Homeowner counter-offer / request revise on an active quote/bid. */
 export async function requestQuoteRevise(req: Request, res: Response) {
-  const bid = await bidRepo().findOne({ where: { id: param(req, "id") } });
-  if (!bid) {
-    return res.status(404).json({ message: "Bid not found", code: "NOT_FOUND" });
-  }
-  if (bid.status !== BidStatus.ACTIVE) {
-    return res.status(400).json({ message: "Only active bids can receive a counter-offer", code: "BID_NOT_ACTIVE" });
-  }
-
-  const job = await jobRepo().findOne({ where: { id: bid.jobId } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-  if (job.homeownerId !== req.user!.id) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-  if (job.status !== JobStatus.OPEN) {
-    return res.status(400).json({ message: "Can only counter while job is open", code: "JOB_NOT_OPEN" });
-  }
-
-  const { suggestedAmount, notes } = req.body ?? {};
-  const amt = Number(suggestedAmount);
-  if (!Number.isFinite(amt) || amt <= 0) {
-    return res.status(400).json({ message: "suggestedAmount must be a positive number", code: "VALIDATION" });
-  }
-  const noteText = notes != null ? String(notes).slice(0, 2000) : null;
-
-  if (bid.counterOffer) {
-    archiveCounterOffer(bid);
-  }
+  const bid = await loadBid(req.valid.params.id);
+  const ctx = await loadJobContext(bid.jobId);
+  assertOwner(ctx, viewer(req));
+  if (bid.status !== BidStatus.ACTIVE) throw conflict("Only active bids can receive a counter-offer", "BID_NOT_ACTIVE");
+  if (ctx.job.status !== JobStatus.OPEN) throw conflict("Counter-offers are only possible while the job is open", "JOB_NOT_OPEN");
+  const { suggestedAmount, notes } = req.valid.body;
+  archiveCounterOffer(bid);
   bid.counterOffer = {
-    suggestedAmount: Math.round(amt * 100) / 100,
-    notes: noteText,
+    suggestedAmount,
+    notes: notes || null,
     requestedAt: new Date().toISOString(),
     status: "pending",
   };
   await bidRepo().save(bid);
-
-  const quotePart =
-    bid.quoteAmount != null
-      ? `current quote ₹${Number(bid.quoteAmount).toFixed(0)}`
-      : `current bid ₹${Number(bid.amount).toFixed(0)}`;
-  const noteHint = noteText ? ` Note: ${noteText.slice(0, 120)}` : "";
-
+  const current = bid.quoteAmount != null ? `current quote ₹${Number(bid.quoteAmount).toFixed(0)}` : `current bid ₹${Number(bid.amount).toFixed(0)}`;
   await createNotification({
     userId: bid.tradespersonId,
     type: NotificationType.SYSTEM,
-    title: "Counter-offer / revise requested",
-    body: `Homeowner suggested ₹${amt.toFixed(0)} on "${job.title}" (${quotePart}).${noteHint}`,
-    link: `/tradesperson/jobs/${job.id}?counter=1#bid-form`,
-    meta: {
-      jobId: job.id,
-      bidId: bid.id,
-      counterOffer: true,
-      suggestedAmount: bid.counterOffer.suggestedAmount,
-      notes: noteText,
-      currentQuoteAmount: bid.quoteAmount != null ? Number(bid.quoteAmount) : null,
-      currentBidAmount: Number(bid.amount),
-    },
+    title: "Counter-offer received",
+    body: `The client suggested ₹${suggestedAmount.toFixed(0)} on "${ctx.job.title}" (${current}).${notes ? ` Note: ${notes.slice(0, 120)}` : ""}`,
+    link: `/professional/jobs/${ctx.job.id}?counter=1#bid-form`,
+    meta: { jobId: ctx.job.id, bidId: bid.id, counterOffer: true, suggestedAmount },
   });
-
   return res.json({
-    bid: {
-      id: bid.id,
-      counterOffer: bid.counterOffer,
-      counterHistory: bid.counterHistory || [],
-      quoteAmount: bid.quoteAmount != null ? Number(bid.quoteAmount) : null,
-    },
+    bid: { id: bid.id, counterOffer: bid.counterOffer, counterHistory: bid.counterHistory || [], quoteAmount: bid.quoteAmount ?? null },
     message: "Counter-offer sent",
   });
 }
 
-/** Pro declines a pending homeowner counter-offer. */
 export async function declineCounterOffer(req: Request, res: Response) {
-  const bid = await bidRepo().findOne({ where: { id: param(req, "id") } });
-  if (!bid) {
-    return res.status(404).json({ message: "Bid not found", code: "NOT_FOUND" });
-  }
-  if (bid.tradespersonId !== req.user!.id) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-  if (bid.status !== BidStatus.ACTIVE) {
-    return res.status(400).json({ message: "Bid is not active", code: "BID_NOT_ACTIVE" });
-  }
+  const { bid, ctx } = await openBidForPro(req);
   if (!bid.counterOffer || bid.counterOffer.status !== "pending") {
-    return res.status(400).json({
-      message: "No pending counter-offer to decline",
-      code: "NO_PENDING_COUNTER",
-    });
+    throw badRequest("There is no pending counter-offer to decline", "NO_PENDING_COUNTER");
   }
-
-  const job = await jobRepo().findOne({ where: { id: bid.jobId } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-
-  const notesRaw = req.body?.notes != null ? String(req.body.notes).slice(0, 2000) : null;
-  const declinedAt = new Date().toISOString();
-  bid.counterOffer = {
-    ...bid.counterOffer,
-    status: "declined",
-    declinedAt,
-    declinedNotes: notesRaw,
-  };
+  const notes = req.valid.body.notes || null;
+  bid.counterOffer = { ...bid.counterOffer, status: "declined", declinedAt: new Date().toISOString(), declinedNotes: notes };
   await bidRepo().save(bid);
-
+  const amount = Number(bid.counterOffer.suggestedAmount).toFixed(0);
   await createNotification({
-    userId: job.homeownerId,
+    userId: ctx.job.homeownerId,
     type: NotificationType.SYSTEM,
     title: "Counter-offer declined",
-    body: notesRaw
-      ? `Pro declined your counter (₹${Number(bid.counterOffer.suggestedAmount).toFixed(0)}) on "${job.title}": ${notesRaw.slice(0, 120)}`
-      : `Pro declined your counter (₹${Number(bid.counterOffer.suggestedAmount).toFixed(0)}) on "${job.title}".`,
-    link: `/homeowner/jobs/${job.id}?bid=${bid.id}#bid-${bid.id}`,
-    meta: {
-      jobId: job.id,
-      bidId: bid.id,
-      counterDeclined: true,
-      suggestedAmount: bid.counterOffer.suggestedAmount,
-      notes: notesRaw,
-    },
+    body: notes
+      ? `The professional declined your counter (₹${amount}) on "${ctx.job.title}": ${notes.slice(0, 120)}`
+      : `The professional declined your counter (₹${amount}) on "${ctx.job.title}".`,
+    link: `/client/jobs/${ctx.job.id}?bid=${bid.id}#bid-${bid.id}`,
+    meta: { jobId: ctx.job.id, bidId: bid.id, counterDeclined: true },
   });
-
   return res.json({
-    bid: {
-      id: bid.id,
-      counterOffer: bid.counterOffer,
-      counterHistory: bid.counterHistory || [],
-    },
+    bid: { id: bid.id, counterOffer: bid.counterOffer, counterHistory: bid.counterHistory || [] },
     message: "Counter-offer declined",
   });
 }
 
-/** Force-check / return viewed-no-reply soft flag (also used by smoke). */
-export async function checkViewedNoReply(req: Request, res: Response) {
-  const bid = await bidRepo().findOne({ where: { id: param(req, "id") } });
-  if (!bid) {
-    return res.status(404).json({ message: "Bid not found", code: "NOT_FOUND" });
-  }
-  const job = await jobRepo().findOne({ where: { id: bid.jobId } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-  const isPro = bid.tradespersonId === req.user!.id;
-  const isHome = job.homeownerId === req.user!.id;
-  const isAdmin = req.user!.role === UserRole.ADMIN;
-  if (!isPro && !isHome && !isAdmin) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-  // Only the pro (or admin) triggers the notify side-effect
-  const force = String(req.query.force || req.body?.force || "") === "1";
-  const notify = isPro || isAdmin;
-  const proUser = await AppDataSource.getRepository(User).findOne({
-    where: { id: bid.tradespersonId },
-  });
-  const thresholdH = resolveQuoteViewNudgeHours(proUser?.quoteViewNudgeHours);
-  const { viewedNoReply } = await applyViewedNoReplyNudge(bid, job, {
-    forceNotify: notify && force,
-    thresholdHours: proUser?.quoteViewNudgeHours,
-  });
-  // Soft override for smoke: if forceHours provided, recompute due
-  const forceHours = Number(req.query.forceHours ?? req.body?.forceHours);
-  if (Number.isFinite(forceHours) && forceHours >= 0 && bid.quoteViewedAt) {
-    const histLen = Array.isArray(bid.quoteHistory) ? bid.quoteHistory.length : 0;
-    const viewedCount = bid.quoteViewedRevisionCount ?? 0;
-    const revisedSinceView = histLen > viewedCount;
-    const due = !revisedSinceView && forceHours >= thresholdH;
-    viewedNoReply.hoursSinceView = forceHours;
-    viewedNoReply.due = due;
-    viewedNoReply.thresholdHours = thresholdH;
-    if (due && notify && !bid.quoteViewedNudgeSentAt) {
-      await createNotification({
-        userId: bid.tradespersonId,
-        type: NotificationType.SYSTEM,
-        title: "Viewed but no reply",
-        body: `Homeowner viewed your revised quote on "${job.title}" ~${Math.floor(forceHours)}h ago with no further revise. Consider following up.`,
-        link: `/tradesperson/jobs/${job.id}?nudge=viewed#bid-form`,
-        meta: {
-          jobId: job.id,
-          bidId: bid.id,
-          viewedNoReply: true,
-          hoursSinceView: forceHours,
-          thresholdHours: thresholdH,
-          forced: true,
-        },
-      });
-      bid.quoteViewedNudgeSentAt = new Date();
-      await bidRepo().save(bid);
-      viewedNoReply.nudged = true;
-      viewedNoReply.nudgeSentAt = bid.quoteViewedNudgeSentAt.toISOString();
-    }
-  }
-  return res.json({ bidId: bid.id, viewedNoReply, thresholdHours: thresholdH });
+async function bidParty(req: Request) {
+  const bid = await loadBid(req.valid.params.id);
+  const ctx = await loadJobContext(bid.jobId);
+  const v = viewer(req);
+  const isPro = bid.tradespersonId === v.id;
+  if (!isPro && !isOwner(ctx, v) && !isAdmin(v)) throw forbidden("You don't have access to this bid");
+  return { bid, ctx, isPro };
 }
 
-/** Homeowner viewed a revised quote — soft alert the pro (deduped per revision). */
+export async function checkViewedNoReply(req: Request, res: Response) {
+  const { bid } = await bidParty(req);
+  const pro = await AppDataSource.getRepository(User).findOne({ where: { id: bid.tradespersonId } });
+  const state = viewedNoReplyState(bid, pro?.quoteViewNudgeHours);
+  return res.json({ bidId: bid.id, viewedNoReply: state, thresholdHours: state.thresholdHours });
+}
+
 export async function markQuoteViewed(req: Request, res: Response) {
-  const bid = await bidRepo().findOne({ where: { id: param(req, "id") } });
-  if (!bid) {
-    return res.status(404).json({ message: "Bid not found", code: "NOT_FOUND" });
-  }
-
-  const job = await jobRepo().findOne({ where: { id: bid.jobId } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-  if (job.homeownerId !== req.user!.id) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-
+  const bid = await loadBid(req.valid.params.id);
+  const ctx: JobContext = await loadJobContext(bid.jobId);
+  assertOwner(ctx, viewer(req));
   const histLen = Array.isArray(bid.quoteHistory) ? bid.quoteHistory.length : 0;
-  if (histLen < 1) {
-    return res.json({ viewed: false, message: "No revised quote to view", notified: false });
-  }
-
-  const prevCount = bid.quoteViewedRevisionCount ?? 0;
-  const alreadySeen = prevCount >= histLen;
-  bid.quoteViewedAt = new Date();
-  bid.quoteViewedRevisionCount = histLen;
-  await bidRepo().save(bid);
-
-  let notified = false;
+  if (histLen < 1) return res.json({ viewed: false, notified: false, message: "No revised quote to view" });
+  const alreadySeen = (bid.quoteViewedRevisionCount ?? 0) >= histLen;
+  const now = new Date();
+  await bidRepo().update({ id: bid.id }, { quoteViewedAt: now, quoteViewedRevisionCount: histLen, ...(alreadySeen ? {} : { quoteViewedNudgeSentAt: null }) });
   if (!alreadySeen) {
     const latest = bid.quoteAmount != null ? Number(bid.quoteAmount) : null;
     await createNotification({
       userId: bid.tradespersonId,
       type: NotificationType.SYSTEM,
-      title: "Homeowner viewed your revised quote",
-      body:
-        latest != null
-          ? `Homeowner opened your revised quote (₹${latest.toFixed(0)}) on "${job.title}".`
-          : `Homeowner opened your revised quote on "${job.title}".`,
-      link: `/tradesperson/jobs/${job.id}`,
-      meta: {
-        jobId: job.id,
-        bidId: bid.id,
-        quoteViewed: true,
-        revisionCount: histLen,
-        quoteAmount: latest,
-      },
-    });
-    notified = true;
-  }
-
-  return res.json({
-    viewed: true,
-    notified,
-    quoteViewedAt: bid.quoteViewedAt,
-    quoteViewedRevisionCount: bid.quoteViewedRevisionCount,
-  });
-}
-
-
-type CounterEvent = {
-  suggestedAmount: number;
-  notes?: string | null;
-  requestedAt: string;
-  status: "pending" | "addressed" | "dismissed" | "declined";
-  resolvedAt?: string | null;
-  addressedAt?: string | null;
-  declinedAt?: string | null;
-  declinedNotes?: string | null;
-  bidId: string;
-  jobId: string;
-  bidStatus: string;
-};
-
-function collectCounterEvents(bid: Bid): CounterEvent[] {
-  const out: CounterEvent[] = [];
-  const hist = Array.isArray(bid.counterHistory) ? bid.counterHistory : [];
-  for (const h of hist) {
-    out.push({
-      suggestedAmount: Number(h.suggestedAmount),
-      notes: h.notes ?? null,
-      requestedAt: h.requestedAt,
-      status: h.status,
-      resolvedAt: h.resolvedAt ?? null,
-      addressedAt: h.addressedAt ?? null,
-      declinedAt: h.declinedAt ?? null,
-      declinedNotes: h.declinedNotes ?? null,
-      bidId: bid.id,
-      jobId: bid.jobId,
-      bidStatus: bid.status,
+      title: "The client viewed your revised quote",
+      body: latest != null
+        ? `The client opened your revised quote (₹${latest.toFixed(0)}) on "${ctx.job.title}".`
+        : `The client opened your revised quote on "${ctx.job.title}".`,
+      link: `/professional/jobs/${ctx.job.id}`,
+      meta: { jobId: ctx.job.id, bidId: bid.id, quoteViewed: true, revisionCount: histLen },
     });
   }
-  if (bid.counterOffer) {
-    out.push({
-      suggestedAmount: Number(bid.counterOffer.suggestedAmount),
-      notes: bid.counterOffer.notes ?? null,
-      requestedAt: bid.counterOffer.requestedAt,
-      status: bid.counterOffer.status,
-      resolvedAt: null,
-      addressedAt: bid.counterOffer.addressedAt ?? null,
-      declinedAt: bid.counterOffer.declinedAt ?? null,
-      declinedNotes: bid.counterOffer.declinedNotes ?? null,
-      bidId: bid.id,
-      jobId: bid.jobId,
-      bidStatus: bid.status,
-    });
-  }
-  return out;
+  return res.json({ viewed: true, notified: !alreadySeen, quoteViewedAt: now, quoteViewedRevisionCount: histLen });
 }
 
-function hoursBetweenIso(fromIso: string, toIso: string): number | null {
-  const a = new Date(fromIso).getTime();
-  const b = new Date(toIso).getTime();
-  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return null;
-  return Math.round(((b - a) / 3600000) * 10) / 10;
-}
-
-function summarizeCounterEvents(events: CounterEvent[]) {
-  let pending = 0;
-  let addressed = 0;
-  let declined = 0;
-  let dismissed = 0;
-  const addressHours: number[] = [];
-  const declineHours: number[] = [];
-  let afterAddressedAccepted = 0;
-  let afterAddressedRejected = 0;
-  let afterAddressedOpen = 0;
-
-  for (const e of events) {
-    if (e.status === "pending") pending += 1;
-    else if (e.status === "addressed") {
-      addressed += 1;
-      const end = e.addressedAt || e.resolvedAt;
-      if (end) {
-        const h = hoursBetweenIso(e.requestedAt, end);
-        if (h != null) addressHours.push(h);
-      }
-      if (e.bidStatus === BidStatus.ACCEPTED) afterAddressedAccepted += 1;
-      else if (e.bidStatus === BidStatus.REJECTED) afterAddressedRejected += 1;
-      else if (e.bidStatus === BidStatus.ACTIVE) afterAddressedOpen += 1;
-    } else if (e.status === "declined") {
-      declined += 1;
-      const end = e.declinedAt || e.resolvedAt;
-      if (end) {
-        const h = hoursBetweenIso(e.requestedAt, end);
-        if (h != null) declineHours.push(h);
-      }
-    } else if (e.status === "dismissed") {
-      dismissed += 1;
-    }
-  }
-
-  const sent = events.length;
-  const avg = (arr: number[]) =>
-    arr.length ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10 : null;
-  const median = (arr: number[]) => {
-    if (!arr.length) return null;
-    const s = [...arr].sort((a, b) => a - b);
-    const mid = Math.floor(s.length / 2);
-    return s.length % 2 ? s[mid] : Math.round(((s[mid - 1] + s[mid]) / 2) * 10) / 10;
-  };
-
-  return {
-    sent,
-    pending,
-    addressed,
-    declined,
-    dismissed,
-    addressRate: sent ? Math.round((addressed / sent) * 1000) / 10 : 0,
-    declineRate: sent ? Math.round((declined / sent) * 1000) / 10 : 0,
-    avgTimeToAddressHours: avg(addressHours),
-    medianTimeToAddressHours: median(addressHours),
-    avgTimeToDeclineHours: avg(declineHours),
-    medianTimeToDeclineHours: median(declineHours),
-    afterAddressedAccepted,
-    afterAddressedRejected,
-    afterAddressedOpen,
-    addressSampleSize: addressHours.length,
-    declineSampleSize: declineHours.length,
-  };
-}
-
-/** Escrow what-if calculator: milestone split preview for an amount (before accept). */
 export async function escrowWhatIf(req: Request, res: Response) {
-  const bid = await bidRepo().findOne({ where: { id: param(req, "id") } });
-  if (!bid) {
-    return res.status(404).json({ message: "Bid not found", code: "NOT_FOUND" });
-  }
-  const job = await jobRepo().findOne({ where: { id: bid.jobId } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-  const isHome = job.homeownerId === req.user!.id;
-  const isPro = bid.tradespersonId === req.user!.id;
-  const isAdmin = req.user!.role === UserRole.ADMIN;
-  if (!isHome && !isPro && !isAdmin) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-
+  const { bid, ctx } = await bidParty(req);
   const fromBid = escrowAmountFromBid(bid);
-  const rawAmount = req.query.amount ?? req.body?.amount;
-  const amount =
-    rawAmount !== undefined && rawAmount !== null && rawAmount !== ""
-      ? Number(rawAmount)
-      : fromBid.amount;
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return res.status(400).json({ message: "amount must be a positive number", code: "VALIDATION" });
-  }
-
-  const preview = previewEscrowSplit(amount);
+  const amount = req.valid.query.amount ?? fromBid.amount;
+  const preview = splitEscrow(amount);
   const counter = bid.counterOffer || null;
   return res.json({
     bidId: bid.id,
-    jobId: job.id,
+    jobId: ctx.job.id,
     source: fromBid.source,
     defaultAmount: fromBid.amount,
+    quoteRevision: bid.quoteRevision,
     amount: preview.amount,
     milestones: preview.milestones,
-    note: "Simulated escrow what-if — Deposit / Progress / Completion split if you accept at this amount.",
+    note: "Simulated escrow preview — Deposit / Progress / Completion split if you accept at this amount.",
     counterOffer: counter
       ? {
           suggestedAmount: Number(counter.suggestedAmount),
           status: counter.status,
-          deltaVsAmount:
-            Math.round((preview.amount - Number(counter.suggestedAmount)) * 100) / 100,
+          deltaVsAmount: Math.round((preview.amount - Number(counter.suggestedAmount)) * 100) / 100,
         }
       : null,
   });
 }
 
-/** Homeowner aggregate (or per-job) + pro counter accept/reject analytics + time-to-address SLA. */
+type CounterEvent = {
+  status: "pending" | "addressed" | "dismissed" | "declined";
+  requestedAt: string;
+  addressedAt?: string | null;
+  declinedAt?: string | null;
+  resolvedAt?: string | null;
+  bidStatus: string;
+};
+
+function counterEvents(bid: Bid): CounterEvent[] {
+  const out: CounterEvent[] = (Array.isArray(bid.counterHistory) ? bid.counterHistory : []).map((h) => ({
+    ...h,
+    bidStatus: bid.status,
+  }));
+  if (bid.counterOffer) out.push({ ...bid.counterOffer, resolvedAt: null, bidStatus: bid.status });
+  return out;
+}
+
+function hoursBetweenIso(from: string, to?: string | null) {
+  if (!to) return null;
+  const a = new Date(from).getTime();
+  const b = new Date(to).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return null;
+  return (b - a) / 3600_000;
+}
+
+export function summarizeCounterEvents(events: CounterEvent[]) {
+  const addressHours: number[] = [];
+  const declineHours: number[] = [];
+  const count = { pending: 0, addressed: 0, declined: 0, dismissed: 0, afterAddressedAccepted: 0, afterAddressedRejected: 0, afterAddressedOpen: 0 };
+  for (const e of events) {
+    count[e.status] += 1;
+    if (e.status === "addressed") {
+      const h = hoursBetweenIso(e.requestedAt, e.addressedAt || e.resolvedAt);
+      if (h != null) addressHours.push(h);
+      if (e.bidStatus === BidStatus.ACCEPTED) count.afterAddressedAccepted += 1;
+      else if (e.bidStatus === BidStatus.REJECTED) count.afterAddressedRejected += 1;
+      else if (e.bidStatus === BidStatus.ACTIVE) count.afterAddressedOpen += 1;
+    } else if (e.status === "declined") {
+      const h = hoursBetweenIso(e.requestedAt, e.declinedAt || e.resolvedAt);
+      if (h != null) declineHours.push(h);
+    }
+  }
+  const sent = events.length;
+  return {
+    sent,
+    ...count,
+    addressRate: rate(count.addressed, sent),
+    declineRate: rate(count.declined, sent),
+    avgTimeToAddressHours: mean(addressHours),
+    medianTimeToAddressHours: median(addressHours),
+    avgTimeToDeclineHours: mean(declineHours),
+    medianTimeToDeclineHours: median(declineHours),
+    addressSampleSize: addressHours.length,
+    declineSampleSize: declineHours.length,
+  };
+}
+
 export async function getCounterAnalytics(req: Request, res: Response) {
-  const role = req.user!.role;
-  const jobId = req.query.jobId ? String(req.query.jobId) : null;
-
-  if (role === UserRole.HOMEOWNER || (role === UserRole.ADMIN && !req.query.asPro)) {
-    const homeownerId =
-      role === UserRole.ADMIN && req.query.homeownerId
-        ? String(req.query.homeownerId)
-        : req.user!.id;
-    let jobs = await jobRepo().find({ where: { homeownerId } });
-    if (jobId) {
-      jobs = jobs.filter((j) => j.id === jobId);
-      if (!jobs.length) {
-        return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-      }
-    }
-    if (!jobs.length) {
-      return res.json({
-        role: "homeowner",
-        homeownerId,
-        jobId: jobId || null,
-        jobs: 0,
-        ...summarizeCounterEvents([]),
-        byJob: [],
-      });
-    }
-    const jobIds = jobs.map((j) => j.id);
-    const bids = jobIds.length
-      ? await bidRepo()
-          .createQueryBuilder("b")
-          .where("b.jobId IN (:...jobIds)", { jobIds })
-          .getMany()
-      : [];
-    const events = bids.flatMap(collectCounterEvents);
-    const byJob = jobs.map((j) => {
-      const jobBids = bids.filter((b) => b.jobId === j.id);
-      const ev = jobBids.flatMap(collectCounterEvents);
-      return { jobId: j.id, title: j.title, ...summarizeCounterEvents(ev) };
-    });
-    return res.json({
-      role: "homeowner",
-      homeownerId,
-      jobId: jobId || null,
-      jobs: jobs.length,
-      ...summarizeCounterEvents(events),
-      byJob: jobId ? byJob : byJob.filter((j) => j.sent > 0).slice(0, 20),
-    });
+  const { role, id } = req.user!;
+  const q = req.valid.query;
+  const asPro = role === UserRole.TRADESPERSON || (role === UserRole.ADMIN && q.asPro);
+  if (role !== UserRole.ADMIN && (q.homeownerId || q.tradespersonId)) {
+    if ((q.homeownerId && q.homeownerId !== id) || (q.tradespersonId && q.tradespersonId !== id)) throw forbidden();
   }
-
-  if (role === UserRole.TRADESPERSON || (role === UserRole.ADMIN && req.query.asPro)) {
-    const proId =
-      role === UserRole.ADMIN && req.query.tradespersonId
-        ? String(req.query.tradespersonId)
-        : req.user!.id;
+  if (asPro) {
+    const proId = role === UserRole.ADMIN && q.tradespersonId ? q.tradespersonId : id;
     const bids = await bidRepo().find({ where: { tradespersonId: proId } });
-    const events = bids.flatMap(collectCounterEvents);
-    return res.json({
-      role: "tradesperson",
-      tradespersonId: proId,
-      bids: bids.length,
-      ...summarizeCounterEvents(events),
-    });
+    return res.json({ role: "tradesperson", tradespersonId: proId, bids: bids.length, ...summarizeCounterEvents(bids.flatMap(counterEvents)) });
   }
-
-  return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
+  if (role !== UserRole.HOMEOWNER && role !== UserRole.ADMIN) throw forbidden();
+  const homeownerId = role === UserRole.ADMIN && q.homeownerId ? q.homeownerId : id;
+  const jobs = await AppDataSource.getRepository(Job).find({
+    where: q.jobId ? { homeownerId, id: q.jobId } : { homeownerId },
+    select: { id: true, title: true },
+  });
+  if (q.jobId && !jobs.length) throw notFound("Job not found");
+  const bids = jobs.length ? await bidRepo().find({ where: { jobId: In(jobs.map((j) => j.id)) } }) : [];
+  const byJob = jobs.map((j) => ({
+    jobId: j.id,
+    title: j.title,
+    ...summarizeCounterEvents(bids.filter((b) => b.jobId === j.id).flatMap(counterEvents)),
+  }));
+  return res.json({
+    role: "homeowner",
+    homeownerId,
+    jobId: q.jobId || null,
+    jobs: jobs.length,
+    ...summarizeCounterEvents(bids.flatMap(counterEvents)),
+    byJob: q.jobId ? byJob : byJob.filter((j) => j.sent > 0).slice(0, 20),
+  });
 }

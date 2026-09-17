@@ -12,6 +12,8 @@ export function haversineKm(
   lat2?: number | null,
   lng2?: number | null
 ): number | null {
+  // Number(null) is 0, so missing coordinates must be rejected before converting.
+  if ([lat1, lng1, lat2, lng2].some((v) => v === null || v === undefined || (v as unknown) === "")) return null;
   const a = Number(lat1);
   const b = Number(lng1);
   const c = Number(lat2);
@@ -35,6 +37,7 @@ export function parseCoordPair(
   lat?: unknown,
   lng?: unknown
 ): { lat: number; lng: number } | null {
+  if (lat === null || lat === undefined || lat === "" || lng === null || lng === undefined || lng === "") return null;
   const a = Number(lat);
   const b = Number(lng);
   if (!Number.isFinite(a) || !Number.isFinite(b)) return null;

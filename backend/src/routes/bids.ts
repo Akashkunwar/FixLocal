@@ -1,57 +1,40 @@
-import { Router, Request, Response, NextFunction } from "express";
+import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/rbac";
+import { validate } from "../middleware/validate";
+import { idempotent } from "../middleware/idempotency";
+import { optionalMultipart, uploadQuoteAttachment } from "../middleware/upload";
 import { UserRole } from "../entities/User";
-import { acceptBid, withdrawBid, updateBidQuote, requestQuoteRevise, markQuoteViewed, declineCounterOffer, checkViewedNoReply, escrowWhatIf, getCounterAnalytics } from "../controllers/bidController";
-import { uploadQuoteAttachment } from "../middleware/upload";
+import * as bids from "../controllers/bidController";
+import { authorizeBidOwner } from "../policies/routeGuards";
+import * as s from "../validation/bids";
 
 const router = Router();
+router.use(requireAuth);
+const params = validate({ params: s.bidIdParams });
 
-function handleQuoteUpload(req: Request, res: Response, next: NextFunction) {
-  const ct = String(req.headers["content-type"] || "");
-  if (!ct.includes("multipart/form-data")) return next();
-  uploadQuoteAttachment(req, res, (err) => {
-    if (err) {
-      return res.status(400).json({ message: err.message || "Upload failed", code: "UPLOAD_ERROR" });
-    }
-    next();
-  });
-}
-
-router.get("/counter-analytics", requireAuth, getCounterAnalytics);
-router.get("/:id/escrow-what-if", requireAuth, escrowWhatIf);
-router.post("/:id/escrow-what-if", requireAuth, escrowWhatIf);
-router.post("/:id/accept", requireAuth, requireRole(UserRole.HOMEOWNER), acceptBid);
+router.get("/counter-analytics", validate({ query: s.counterAnalyticsQuery }), bids.getCounterAnalytics);
+router.get("/:id/escrow-what-if", validate({ params: s.bidIdParams, query: s.whatIfQuery }), bids.escrowWhatIf);
+router.post("/:id/accept", requireRole(UserRole.HOMEOWNER), validate({ params: s.bidIdParams, body: s.acceptBidBody }), idempotent, bids.acceptBid);
 router.patch(
   "/:id/quote",
-  requireAuth,
   requireRole(UserRole.TRADESPERSON),
-  handleQuoteUpload,
-  updateBidQuote
+  params,
+  authorizeBidOwner,
+  optionalMultipart(uploadQuoteAttachment),
+  validate({ params: s.bidIdParams, body: s.updateQuoteBody }),
+  bids.updateBidQuote
 );
-router.post(
-  "/:id/counter-offer",
-  requireAuth,
-  requireRole(UserRole.HOMEOWNER),
-  requestQuoteRevise
-);
-router.post(
-  "/:id/quote-viewed",
-  requireAuth,
-  requireRole(UserRole.HOMEOWNER),
-  markQuoteViewed
-);
+router.post("/:id/counter-offer", requireRole(UserRole.HOMEOWNER), validate({ params: s.bidIdParams, body: s.counterOfferBody }), bids.requestQuoteRevise);
+router.post("/:id/quote-viewed", requireRole(UserRole.HOMEOWNER), params, bids.markQuoteViewed);
 router.post(
   "/:id/counter-offer/decline",
-  requireAuth,
   requireRole(UserRole.TRADESPERSON),
-  declineCounterOffer
+  validate({ params: s.bidIdParams, body: s.declineCounterBody }),
+  bids.declineCounterOffer
 );
-router.post(
-  "/:id/viewed-no-reply",
-  requireAuth,
-  checkViewedNoReply
-);
-router.delete("/:id", requireAuth, requireRole(UserRole.TRADESPERSON), withdrawBid);
+router.get("/:id/viewed-no-reply", params, bids.checkViewedNoReply);
+router.post("/:id/viewed-no-reply", params, bids.checkViewedNoReply);
+router.delete("/:id", requireRole(UserRole.TRADESPERSON), params, bids.withdrawBid);
 
 export default router;

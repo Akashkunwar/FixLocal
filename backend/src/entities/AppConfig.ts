@@ -15,9 +15,9 @@ export class AppConfig {
   @Column({ type: "jsonb" })
   value!: Record<string, unknown>;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

@@ -1,4 +1,6 @@
+import { numeric } from "../db/numeric";
 import {
+  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -21,6 +23,11 @@ export enum BidStatus {
 @Entity("bids")
 @Index(["jobId"])
 @Index(["tradespersonId"])
+@Index("UQ_bid_job_pro", ["jobId", "tradespersonId"], { unique: true })
+@Index("UQ_bid_one_accepted_per_job", ["jobId"], { unique: true, where: `"status" = 'accepted'` })
+@Check("CHK_bid_amount", `"amount" > 0`)
+@Check("CHK_bid_quote_amount", `"quoteAmount" IS NULL OR "quoteAmount" > 0`)
+@Check("CHK_bid_eta", `"etaDays" IS NULL OR ("etaDays" >= 0 AND "etaDays" <= 365)`)
 export class Bid {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -39,7 +46,7 @@ export class Bid {
   @JoinColumn({ name: "tradespersonId" })
   tradesperson!: User;
 
-  @Column({ type: "decimal", precision: 10, scale: 2 })
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric })
   amount!: number;
 
   @Column({ type: "text", nullable: true })
@@ -56,7 +63,7 @@ export class Bid {
   proposedVisitEnd?: Date;
 
   /** Structured estimate/quote (may match bid amount or be a detailed breakdown). */
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric, nullable: true })
   quoteAmount?: number;
 
   @Column({ type: "text", nullable: true })
@@ -65,6 +72,10 @@ export class Bid {
   /** Optional PDF/image supporting the quote (multer path). */
   @Column({ type: "varchar", nullable: true })
   quoteAttachmentUrl?: string;
+
+  /** Incremented on every quote change; clients send it back when accepting. */
+  @Column({ type: "int", default: 0 })
+  quoteRevision!: number;
 
   /** Prior quote revisions when the pro edits quoteAmount/notes/attachment. */
   @Column({ type: "jsonb", nullable: true })
@@ -115,9 +126,9 @@ export class Bid {
   @Column({ type: "enum", enum: BidStatus, default: BidStatus.ACTIVE })
   status!: BidStatus;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

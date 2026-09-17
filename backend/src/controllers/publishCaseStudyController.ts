@@ -1,141 +1,71 @@
-import { Request, Response } from "express";
-import { param } from "../utils/params";
+import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
-import { Bid } from "../entities/Bid";
-import { Job, JobStatus } from "../entities/Job";
+import { JobStatus } from "../entities/Job";
 import { TradespersonProfile } from "../entities/TradespersonProfile";
-import { UserRole } from "../entities/User";
-
-const jobRepo = () => AppDataSource.getRepository(Job);
-const bidRepo = () => AppDataSource.getRepository(Bid);
-const profileRepo = () => AppDataSource.getRepository(TradespersonProfile);
-
-const PUBLISHABLE = [
-  JobStatus.AWARDED,
-  JobStatus.IN_PROGRESS,
-  JobStatus.COMPLETED,
-  JobStatus.DISPUTED,
-];
+import { UploadKind } from "../entities/Upload";
+import { assertAwardedProOrAdmin, loadJobContext } from "../policies/jobPolicy";
+import { viewer } from "./jobController";
+import { copyUploadAs, deleteUploadByRef } from "../services/files";
+import { badRequest, conflict, forbidden } from "../http/errors";
+import { toProfile } from "../serializers";
 
 /**
- * One-click: publish a past-work case study from this job's before/after photos
- * onto the awarded professional's portfolio.
+ * Publish a completed job's photos to the pro's public portfolio.
+ * Needs the client's consent; photos are copied so the job's private files stay private.
  */
 export async function publishCaseStudyFromJob(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertAwardedProOrAdmin(ctx, viewer(req), "Only the hired professional can publish a case study from this job");
+  const job = ctx.job;
+  if (job.status !== JobStatus.COMPLETED) {
+    throw conflict("Case studies can only be published from completed jobs", "INVALID_STATUS");
   }
-  if (!PUBLISHABLE.includes(job.status)) {
-    return res.status(400).json({
-      message: "Case studies can be published from awarded, in-progress, completed, or disputed jobs",
-      code: "INVALID_STATUS",
-    });
+  if (!job.photoConsent) {
+    throw forbidden("The client hasn't allowed these photos to be published", "PHOTO_CONSENT_REQUIRED");
   }
-
-  if (!job.acceptedBidId) {
-    return res.status(400).json({
-      message: "Job has no awarded professional",
-      code: "NO_AWARDED_PRO",
-    });
-  }
-
-  const accepted = await bidRepo().findOne({ where: { id: job.acceptedBidId } });
-  if (!accepted) {
-    return res.status(400).json({
-      message: "Accepted bid not found",
-      code: "NO_AWARDED_PRO",
-    });
-  }
-
-  const isPro = accepted.tradespersonId === req.user!.id;
-  const isAdmin = req.user!.role === UserRole.ADMIN;
-  if (!isPro && !isAdmin) {
-    return res.status(403).json({
-      message: "Only the awarded professional can publish a case study from this job",
-      code: "FORBIDDEN",
-    });
-  }
-
+  if (!ctx.acceptedProId) throw badRequest("Job has no hired professional", "NO_AWARDED_PRO");
   const before = job.beforePhotoUrls || [];
   const after = job.afterPhotoUrls || [];
-  if (before.length === 0 && after.length === 0) {
-    return res.status(400).json({
-      message: "Add at least one before or after completion photo first",
-      code: "NO_PHOTOS",
-    });
+  if (!before.length && !after.length) {
+    throw badRequest("Add at least one before or after completion photo first", "NO_PHOTOS");
+  }
+  const b = req.valid.body;
+  const pick = (wanted: string | undefined, pool: string[]) => (wanted && pool.includes(wanted) ? wanted : pool[0]);
+  const proId = ctx.acceptedProId;
+
+  const repo = AppDataSource.getRepository(TradespersonProfile);
+  const profile = (await repo.findOne({ where: { userId: proId }, relations: ["user"] })) ||
+    (await repo.save(repo.create({ userId: proId, galleryUrls: [], caseStudies: [] })));
+  const existing = Array.isArray(profile.caseStudies) ? profile.caseStudies : [];
+  const caseId = b.id || `case-job-${job.id.slice(0, 8)}`;
+  const replaced = existing.filter((c) => c.id === caseId || (c as { sourceJobId?: string }).sourceJobId === job.id);
+  if (!replaced.length && existing.length >= 12) {
+    throw badRequest("A portfolio can have at most 12 case studies; remove one first", "TOO_MANY_CASE_STUDIES");
   }
 
-  const body = req.body ?? {};
-  const title =
-    String(body.title || "").trim().slice(0, 120) ||
-    `${job.title}`.slice(0, 120) ||
-    "Completed job";
-  const notes =
-    body.notes != null && String(body.notes).trim()
-      ? String(body.notes).trim().slice(0, 800)
-      : undefined;
+  const beforeSrc = pick(b.beforeUrl, before);
+  const afterSrc = pick(b.afterUrl, after);
+  const beforeUrl = beforeSrc ? await copyUploadAs(beforeSrc, UploadKind.CASE_STUDY, proId) : null;
+  const afterUrl = afterSrc ? await copyUploadAs(afterSrc, UploadKind.CASE_STUDY, proId) : null;
 
-  // Prefer explicit URLs when they belong to this job; else first of each gallery.
-  const pickUrl = (raw: unknown, pool: string[]) => {
-    const s = raw != null ? String(raw).trim() : "";
-    if (s && pool.includes(s)) return s.slice(0, 500);
-    return pool[0] ? pool[0].slice(0, 500) : undefined;
-  };
-  const beforeUrl = pickUrl(body.beforeUrl, before);
-  const afterUrl = pickUrl(body.afterUrl, after);
-
-  let profile = await profileRepo().findOne({
-    where: { userId: accepted.tradespersonId },
-  });
-  if (!profile) {
-    profile = await profileRepo().save(
-      profileRepo().create({
-        userId: accepted.tradespersonId,
-        galleryUrls: [],
-        caseStudies: [],
-      })
-    );
-  }
-
-  const existing = Array.isArray(profile.caseStudies) ? [...profile.caseStudies] : [];
-  const caseId =
-    String(body.id || "").trim().slice(0, 64) ||
-    `case-job-${job.id.slice(0, 8)}-${Date.now().toString(36)}`;
-
-  // Replace prior study from this job (or same id) — soft idempotent re-publish
-  const filtered = existing.filter(
-    (c) => c.id !== caseId && String((c as any).sourceJobId || "") !== job.id
-  );
-
-  const study: {
-    id: string;
-    title: string;
-    notes?: string;
-    beforeUrl?: string | null;
-    afterUrl?: string | null;
-    category?: string | null;
-    sourceJobId?: string;
-  } = {
+  const study = {
     id: caseId,
-    title,
-    ...(notes ? { notes } : {}),
-    ...(beforeUrl ? { beforeUrl } : {}),
-    ...(afterUrl ? { afterUrl } : {}),
-    category: String(job.category || "").slice(0, 40) || undefined,
+    title: b.title || job.title.slice(0, 120) || "Completed job",
+    ...(b.notes ? { notes: b.notes } : {}),
+    beforeUrl,
+    afterUrl,
+    category: job.category,
     sourceJobId: job.id,
   };
-
-  // Keep max 12 like profile normalize
-  profile.caseStudies = [...filtered, study].slice(-12) as any;
-  await profileRepo().save(profile);
-
+  profile.caseStudies = [...existing.filter((c) => !replaced.includes(c)), study];
+  await repo.save(profile);
+  for (const old of replaced) {
+    for (const ref of [old.beforeUrl, old.afterUrl]) if (ref) await deleteUploadByRef(ref);
+  }
+  const serialized = toProfile(profile, profile.user, "public");
   return res.json({
-    caseStudy: study,
-    profile: {
-      id: profile.id,
-      caseStudies: profile.caseStudies,
-    },
-    message: "Case study published to portfolio",
+    caseStudy: serialized.caseStudies.find((c) => c.id === caseId),
+    profile: { id: profile.id, caseStudies: serialized.caseStudies },
+    message: "Case study published to your portfolio",
   });
 }

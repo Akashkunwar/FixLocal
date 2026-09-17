@@ -10,8 +10,13 @@ import {
 import { Job } from "./Job";
 import { User } from "./User";
 
+/**
+ * Job chat is split into one thread per (job, professional):
+ * the client talks to each bidding pro privately.
+ */
 @Entity("messages")
 @Index(["jobId", "createdAt"])
+@Index(["jobId", "threadTradespersonId", "createdAt"])
 export class Message {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -24,6 +29,9 @@ export class Message {
   job!: Job;
 
   @Column({ type: "uuid" })
+  threadTradespersonId!: string;
+
+  @Column({ type: "uuid" })
   senderId!: string;
 
   @ManyToOne(() => User, { onDelete: "CASCADE" })
@@ -33,7 +41,7 @@ export class Message {
   @Column({ type: "text", default: "" })
   body!: string;
 
-  /** Chat image/PDF attachments (multer paths under /uploads). */
+  /** Upload references (/api/files/<name>) of kind "chat". */
   @Column({ type: "jsonb", default: [] })
   attachmentUrls!: string[];
 
@@ -45,9 +53,6 @@ export class Message {
     attachmentUrl?: string;
   } | null;
 
-  @Column({ type: "timestamptz", nullable: true })
-  readAt?: Date;
-
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

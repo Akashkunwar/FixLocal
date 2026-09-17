@@ -1,200 +1,185 @@
-import { Request, Response } from "express";
-import { param } from "../utils/params";
+import { In } from "typeorm";
+import type { NextFunction, Request, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { Message } from "../entities/Message";
-import { Job, JobStatus } from "../entities/Job";
-import { Bid, BidStatus } from "../entities/Bid";
+import { ChatThreadRead } from "../entities/ChatThreadRead";
+import { Bid } from "../entities/Bid";
 import { User, UserRole } from "../entities/User";
 import { NotificationType } from "../entities/Notification";
+import { UploadKind } from "../entities/Upload";
 import { createNotification } from "../utils/notifications";
-import { uploadedPaths } from "../middleware/upload";
-import { publishMessage, sseInit, sseSubscribe } from "../utils/sse";
+import { openStream, publishMessage } from "../utils/sse";
+import { toMessage } from "../serializers";
+import { isAdmin, isOwner, loadJobContext, threadAccess, type JobContext } from "../policies/jobPolicy";
+import { viewer } from "./jobController";
+import { filesOf } from "../middleware/upload";
+import { discardFiles, fileRef, storeUploads } from "../services/files";
+import { badRequest, forbidden } from "../http/errors";
 
-async function canAccessJobMessages(job: Job, userId: string, role: UserRole) {
-  if (role === UserRole.ADMIN) return true;
-  if (job.homeownerId === userId) return true;
-  if (job.acceptedBidId) {
-    const bid = await AppDataSource.getRepository(Bid).findOne({
-      where: { id: job.acceptedBidId },
-    });
-    if (bid?.tradespersonId === userId) return true;
-  }
-  if (role === UserRole.TRADESPERSON && job.status === JobStatus.OPEN) {
-    const bid = await AppDataSource.getRepository(Bid).findOne({
-      where: { jobId: job.id, tradespersonId: userId, status: BidStatus.ACTIVE },
-    });
-    if (bid) return true;
-  }
-  return false;
+/** Which pro's thread the request refers to. Pros always use their own. */
+function threadProId(req: Request, ctx: JobContext): string {
+  const v = req.user!;
+  if (v.role === UserRole.TRADESPERSON) return v.id;
+  const requested = req.valid.query.pro as string | undefined;
+  if (requested) return requested;
+  if (ctx.acceptedProId) return ctx.acceptedProId;
+  throw badRequest("Choose which professional's conversation to open (?pro=<id>)", "THREAD_REQUIRED");
 }
 
-function parseQuote(body: any, attachmentOverride?: string | null) {
-  const raw = body?.quote;
-  let parsed: any = raw;
-  if (typeof raw === "string" && raw.trim()) {
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      parsed = null;
-    }
+async function resolveThread(req: Request, need: "read" | "write") {
+  const ctx = await loadJobContext(req.valid.params.jobId);
+  const proId = threadProId(req, ctx);
+  const access = await threadAccess(ctx, viewer(req), proId);
+  if (access === "none" || (need === "write" && access !== "write")) {
+    throw forbidden(need === "write" ? "You can't send messages in this conversation" : "You don't have access to this conversation");
   }
-  const amountSrc =
-    parsed?.amount ?? body?.quoteAmount ?? body?.quote_amount;
-  const amt = amountSrc !== undefined && amountSrc !== null && amountSrc !== ""
-    ? Number(amountSrc)
-    : NaN;
-  if (!Number.isFinite(amt) || amt <= 0) return undefined;
-  const notesRaw = parsed?.notes ?? body?.quoteNotes ?? body?.quote_notes;
-  const att =
-    attachmentOverride ||
-    parsed?.attachmentUrl ||
-    body?.quoteAttachmentUrl ||
-    undefined;
-  return {
-    amount: amt,
-    notes: notesRaw ? String(notesRaw).slice(0, 2000) : undefined,
-    attachmentUrl: att ? String(att) : undefined,
-  };
+  return { ctx, proId, access };
 }
 
-function serializeMessage(m: Message, sender?: User | null) {
-  const s = sender || (m as any).sender;
-  return {
-    id: m.id,
-    jobId: m.jobId,
-    body: m.body,
-    attachmentUrls: m.attachmentUrls || [],
-    quote: m.quote || null,
-    createdAt: m.createdAt,
-    readAt: m.readAt,
-    sender: s
-      ? { id: s.id, email: s.email, name: s.name, role: s.role }
-      : { id: m.senderId, email: "", role: "" },
-  };
+async function markRead(jobId: string, proId: string, userId: string) {
+  await AppDataSource.createQueryBuilder()
+    .insert()
+    .into(ChatThreadRead)
+    .values({ jobId, threadTradespersonId: proId, userId, lastReadAt: new Date() })
+    .orUpdate(["lastReadAt"], ["jobId", "threadTradespersonId", "userId"])
+    .execute();
+}
+
+/** Client: one entry per pro who bid (or was hired). Pro: just their own thread. */
+export async function listThreads(req: Request, res: Response) {
+  const ctx = await loadJobContext(req.valid.params.jobId);
+  const v = viewer(req);
+  let proIds: string[];
+  if (v.role === UserRole.TRADESPERSON) {
+    if ((await threadAccess(ctx, v, v.id)) === "none") throw forbidden("You don't have access to this conversation");
+    proIds = [v.id];
+  } else if (isOwner(ctx, v) || isAdmin(v)) {
+    const bids = await AppDataSource.getRepository(Bid).find({ where: { jobId: ctx.job.id }, select: { tradespersonId: true } });
+    proIds = [...new Set(bids.map((b) => b.tradespersonId))];
+  } else {
+    throw forbidden("You don't have access to this job's messages");
+  }
+  if (!proIds.length) return res.json({ threads: [] });
+  const stats: { pro: string; last_at: Date | null; last_body: string | null; unread: string; total: string }[] =
+    await AppDataSource.query(
+      `SELECT p.pro,
+              (SELECT m."createdAt" FROM "messages" m WHERE m."jobId" = $1 AND m."threadTradespersonId" = p.pro ORDER BY m."createdAt" DESC LIMIT 1) AS last_at,
+              (SELECT m."body" FROM "messages" m WHERE m."jobId" = $1 AND m."threadTradespersonId" = p.pro ORDER BY m."createdAt" DESC LIMIT 1) AS last_body,
+              (SELECT COUNT(*) FROM "messages" m
+                 LEFT JOIN "chat_thread_reads" r ON r."jobId" = m."jobId" AND r."threadTradespersonId" = m."threadTradespersonId" AND r."userId" = $2
+                WHERE m."jobId" = $1 AND m."threadTradespersonId" = p.pro AND m."senderId" <> $2
+                  AND (r."lastReadAt" IS NULL OR m."createdAt" > r."lastReadAt")) AS unread,
+              (SELECT COUNT(*) FROM "messages" m WHERE m."jobId" = $1 AND m."threadTradespersonId" = p.pro) AS total
+         FROM unnest($3::uuid[]) AS p(pro)`,
+    [ctx.job.id, v.id, proIds]
+  );
+  const users = await AppDataSource.getRepository(User).find({ where: { id: In(proIds) } });
+  const names = new Map(users.map((u) => [u.id, u.name ?? null]));
+  const threads = await Promise.all(
+    stats.map(async (s) => ({
+      tradespersonId: s.pro,
+      name: names.get(s.pro) ?? null,
+      hired: ctx.acceptedProId === s.pro,
+      access: await threadAccess(ctx, v, s.pro),
+      lastMessageAt: s.last_at,
+      lastMessagePreview: s.last_body ? s.last_body.slice(0, 120) : null,
+      unread: isAdmin(v) ? 0 : Number(s.unread),
+      total: Number(s.total),
+    }))
+  );
+  threads.sort((a, b) => Number(b.hired) - Number(a.hired) || (b.lastMessageAt ? +new Date(b.lastMessageAt) : 0) - (a.lastMessageAt ? +new Date(a.lastMessageAt) : 0));
+  return res.json({ threads });
 }
 
 export async function listMessages(req: Request, res: Response) {
-  const job = await AppDataSource.getRepository(Job).findOne({ where: { id: param(req, "jobId") } });
-  if (!job) return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-
-  const ok = await canAccessJobMessages(job, req.user!.id, req.user!.role);
-  if (!ok) return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-
-  const messages = await AppDataSource.getRepository(Message).find({
-    where: { jobId: job.id },
-    relations: ["sender"],
-    order: { createdAt: "ASC" },
-  });
-
-  const unread = messages.filter((m) => m.senderId !== req.user!.id && !m.readAt);
-  if (unread.length) {
-    const now = new Date();
-    for (const m of unread) m.readAt = now;
-    await AppDataSource.getRepository(Message).save(unread);
-  }
-
+  const { ctx, proId, access } = await resolveThread(req, "read");
+  const limit = req.valid.query.limit ?? 50;
+  const qb = AppDataSource.getRepository(Message)
+    .createQueryBuilder("m")
+    .leftJoinAndSelect("m.sender", "sender")
+    .where("m.jobId = :jobId AND m.threadTradespersonId = :proId", { jobId: ctx.job.id, proId })
+    .orderBy("m.createdAt", "DESC")
+    .addOrderBy("m.id", "DESC")
+    .take(limit + 1);
+  if (req.valid.query.before) qb.andWhere("m.createdAt < :before", { before: req.valid.query.before });
+  const rows = await qb.getMany();
+  const hasMore = rows.length > limit;
+  const page = rows.slice(0, limit).reverse();
   return res.json({
-    messages: messages.map((m) => serializeMessage(m, m.sender)),
+    messages: page.map((m) => toMessage(m, m.sender)),
+    threadTradespersonId: proId,
+    canSend: access === "write",
+    hasMore,
+    nextBefore: hasMore ? page[0]?.createdAt : null,
   });
+}
+
+/** Runs before multer. */
+export async function authorizeSend(req: Request, _res: Response, next: NextFunction) {
+  await resolveThread(req, "write");
+  next();
 }
 
 export async function sendMessage(req: Request, res: Response) {
-  const bodyRaw = req.body?.body;
-  const filesMap = req.files as
-    | { [field: string]: Express.Multer.File[] }
-    | Express.Multer.File[]
-    | undefined;
-  let attachmentFiles: Express.Multer.File[] = [];
-  let quoteFile: Express.Multer.File | undefined;
-  if (Array.isArray(filesMap)) {
-    attachmentFiles = filesMap;
-  } else if (filesMap) {
-    attachmentFiles = filesMap.attachments || [];
-    quoteFile = (filesMap.quoteAttachment || [])[0];
+  const { ctx, proId } = await resolveThread(req, "write");
+  const b = req.valid.body;
+  const attachments = filesOf(req, "attachments");
+  const quoteFile = filesOf(req, "quoteAttachment")[0];
+  const hasQuote = b.quoteAmount !== undefined;
+  if (quoteFile && !hasQuote) throw badRequest("A quote attachment needs a quote amount", "VALIDATION");
+  if (!b.body && !attachments.length && !hasQuote) {
+    throw badRequest("Write a message, attach a file or add a quote", "EMPTY_MESSAGE");
   }
-  const attachmentUrls = uploadedPaths(attachmentFiles);
-  const quoteFileUrl = quoteFile ? `/uploads/${quoteFile.filename}` : undefined;
-  const quote = parseQuote(req.body, quoteFileUrl);
-  const body = bodyRaw != null ? String(bodyRaw).trim().slice(0, 4000) : "";
-
-  if (!body && !attachmentUrls.length && !quote) {
-    return res.status(400).json({ message: "body, attachments, or quote required" });
-  }
-
-  const job = await AppDataSource.getRepository(Job).findOne({ where: { id: param(req, "jobId") } });
-  if (!job) return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-
-  const ok = await canAccessJobMessages(job, req.user!.id, req.user!.role);
-  if (!ok) return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-
-  let finalAttachments = attachmentUrls;
-  if (quote?.attachmentUrl && !finalAttachments.includes(quote.attachmentUrl)) {
-    // keep quote attachment separate in quote object; also list if it was uploaded as attachment
-  }
-
-  const msg = await AppDataSource.getRepository(Message).save(
-    AppDataSource.getRepository(Message).create({
-      jobId: job.id,
-      senderId: req.user!.id,
-      body:
-        body ||
-        (quote
-          ? `Quote: ₹${Number(quote.amount).toFixed(0)}`
-          : attachmentUrls.length
-            ? "(attachment)"
-            : ""),
-      attachmentUrls: finalAttachments,
-      quote: quote || null,
-    })
-  );
-
-  const recipients = new Set<string>();
-  if (job.homeownerId !== req.user!.id) recipients.add(job.homeownerId);
-  if (job.acceptedBidId) {
-    const bid = await AppDataSource.getRepository(Bid).findOne({ where: { id: job.acceptedBidId } });
-    if (bid && bid.tradespersonId !== req.user!.id) recipients.add(bid.tradespersonId);
-  } else if (req.user!.role === UserRole.TRADESPERSON) {
-    recipients.add(job.homeownerId);
-  }
-
-  for (const userId of recipients) {
-    await createNotification({
-      userId,
-      type: NotificationType.MESSAGE,
-      title: quote
-        ? "New quote in chat"
-        : attachmentUrls.length
-          ? "New message with attachment"
-          : "New message",
-      body: quote
-        ? `Quote ₹${Number(quote.amount).toFixed(0)} on "${job.title}"`
-        : `New message on "${job.title}"`,
-      link: userId === job.homeownerId ? `/homeowner/jobs/${job.id}` : `/tradesperson/jobs/${job.id}`,
-      meta: { jobId: job.id, messageId: msg.id, hasQuote: !!quote },
-    });
-  }
-
-  const sender = await AppDataSource.getRepository(User).findOne({ where: { id: req.user!.id } });
-  const shaped = serializeMessage(msg, sender);
-
-  try {
-    publishMessage(job.id, { message: shaped });
-  } catch {
-    /* optional */
-  }
-
-  return res.status(201).json({
-    message: shaped,
+  let stored: string[] = [];
+  const msg = await AppDataSource.transaction(async (m) => {
+    const ctxFiles = { kind: UploadKind.CHAT, ownerUserId: req.user!.id, jobId: ctx.job.id, threadTradespersonId: proId, allowPdf: true };
+    const att = (await storeUploads(attachments, ctxFiles, m)).map((u) => fileRef(u.name));
+    stored = [...att];
+    const q = quoteFile ? (await storeUploads([quoteFile], ctxFiles, m)).map((u) => fileRef(u.name))[0] : undefined;
+    if (q) stored.push(q);
+    return m.save(
+      m.create(Message, {
+        jobId: ctx.job.id,
+        threadTradespersonId: proId,
+        senderId: req.user!.id,
+        body: b.body || (hasQuote ? `Quote: ₹${Number(b.quoteAmount).toFixed(0)}` : "(attachment)"),
+        attachmentUrls: att,
+        quote: hasQuote ? { amount: b.quoteAmount, notes: b.quoteNotes || undefined, attachmentUrl: q } : null,
+      })
+    );
+  }).catch(async (err) => {
+    await discardFiles(stored);
+    throw err;
   });
+  await markRead(ctx.job.id, proId, req.user!.id);
+
+  const sender = await AppDataSource.getRepository(User).findOneOrFail({ where: { id: req.user!.id } });
+  const recipient = req.user!.id === proId ? ctx.job.homeownerId : proId;
+  await createNotification({
+    userId: recipient,
+    type: NotificationType.MESSAGE,
+    title: hasQuote ? "New quote in chat" : attachments.length ? "New message with attachment" : "New message",
+    body: hasQuote
+      ? `${sender.name || "Someone"} shared a ₹${Number(b.quoteAmount).toFixed(0)} quote on "${ctx.job.title}"`
+      : `${sender.name || "Someone"} sent a message on "${ctx.job.title}"`,
+    link:
+      recipient === ctx.job.homeownerId
+        ? `/client/jobs/${ctx.job.id}?chat=${proId}`
+        : `/professional/jobs/${ctx.job.id}`,
+    meta: { jobId: ctx.job.id, messageId: msg.id, threadTradespersonId: proId, hasQuote },
+  });
+  const shaped = toMessage(msg, sender);
+  await publishMessage(ctx.job.id, proId, { message: shaped });
+  return res.status(201).json({ message: shaped });
+}
+
+export async function markThreadRead(req: Request, res: Response) {
+  const { ctx, proId } = await resolveThread(req, "read");
+  if (!isAdmin(viewer(req))) await markRead(ctx.job.id, proId, req.user!.id);
+  return res.json({ ok: true });
 }
 
 export async function streamMessages(req: Request, res: Response) {
-  const job = await AppDataSource.getRepository(Job).findOne({ where: { id: param(req, "jobId") } });
-  if (!job) return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-
-  const ok = await canAccessJobMessages(job, req.user!.id, req.user!.role);
-  if (!ok) return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-
-  sseInit(res);
-  sseSubscribe(res, req.user!.id, { jobId: job.id });
+  const { ctx, proId } = await resolveThread(req, "read");
+  openStream(res, req.user!.id, { jobId: ctx.job.id, tradespersonId: proId });
 }

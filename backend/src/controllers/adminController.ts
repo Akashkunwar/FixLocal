@@ -1,138 +1,142 @@
-import { Request, Response } from "express";
-import { param } from "../utils/params";
+import type { Request, Response } from "express";
+import { In } from "typeorm";
 import { AppDataSource } from "../data-source";
 import { User, UserRole } from "../entities/User";
-import {
-  TradespersonProfile,
-  VerificationStatus,
-} from "../entities/TradespersonProfile";
+import { TradespersonProfile, VerificationStatus } from "../entities/TradespersonProfile";
 import { Job, JobStatus } from "../entities/Job";
-import { Dispute, DisputeStatus } from "../entities/Dispute";
+import { Dispute, DisputeResolution, DisputeStatus } from "../entities/Dispute";
 import { Bid, BidStatus } from "../entities/Bid";
 import { Review } from "../entities/Review";
+import { AuditLog } from "../entities/AuditLog";
+import { NotificationType } from "../entities/Notification";
 import { invalidateOpenJobsCache } from "../utils/cache";
 import { writeAudit, AuditAction } from "../utils/audit";
 import { notifyFavoritersProAvailable } from "../utils/matchAlerts";
-import { AuditLog } from "../entities/AuditLog";
+import { createNotifications } from "../utils/notifications";
+import { revokeThreadStreams } from "../utils/sse";
 import { haversineKm } from "../utils/geo";
 import { scoreProForJob, type ScoreablePro } from "../utils/matchScore";
 import { getMatchWeights, setMatchWeights, weightsSum, DEFAULT_MATCH_WEIGHTS, MATCH_WEIGHT_PRESETS, detectMatchPreset, normalizeMatchWeights, getHeatWeight, setHeatWeight, DEFAULT_HEAT_WEIGHT, normalizeHeatWeight, computeHeatBoost, getBestValueBlend, setBestValueBlend, DEFAULT_BEST_VALUE_BLEND, blendsEqual, normalizeBestValueBlend, BEST_VALUE_BLEND_PRESETS, detectBestValueBlendPreset } from "../utils/matchWeights";
 import { scoreBestValueBids, escrowHoldFromAmounts } from "../utils/bestValueScore";
 import { hoursBetween, buildEventSla } from "../utils/responseSla";
+import { loadJobToBidSamples } from "../utils/proSlaBatch";
 import { buildAvailabilityHeat } from "../utils/availabilityHeat";
-import { In } from "typeorm";
+import { invalidateAuthState } from "../auth/authState";
+import { revokeAllRefreshTokens } from "../auth/tokens";
+import { transitionJob } from "../domain/jobStateMachine";
+import { refundMilestones } from "../domain/escrow";
+import { mean } from "../domain/analytics";
+import { signedUrl } from "../services/files";
+import { badRequest, notFound } from "../http/errors";
+
+async function suspendUser(userId: string, suspend: boolean) {
+  const repo = AppDataSource.getRepository(User);
+  if (suspend) {
+    await repo.update({ id: userId }, { isSuspended: true });
+    await repo.increment({ id: userId }, "tokenVersion", 1);
+    await revokeAllRefreshTokens(userId);
+  } else {
+    await repo.update({ id: userId }, { isSuspended: false });
+  }
+  await invalidateAuthState(userId);
+}
 
 export async function verifyTradesperson(req: Request, res: Response) {
-  const userId = param(req, "id");
+  const userId = req.valid.params.id as string;
   const user = await AppDataSource.getRepository(User).findOne({ where: { id: userId } });
-  if (!user || user.role !== UserRole.TRADESPERSON) {
-    return res.status(404).json({ message: "Tradesperson not found", code: "NOT_FOUND" });
+  if (!user || user.role !== UserRole.TRADESPERSON || user.deletedAt) throw notFound("Professional not found");
+  const repo = AppDataSource.getRepository(TradespersonProfile);
+  const profile = (await repo.findOne({ where: { userId } })) || repo.create({ userId, galleryUrls: [] });
+  const status = req.valid.body.status as VerificationStatus;
+  const previous = profile.verificationStatus;
+  profile.verificationStatus = status;
+  profile.verifiedAt = status === VerificationStatus.VERIFIED ? new Date() : undefined;
+  await repo.save(profile);
+  if (status === VerificationStatus.SUSPENDED) await suspendUser(userId, true);
+  else if (user.isSuspended && status === VerificationStatus.VERIFIED) await suspendUser(userId, false);
+  else await invalidateAuthState(userId);
+
+  if (status === VerificationStatus.VERIFIED && previous !== VerificationStatus.VERIFIED) {
+    await notifyFavoritersProAvailable(user.id, "is now verified and available to hire").catch(() => undefined);
+    await createNotifications([
+      {
+        userId,
+        type: NotificationType.SYSTEM,
+        title: "You're verified",
+        body: "Your professional account is verified. You can now bid on jobs.",
+        link: "/professional",
+      },
+    ]);
   }
-
-  const profileRepo = AppDataSource.getRepository(TradespersonProfile);
-  let profile = await profileRepo.findOne({ where: { userId } });
-  if (!profile) {
-    profile = profileRepo.create({ userId });
-  }
-
-  const action = String(req.body?.status || "verified");
-  if (action === "verified") {
-    profile.verificationStatus = VerificationStatus.VERIFIED;
-    profile.verifiedAt = new Date();
-    user.isSuspended = false;
-  } else if (action === "rejected") {
-    profile.verificationStatus = VerificationStatus.REJECTED;
-    profile.verifiedAt = undefined;
-  } else if (action === "suspended") {
-    profile.verificationStatus = VerificationStatus.SUSPENDED;
-    user.isSuspended = true;
-  } else if (action === "pending") {
-    profile.verificationStatus = VerificationStatus.PENDING;
-    profile.verifiedAt = undefined;
-    user.isSuspended = false;
-  } else {
-    return res.status(400).json({ message: "status must be verified|rejected|suspended|pending" });
-  }
-
-  await profileRepo.save(profile);
-  await AppDataSource.getRepository(User).save(user);
-
-  if (profile.verificationStatus === VerificationStatus.VERIFIED) {
-    try {
-      await notifyFavoritersProAvailable(user.id, "is now verified and available to hire");
-    } catch (e) {
-      console.warn("verify match alert failed", e);
-    }
-  }
-
   await writeAudit({
     actorUserId: req.user!.id,
     actorEmail: req.user!.email,
     action: AuditAction.VERIFY_TRADESPERSON,
     targetType: "user",
     targetId: user.id,
-    summary: `Set verification to ${profile.verificationStatus} for ${user.email}`,
-    meta: { status: profile.verificationStatus, email: user.email },
+    summary: `Set verification to ${status} for ${user.email}`,
+    meta: { status, previous, email: user.email },
   });
-
-  return res.json({ profile, user: { id: user.id, isSuspended: user.isSuspended } });
+  return res.json({
+    profile: { id: profile.id, userId, verificationStatus: profile.verificationStatus, verifiedAt: profile.verifiedAt ?? null },
+    user: { id: user.id, isSuspended: status === VerificationStatus.SUSPENDED ? true : user.isSuspended && status !== VerificationStatus.VERIFIED },
+  });
 }
 
 export async function listTradespeople(req: Request, res: Response) {
+  const { status, page = 1, limit = 100 } = req.valid.query;
   const qb = AppDataSource.getRepository(TradespersonProfile)
     .createQueryBuilder("p")
-    .leftJoinAndSelect("p.user", "user")
-    .orderBy("p.createdAt", "DESC");
-
-  if (req.query.status) {
-    qb.andWhere("p.verificationStatus = :status", { status: String(req.query.status) });
-  }
-
-  const profiles = await qb.getMany();
+    .innerJoinAndSelect("p.user", "user")
+    .where("user.deletedAt IS NULL")
+    .orderBy("p.createdAt", "DESC")
+    .skip((page - 1) * limit)
+    .take(limit);
+  if (status) qb.andWhere("p.verificationStatus = :status", { status });
+  const [rows, total] = await qb.getManyAndCount();
   return res.json({
-    tradespeople: profiles.map((p) => ({
+    total,
+    tradespeople: rows.map((p) => ({
       id: p.id,
       userId: p.userId,
       email: p.user?.email,
       name: p.user?.name,
+      phone: p.user?.phone ?? null,
       skills: p.skills,
       serviceAreas: p.serviceAreas,
       city: p.city,
+      yearsExperience: p.yearsExperience ?? null,
+      licenseDocUrl: signedUrl(p.licenseDocUrl),
       averageRating: Number(p.averageRating || 0),
       reviewCount: p.reviewCount || 0,
       verificationStatus: p.verificationStatus,
       verifiedAt: p.verifiedAt,
       isSuspended: !!p.user?.isSuspended,
+      emailVerified: !!p.user?.emailVerifiedAt,
       createdAt: p.createdAt,
     })),
   });
 }
 
 export async function listUsers(req: Request, res: Response) {
-  const role = req.query.role ? String(req.query.role).toUpperCase() : undefined;
-  const q = req.query.q ? String(req.query.q).trim() : "";
-  const suspendedOnly = String(req.query.suspended || "") === "1";
-
+  const { role, q, suspended, page = 1, limit = 100 } = req.valid.query;
   const qb = AppDataSource.getRepository(User)
     .createQueryBuilder("u")
     .leftJoinAndSelect("u.tradespersonProfile", "p")
+    .where("u.deletedAt IS NULL")
     .orderBy("u.createdAt", "DESC")
-    .take(200);
-
-  if (role && Object.values(UserRole).includes(role as UserRole)) {
-    qb.andWhere("u.role = :role", { role });
-  }
-  if (suspendedOnly) {
-    qb.andWhere("u.isSuspended = true");
-  }
+    .skip((page - 1) * limit)
+    .take(limit);
+  if (role) qb.andWhere("u.role = :role", { role });
+  if (suspended) qb.andWhere("u.isSuspended = true");
   if (q) {
     qb.andWhere("(u.email ILIKE :q OR u.name ILIKE :q OR u.phone ILIKE :q)", {
-      q: `%${q}%`,
+      q: `%${String(q).replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
     });
   }
-
-  const users = await qb.getMany();
+  const [users, total] = await qb.getManyAndCount();
   return res.json({
+    total,
     users: users.map((u) => ({
       id: u.id,
       email: u.email,
@@ -140,6 +144,7 @@ export async function listUsers(req: Request, res: Response) {
       phone: u.phone,
       role: u.role,
       isSuspended: !!u.isSuspended,
+      emailVerified: !!u.emailVerifiedAt,
       createdAt: u.createdAt,
       verificationStatus: u.tradespersonProfile?.verificationStatus || null,
     })),
@@ -147,39 +152,31 @@ export async function listUsers(req: Request, res: Response) {
 }
 
 export async function setUserSuspended(req: Request, res: Response) {
-  const userId = param(req, "id");
-  const suspend = req.body?.suspended === true || req.body?.suspended === "true";
-
-  const userRepo = AppDataSource.getRepository(User);
-  const user = await userRepo.findOne({ where: { id: userId } });
-  if (!user) {
-    return res.status(404).json({ message: "User not found", code: "NOT_FOUND" });
-  }
-  if (user.role === UserRole.ADMIN) {
-    return res.status(400).json({ message: "Cannot suspend admin accounts", code: "FORBIDDEN" });
-  }
-  if (user.id === req.user!.id) {
-    return res.status(400).json({ message: "Cannot suspend yourself", code: "FORBIDDEN" });
-  }
-
-  user.isSuspended = suspend;
-  await userRepo.save(user);
+  const userId = req.valid.params.id as string;
+  const suspend = req.valid.body.suspended as boolean;
+  const user = await AppDataSource.getRepository(User).findOne({ where: { id: userId } });
+  if (!user || user.deletedAt) throw notFound("User not found");
+  if (user.role === UserRole.ADMIN) throw badRequest("Admin accounts can't be suspended", "FORBIDDEN");
+  if (user.id === req.user!.id) throw badRequest("You can't suspend yourself", "FORBIDDEN");
+  await suspendUser(user.id, suspend);
 
   if (user.role === UserRole.TRADESPERSON) {
-    const profileRepo = AppDataSource.getRepository(TradespersonProfile);
-    let profile = await profileRepo.findOne({ where: { userId: user.id } });
-    if (!profile) {
-      profile = profileRepo.create({ userId: user.id, galleryUrls: [] });
-    }
+    const repo = AppDataSource.getRepository(TradespersonProfile);
+    const profile = (await repo.findOne({ where: { userId: user.id } })) || repo.create({ userId: user.id, galleryUrls: [] });
     if (suspend) {
       profile.verificationStatus = VerificationStatus.SUSPENDED;
     } else if (profile.verificationStatus === VerificationStatus.SUSPENDED) {
       profile.verificationStatus = VerificationStatus.PENDING;
       profile.verifiedAt = undefined;
     }
-    await profileRepo.save(profile);
+    await repo.save(profile);
+    await invalidateAuthState(user.id);
   }
-
+  if (suspend) {
+    // Suspended users' open listings and bids stop being visible.
+    await AppDataSource.query(`UPDATE "bids" SET "status" = 'withdrawn' WHERE "tradespersonId" = $1 AND "status" = 'active'`, [user.id]);
+    await invalidateOpenJobsCache();
+  }
   await writeAudit({
     actorUserId: req.user!.id,
     actorEmail: req.user!.email,
@@ -189,25 +186,13 @@ export async function setUserSuspended(req: Request, res: Response) {
     summary: `${suspend ? "Suspended" : "Unsuspended"} ${user.email}`,
     meta: { role: user.role, email: user.email },
   });
-
-  return res.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      isSuspended: user.isSuspended,
-    },
-  });
+  return res.json({ user: { id: user.id, email: user.email, role: user.role, isSuspended: suspend } });
 }
 
 export async function adminStats(_req: Request, res: Response) {
-  const userRepo = AppDataSource.getRepository(User);
-  const jobRepo = AppDataSource.getRepository(Job);
-  const disputeRepo = AppDataSource.getRepository(Dispute);
-  const profileRepo = AppDataSource.getRepository(TradespersonProfile);
-  const bidRepo = AppDataSource.getRepository(Bid);
-  const reviewRepo = AppDataSource.getRepository(Review);
-
+  const users = AppDataSource.getRepository(User);
+  const jobs = AppDataSource.getRepository(Job);
+  const count = (status: JobStatus) => jobs.count({ where: { status } });
   const [
     totalUsers,
     homeowners,
@@ -215,6 +200,7 @@ export async function adminStats(_req: Request, res: Response) {
     openJobs,
     awardedJobs,
     inProgressJobs,
+    pendingConfirmationJobs,
     completedJobs,
     cancelledJobs,
     disputedJobs,
@@ -223,33 +209,35 @@ export async function adminStats(_req: Request, res: Response) {
     suspendedUsers,
     activeBids,
     totalReviews,
+    ledger,
+    openReports,
   ] = await Promise.all([
-    userRepo.count(),
-    userRepo.count({ where: { role: UserRole.HOMEOWNER } }),
-    userRepo.count({ where: { role: UserRole.TRADESPERSON } }),
-    jobRepo.count({ where: { status: JobStatus.OPEN } }),
-    jobRepo.count({ where: { status: JobStatus.AWARDED } }),
-    jobRepo.count({ where: { status: JobStatus.IN_PROGRESS } }),
-    jobRepo.count({ where: { status: JobStatus.COMPLETED } }),
-    jobRepo.count({ where: { status: JobStatus.CANCELLED } }),
-    jobRepo.count({ where: { status: JobStatus.DISPUTED } }),
-    disputeRepo.count({ where: { status: DisputeStatus.OPEN } }),
-    profileRepo.count({ where: { verificationStatus: VerificationStatus.PENDING } }),
-    userRepo.count({ where: { isSuspended: true } }),
-    bidRepo.count({ where: { status: BidStatus.ACTIVE } }),
-    reviewRepo.count(),
+    users.count(),
+    users.count({ where: { role: UserRole.HOMEOWNER } }),
+    users.count({ where: { role: UserRole.TRADESPERSON } }),
+    count(JobStatus.OPEN),
+    count(JobStatus.AWARDED),
+    count(JobStatus.IN_PROGRESS),
+    count(JobStatus.PENDING_CONFIRMATION),
+    count(JobStatus.COMPLETED),
+    count(JobStatus.CANCELLED),
+    count(JobStatus.DISPUTED),
+    AppDataSource.getRepository(Dispute).count({ where: { status: DisputeStatus.OPEN } }),
+    AppDataSource.getRepository(TradespersonProfile).count({ where: { verificationStatus: VerificationStatus.PENDING } }),
+    users.count({ where: { isSuspended: true } }),
+    AppDataSource.getRepository(Bid).count({ where: { status: BidStatus.ACTIVE } }),
+    AppDataSource.getRepository(Review).count(),
+    AppDataSource.query(
+      `SELECT COALESCE(SUM(CASE WHEN "type" = 'release' THEN "amount" END), 0) AS released,
+              COALESCE(SUM(CASE WHEN "type" = 'refund' THEN "amount" END), 0) AS refunded,
+              COALESCE(SUM(CASE WHEN "type" = 'hold' THEN "amount" END), 0) AS held
+         FROM "ledger_entries"`
+    ),
+    AppDataSource.query(`SELECT COUNT(*)::int AS n FROM "reports" WHERE "status" = 'open'`),
   ]);
-
-  const completedWithBids = await bidRepo
-    .createQueryBuilder("b")
-    .innerJoin("b.job", "job")
-    .where("b.status = :accepted", { accepted: BidStatus.ACCEPTED })
-    .andWhere("job.status = :completed", { completed: JobStatus.COMPLETED })
-    .select("COALESCE(SUM(b.amount), 0)", "sum")
-    .getRawOne();
-
-  const simulatedGMV = Number(completedWithBids?.sum || 0);
-
+  const l = ledger[0] || {};
+  const released = Number(l.released || 0);
+  const refunded = Number(l.refunded || 0);
   return res.json({
     stats: {
       totalUsers,
@@ -258,6 +246,7 @@ export async function adminStats(_req: Request, res: Response) {
       openJobs,
       awardedJobs,
       inProgressJobs,
+      pendingConfirmationJobs,
       completedJobs,
       cancelledJobs,
       disputedJobs,
@@ -266,122 +255,93 @@ export async function adminStats(_req: Request, res: Response) {
       suspendedUsers,
       activeBids,
       totalReviews,
-      simulatedGMV,
+      openReports: openReports[0]?.n ?? 0,
+      simulatedGMV: released,
+      escrowReleased: released,
+      escrowRefunded: refunded,
+      escrowOutstanding: Math.round((Number(l.held || 0) - released - refunded) * 100) / 100,
     },
   });
 }
 
+/** Admin cancel: refunds unreleased escrow, closes bids and disputes, tells both sides. */
 export async function forceCancelJob(req: Request, res: Response) {
-  const job = await AppDataSource.getRepository(Job).findOne({
-    where: { id: param(req, "id") },
+  const jobId = req.valid.params.id as string;
+  const job = await AppDataSource.getRepository(Job).findOne({ where: { id: jobId } });
+  if (!job) throw notFound("Job not found");
+  const reason = (req.valid.body.reason as string | undefined) || "Cancelled by an admin";
+  const outcome = await AppDataSource.transaction(async (m) => {
+    const previous = await transitionJob(m, jobId, "force_cancel");
+    const active = await m.find(Bid, { where: { jobId, status: BidStatus.ACTIVE } });
+    if (active.length) await m.update(Bid, { id: In(active.map((b) => b.id)) }, { status: BidStatus.REJECTED });
+    const refund = await refundMilestones(m, job, "all_unreleased", req.user!.id, reason);
+    const disputes = await m.update(
+      Dispute,
+      { jobId, status: DisputeStatus.OPEN },
+      { status: DisputeStatus.RESOLVED, resolution: DisputeResolution.NO_ACTION, resolutionNotes: `Job force-cancelled: ${reason}`, resolvedAt: new Date() }
+    );
+    const accepted = job.acceptedBidId ? await m.findOne(Bid, { where: { id: job.acceptedBidId } }) : null;
+    await writeAudit(
+      {
+        actorUserId: req.user!.id,
+        actorEmail: req.user!.email,
+        action: AuditAction.FORCE_CANCEL,
+        targetType: "job",
+        targetId: jobId,
+        summary: `Force-cancelled job "${job.title}" (was ${previous})`,
+        meta: { title: job.title, previousStatus: previous, reason, refunded: refund.totalRefunded, disputesClosed: disputes.affected ?? 0 },
+      },
+      m
+    );
+    return { previous, bidders: active.map((b) => b.tradespersonId), proId: accepted?.tradespersonId ?? null, refund };
   });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-  if (job.status === JobStatus.COMPLETED || job.status === JobStatus.CANCELLED) {
-    return res.status(400).json({
-      message: "Job is already terminal",
-      code: "INVALID_STATUS",
-    });
-  }
-
-  job.status = JobStatus.CANCELLED;
-  await AppDataSource.getRepository(Job).save(job);
-
-  await AppDataSource.getRepository(Bid)
-    .createQueryBuilder()
-    .update(Bid)
-    .set({ status: BidStatus.REJECTED })
-    .where("jobId = :jobId AND status = :active", {
-      jobId: job.id,
-      active: BidStatus.ACTIVE,
-    })
-    .execute();
-
   await invalidateOpenJobsCache();
-
-  await writeAudit({
-    actorUserId: req.user!.id,
-    actorEmail: req.user!.email,
-    action: AuditAction.FORCE_CANCEL,
-    targetType: "job",
-    targetId: job.id,
-    summary: `Force-cancelled job "${job.title}"`,
-    meta: { title: job.title, previousStatus: "non-terminal" },
-  });
-
-  return res.json({ job });
+  await revokeThreadStreams(jobId, null);
+  const recipients = new Set([job.homeownerId, outcome.proId, ...outcome.bidders].filter(Boolean) as string[]);
+  await createNotifications(
+    [...recipients].map((userId) => ({
+      userId,
+      type: NotificationType.JOB_STATUS,
+      title: "Job cancelled by FixLocal",
+      body: `"${job.title}" was cancelled by an admin: ${reason}${
+        outcome.refund.totalRefunded && userId === job.homeownerId ? ` · ₹${outcome.refund.totalRefunded.toFixed(0)} refunded (simulated)` : ""
+      }`,
+      link: userId === job.homeownerId ? `/client/jobs/${jobId}` : "/professional",
+      meta: { jobId, forceCancelled: true },
+    }))
+  );
+  const fresh = await AppDataSource.getRepository(Job).findOneOrFail({ where: { id: jobId } });
+  return res.json({ job: { id: fresh.id, title: fresh.title, status: fresh.status, paymentStatus: fresh.paymentStatus }, previousStatus: outcome.previous });
 }
-
 
 export async function listAuditLogs(req: Request, res: Response) {
-  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "50"), 10) || 50));
-  const action = req.query.action ? String(req.query.action) : undefined;
-
-  const qb = AppDataSource.getRepository(AuditLog)
-    .createQueryBuilder("a")
-    .orderBy("a.createdAt", "DESC")
-    .take(limit);
-
-  if (action) {
-    qb.andWhere("a.action = :action", { action });
-  }
-
+  const { action, limit = 50, before } = req.valid.query;
+  const qb = AppDataSource.getRepository(AuditLog).createQueryBuilder("a").orderBy("a.createdAt", "DESC").take(limit);
+  if (action) qb.andWhere("a.action = :action", { action });
+  if (before) qb.andWhere("a.createdAt < :before", { before });
   const logs = await qb.getMany();
-  return res.json({ logs });
+  return res.json({ logs, nextBefore: logs.length === limit ? logs[logs.length - 1].createdAt : null });
 }
 
-
 export async function createAdminNote(req: Request, res: Response) {
-  const noteRaw = req.body?.note != null ? String(req.body.note).trim() : "";
-  const note = noteRaw.slice(0, 2000);
-  if (!note) {
-    return res.status(400).json({ message: "note is required", code: "VALIDATION" });
-  }
-  const targetType = req.body?.targetType != null ? String(req.body.targetType).slice(0, 64) : undefined;
-  const targetId = req.body?.targetId != null ? String(req.body.targetId).trim() || undefined : undefined;
-  const summary = (req.body?.summary != null ? String(req.body.summary).trim() : "") || note.slice(0, 200);
-
+  const { note, targetType, targetId, summary } = req.valid.body;
   const log = await writeAudit({
     actorUserId: req.user!.id,
     actorEmail: req.user!.email,
     action: AuditAction.ADMIN_NOTE,
     targetType,
     targetId,
-    summary,
-    meta: { note, optional: true },
+    summary: summary || note.slice(0, 200),
+    meta: { note },
   });
   return res.status(201).json({ log });
 }
 
-
-
 /** Richer match-quality: open jobs vs scored verified pros (skills, rating, response, distance). */
 async function avgResponseHoursByPro(proUserIds: string[]): Promise<Record<string, number | null>> {
+  const samples = await loadJobToBidSamples(proUserIds, 40);
   const out: Record<string, number | null> = {};
-  for (const id of proUserIds) out[id] = null;
-  if (!proUserIds.length) return out;
-
-  const bids = await AppDataSource.getRepository(Bid).find({
-    where: { tradespersonId: In(proUserIds) },
-    relations: ["job"],
-    order: { createdAt: "DESC" },
-    take: Math.min(500, proUserIds.length * 40),
-  });
-
-  const buckets: Record<string, number[]> = {};
-  for (const bid of bids) {
-    if (!bid.job?.createdAt) continue;
-    const ms = new Date(bid.createdAt).getTime() - new Date(bid.job.createdAt).getTime();
-    if (ms < 0 || ms > 14 * 24 * 3600000) continue; // ignore weird / >14d
-    const hours = ms / 3600000;
-    (buckets[bid.tradespersonId] ||= []).push(hours);
-  }
-  for (const id of proUserIds) {
-    const arr = buckets[id];
-    if (!arr?.length) continue;
-    out[id] = Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10;
-  }
+  for (const id of proUserIds) out[id] = mean((samples[id] || []).map((s) => s.hours));
   return out;
 }
 
@@ -545,10 +505,7 @@ export async function updateMatchWeightsConfig(req: Request, res: Response) {
 
 /** Roll back match weights to the `before` snapshot on a match_weights_update audit row, if clean. */
 export async function rollbackMatchWeightsFromAudit(req: Request, res: Response) {
-  const auditLogId = String(req.body?.auditLogId || "").trim();
-  if (!auditLogId) {
-    return res.status(400).json({ message: "auditLogId is required", code: "VALIDATION" });
-  }
+  const auditLogId = req.valid.body.auditLogId as string;
 
   const log = await AppDataSource.getRepository(AuditLog).findOne({ where: { id: auditLogId } });
   if (!log) {
@@ -581,7 +538,7 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
     }
   }
 
-  const target = normalizeMatchWeights(raw as any);
+  const target = normalizeMatchWeights(raw);
   const sum = weightsSum(target);
   // Clean = sane total (allow custom weights that don't sum exactly to 100)
   if (sum < 40 || sum > 160) {
@@ -595,7 +552,7 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
   const metaHeat =
     log.meta?.beforeHeatWeight != null
       ? log.meta.beforeHeatWeight
-      : (raw as any).heatWeight;
+      : raw.heatWeight;
   let targetHeat: number | null = null;
   if (metaHeat !== undefined && metaHeat !== null && metaHeat !== "") {
     const n = Number(metaHeat);
@@ -661,10 +618,7 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
 
 /** Roll back best_value_blend to the `before` snapshot on a best_value_blend_update audit row. */
 export async function rollbackBestValueBlendFromAudit(req: Request, res: Response) {
-  const auditLogId = String(req.body?.auditLogId || "").trim();
-  if (!auditLogId) {
-    return res.status(400).json({ message: "auditLogId is required", code: "VALIDATION" });
-  }
+  const auditLogId = req.valid.body.auditLogId as string;
 
   const log = await AppDataSource.getRepository(AuditLog).findOne({ where: { id: auditLogId } });
   if (!log) {
@@ -705,7 +659,7 @@ export async function rollbackBestValueBlendFromAudit(req: Request, res: Respons
     }
   }
 
-  const target = normalizeBestValueBlend(raw as any);
+  const target = normalizeBestValueBlend(raw);
   const sum = target.matchPct + target.pricePct + (target.slaHeatPct || 0);
   if (sum < 90 || sum > 110) {
     return res.status(400).json({
@@ -844,10 +798,7 @@ export async function previewBestValueBlend(req: Request, res: Response) {
           name: b.tradesperson?.name || null,
         };
         const breakdown = scoreProForJob(job, input, matchWeights);
-        const availabilityHeat = buildAvailabilityHeat(
-          profile.weeklyAvailability as any,
-          profile.blockedDates
-        );
+        const availabilityHeat = buildAvailabilityHeat(profile.weeklyAvailability, profile.blockedDates);
         heatBoost = computeHeatBoost(availabilityHeat, heatWeightCfg);
         matchScore = Math.round((breakdown.total + heatBoost) * 10) / 10;
       }
@@ -905,6 +856,8 @@ export async function matchQualityLite(_req: Request, res: Response) {
   const pros = await AppDataSource.getRepository(TradespersonProfile).find({
     where: { verificationStatus: VerificationStatus.VERIFIED },
     relations: ["user"],
+    order: { averageRating: "DESC" },
+    take: 500,
   });
 
   const responseMap = await avgResponseHoursByPro(pros.map((p) => p.userId));
@@ -957,13 +910,9 @@ export async function matchQualityLite(_req: Request, res: Response) {
         reviewCount: p.reviewCount || 0,
         avgResponseHours: responseMap[p.userId],
         name: p.user?.name || null,
-        email: p.user?.email || null,
       };
       const breakdown = scoreProForJob(job, proInput, weights);
-      const availabilityHeat = buildAvailabilityHeat(
-        p.weeklyAvailability as any,
-        p.blockedDates
-      );
+      const availabilityHeat = buildAvailabilityHeat(p.weeklyAvailability, p.blockedDates, p.user?.timezone);
       const heatBoost = computeHeatBoost(availabilityHeat, heatWeight);
       const rankedScore = Math.round((breakdown.total + heatBoost) * 10) / 10;
       scored.push({

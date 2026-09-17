@@ -64,7 +64,7 @@ export function normalizeMatchWeights(
   raw?: Partial<MatchWeights> | Record<string, unknown> | null
 ): MatchWeights {
   const pick = (k: keyof MatchWeights, fallback: number) => {
-    const n = Number((raw as any)?.[k]);
+    const n = Number((raw as Record<string, unknown> | null | undefined)?.[k]);
     if (!Number.isFinite(n) || n < 0) return fallback;
     return Math.min(100, Math.round(n * 10) / 10);
   };
@@ -248,9 +248,10 @@ export function blendsEqual(a: BestValueBlend, b: BestValueBlend): boolean {
 export function normalizeBestValueBlend(
   raw?: Partial<BestValueBlend> | Record<string, unknown> | null
 ): BestValueBlend {
-  let matchPct = Number((raw as any)?.matchPct);
-  let pricePct = Number((raw as any)?.pricePct);
-  let slaHeatPct = Number((raw as any)?.slaHeatPct);
+  const src = (raw || {}) as Record<string, unknown>;
+  let matchPct = Number(src.matchPct);
+  let pricePct = Number(src.pricePct);
+  let slaHeatPct = Number(src.slaHeatPct);
   if (!Number.isFinite(matchPct) || matchPct < 0) matchPct = DEFAULT_BEST_VALUE_BLEND.matchPct;
   if (!Number.isFinite(pricePct) || pricePct < 0) pricePct = DEFAULT_BEST_VALUE_BLEND.pricePct;
   // Missing slaHeatPct → 0 (backward compatible with wave 22 two-weight blend)

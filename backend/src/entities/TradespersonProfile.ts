@@ -1,4 +1,6 @@
+import { numeric } from "../db/numeric";
 import {
+  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -17,6 +19,10 @@ export enum VerificationStatus {
 }
 
 @Entity("tradesperson_profiles")
+@Check("CHK_profile_lat", `"lat" IS NULL OR ("lat" >= -90 AND "lat" <= 90)`)
+@Check("CHK_profile_lng", `"lng" IS NULL OR ("lng" >= -180 AND "lng" <= 180)`)
+@Check("CHK_profile_rates", `("hourlyRateMin" IS NULL OR "hourlyRateMin" >= 0) AND ("hourlyRateMax" IS NULL OR "hourlyRateMax" >= 0)`)
+@Check("CHK_profile_years", `"yearsExperience" IS NULL OR ("yearsExperience" >= 0 AND "yearsExperience" <= 80)`)
 export class TradespersonProfile {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -40,10 +46,10 @@ export class TradespersonProfile {
   @Column({ type: "int", nullable: true })
   yearsExperience?: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric, nullable: true })
   hourlyRateMin?: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric, nullable: true })
   hourlyRateMax?: number;
 
   @Column({ type: "varchar", nullable: true })
@@ -110,7 +116,7 @@ export class TradespersonProfile {
     category?: string | null;
   }[];
 
-  @Column({ type: "decimal", precision: 3, scale: 2, default: 0 })
+  @Column({ type: "decimal", precision: 3, scale: 2, transformer: numeric, default: 0 })
   averageRating!: number;
 
   @Column({ type: "int", default: 0 })
@@ -123,15 +129,16 @@ export class TradespersonProfile {
   })
   verificationStatus!: VerificationStatus;
 
+  /** Upload reference of kind "license" (private: owner + admins). */
   @Column({ type: "varchar", nullable: true })
-  licenseDocUrl?: string;
+  licenseDocUrl?: string | null;
 
   @Column({ type: "timestamptz", nullable: true })
   verifiedAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

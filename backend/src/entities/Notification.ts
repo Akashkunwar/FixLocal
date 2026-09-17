@@ -54,6 +54,6 @@ export class Notification {
   @Column({ type: "jsonb", nullable: true })
   meta?: Record<string, unknown>;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

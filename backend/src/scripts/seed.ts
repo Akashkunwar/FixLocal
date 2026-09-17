@@ -6,57 +6,63 @@ import {
   TradespersonProfile,
   VerificationStatus,
 } from "../entities/TradespersonProfile";
-import { Job, JobCategory, JobStatus, PaymentStatus } from "../entities/Job";
+import { Job, JobCategory, JobStatus } from "../entities/Job";
 import { Bid, BidStatus } from "../entities/Bid";
-import { Review } from "../entities/Review";
+import { Review, ReviewDirection } from "../entities/Review";
 import { Notification, NotificationType } from "../entities/Notification";
 import { hashPassword } from "../utils/password";
+import { createEscrow, releaseRemaining } from "../domain/escrow";
 
 const SEED_PASSWORD = process.env.SEED_PASSWORD || "Password123!";
 
-async function upsertUser(
-  email: string,
-  role: UserRole,
-  passwordHash: string,
-  extras: Partial<User> = {}
-) {
+/** Creates demo users; existing passwords are only reset with SEED_RESET=true. */
+async function upsertUser(email: string, role: UserRole, extras: Partial<User> = {}) {
   const userRepo = AppDataSource.getRepository(User);
-  let user = await userRepo.findOne({ where: { email } });
-  if (user) {
-    Object.assign(user, { passwordHash, role, ...extras });
-    await userRepo.save(user);
-  } else {
-    user = await userRepo.save(
-      userRepo.create({ email, passwordHash, role, ...extras })
-    );
+  const existing = await userRepo.findOne({ where: { email } });
+  if (existing) {
+    const patch: Partial<User> = { ...extras };
+    if (!existing.emailVerifiedAt) patch.emailVerifiedAt = new Date();
+    if (process.env.SEED_RESET === "true") {
+      await userRepo.update({ id: existing.id }, { ...patch, passwordHash: await hashPassword(SEED_PASSWORD) } as never);
+    } else {
+      await userRepo.update({ id: existing.id }, patch as never);
+    }
+    return userRepo.findOneOrFail({ where: { id: existing.id } });
   }
-  return user;
+  return userRepo.save(
+    userRepo.create({ email, passwordHash: await hashPassword(SEED_PASSWORD), role, emailVerifiedAt: new Date(), ...extras })
+  );
 }
 
 async function seed() {
+  if (process.env.NODE_ENV === "production") {
+    console.error("Refusing to seed demo data with NODE_ENV=production.");
+    process.exit(1);
+  }
   await AppDataSource.initialize();
-  const passwordHash = await hashPassword(SEED_PASSWORD);
+  if (await AppDataSource.showMigrations()) {
+    console.error("The database has pending migrations. Run `npm run db:migrate` first.");
+    process.exit(1);
+  }
 
-  const admin = await upsertUser("admin@fixlocal.local", UserRole.ADMIN, passwordHash, {
-    name: "FixLocal Admin",
-  });
-  const home = await upsertUser("home@fixlocal.local", UserRole.HOMEOWNER, passwordHash, {
+  await upsertUser("admin@fixlocal.local", UserRole.ADMIN, { name: "FixLocal Admin" });
+  const home = await upsertUser("home@fixlocal.local", UserRole.HOMEOWNER, {
     name: "Priya Sharma",
     phone: "+91 98765 43210",
   });
-  const home2 = await upsertUser("home2@fixlocal.local", UserRole.HOMEOWNER, passwordHash, {
+  const home2 = await upsertUser("home2@fixlocal.local", UserRole.HOMEOWNER, {
     name: "Rahul Mehta",
     phone: "+91 99887 76655",
   });
-  const pro = await upsertUser("pro@fixlocal.local", UserRole.TRADESPERSON, passwordHash, {
+  const pro = await upsertUser("pro@fixlocal.local", UserRole.TRADESPERSON, {
     name: "Arjun Patel",
     phone: "+91 91234 56789",
   });
-  const pro2 = await upsertUser("pro2@fixlocal.local", UserRole.TRADESPERSON, passwordHash, {
+  const pro2 = await upsertUser("pro2@fixlocal.local", UserRole.TRADESPERSON, {
     name: "Sneha Reddy",
     phone: "+91 90123 45678",
   });
-  const pro3 = await upsertUser("pro3@fixlocal.local", UserRole.TRADESPERSON, passwordHash, {
+  const pro3 = await upsertUser("pro3@fixlocal.local", UserRole.TRADESPERSON, {
     name: "Vikram Singh",
     phone: "+91 97654 32100",
   });
@@ -205,7 +211,7 @@ async function seed() {
     }
 
     // Bid from pro on first job
-    const bid1 = await bidRepo.save(
+    await bidRepo.save(
       bidRepo.create({
         jobId: createdJobs[0].id,
         tradespersonId: pro.id,
@@ -227,7 +233,7 @@ async function seed() {
       })
     );
 
-    // Completed job + review for rating demo
+    // Completed job with released escrow + review for the rating demo
     const done = await jobRepo.save(
       jobRepo.create({
         title: "Bathroom tap replacement",
@@ -243,7 +249,6 @@ async function seed() {
         pincode: "560038",
         homeownerId: home.id,
         status: JobStatus.COMPLETED,
-        paymentStatus: PaymentStatus.HELD,
         maxBids: 3,
         photoUrls: [],
         completedAt: new Date(Date.now() - 5 * 86400000),
@@ -259,13 +264,19 @@ async function seed() {
         status: BidStatus.ACCEPTED,
       })
     );
-    done.acceptedBidId = doneBid.id;
-    await jobRepo.save(done);
+    await AppDataSource.transaction(async (m) => {
+      await m.update(Job, { id: done.id }, { acceptedBidId: doneBid.id, escrowAmount: 1400, escrowSource: "bid" });
+      done.acceptedBidId = doneBid.id;
+      await createEscrow(m, done, pro.id, 1400, home.id);
+      await releaseRemaining(m, done, home.id);
+    });
 
     await reviewRepo.save(
       reviewRepo.create({
         jobId: done.id,
+        direction: ReviewDirection.CLIENT_TO_PRO,
         reviewerId: home.id,
+        revieweeId: pro.id,
         tradespersonId: pro.id,
         rating: 5,
         comment: "Punctual, tidy, and fixed it right the first time. Highly recommend!",
@@ -286,7 +297,7 @@ async function seed() {
         type: NotificationType.NEW_BID,
         title: "New bid on your job",
         body: `Arjun Patel bid ₹1600 on "${createdJobs[0].title}".`,
-        link: `/homeowner/jobs/${createdJobs[0].id}`,
+        link: `/client/jobs/${createdJobs[0].id}`,
         read: false,
       })
     );
@@ -394,7 +405,7 @@ async function seed() {
     }
   }
 
-  const allReviews = await reviewRepo.find();
+  const allReviews = await reviewRepo.find({ where: { direction: ReviewDirection.CLIENT_TO_PRO } });
   const byPro = new Map<string, { sum: number; count: number }>();
   for (const r of allReviews) {
     const cur = byPro.get(r.tradespersonId) || { sum: 0, count: 0 };
@@ -410,7 +421,7 @@ async function seed() {
     await profileRepo.save(p);
   }
 
-  console.log("\nDemo accounts (password: " + SEED_PASSWORD + ")");
+  console.log("\nDemo accounts (password: " + (process.env.SEED_PASSWORD ? "from SEED_PASSWORD" : SEED_PASSWORD) + ")");
   console.log("  admin@fixlocal.local  — Admin");
   console.log("  home@fixlocal.local   — Client (Priya)");
   console.log("  home2@fixlocal.local  — Client (Rahul)");

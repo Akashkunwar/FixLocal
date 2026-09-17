@@ -1,140 +1,95 @@
-import { Request, Response } from "express";
-import { param } from "../utils/params";
+import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
-import { Bid } from "../entities/Bid";
-import { Job, JobStatus, PaymentStatus } from "../entities/Job";
-import { UserRole } from "../entities/User";
+import { Job, JobStatus } from "../entities/Job";
 import { NotificationType } from "../entities/Notification";
 import { createNotification } from "../utils/notifications";
-import { autoReleaseRemainingEscrow } from "./paymentController";
+import { toJob } from "../serializers";
+import { transitionJob } from "../domain/jobStateMachine";
+import { releaseRemaining } from "../domain/escrow";
+import { config } from "../config";
+import {
+  assertAwardedProOrAdmin,
+  isAdmin,
+  isAwardedPro,
+  isOwner,
+  loadJobContext,
+} from "../policies/jobPolicy";
+import { viewer } from "./jobController";
+import { forbidden } from "../http/errors";
 
 const jobRepo = () => AppDataSource.getRepository(Job);
-const bidRepo = () => AppDataSource.getRepository(Bid);
 
 export async function startJob(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-  if (job.status !== JobStatus.AWARDED) {
-    return res.status(400).json({
-      message: "Job must be awarded before starting work",
-      code: "INVALID_STATUS",
-    });
-  }
-
-  const accepted = job.acceptedBidId
-    ? await bidRepo().findOne({ where: { id: job.acceptedBidId } })
-    : null;
-  if (!accepted || accepted.tradespersonId !== req.user!.id) {
-    return res.status(403).json({
-      message: "Only the awarded tradesperson can start this job",
-      code: "FORBIDDEN",
-    });
-  }
-
-  job.status = JobStatus.IN_PROGRESS;
-  await jobRepo().save(job);
-
+  const ctx = await loadJobContext(req.valid.params.id);
+  if (!isAwardedPro(ctx, viewer(req))) throw forbidden("Only the hired professional can start this job");
+  await AppDataSource.transaction((m) => transitionJob(m, ctx.job.id, "start"));
   await createNotification({
-    userId: job.homeownerId,
+    userId: ctx.job.homeownerId,
     type: NotificationType.JOB_STATUS,
     title: "Work started",
-    body: `The tradesperson started work on "${job.title}".`,
-    link: `/homeowner/jobs/${job.id}`,
-    meta: { jobId: job.id, status: job.status },
+    body: `The professional started work on "${ctx.job.title}".`,
+    link: `/client/jobs/${ctx.job.id}`,
+    meta: { jobId: ctx.job.id, status: JobStatus.IN_PROGRESS },
   });
-
-  return res.json({ job });
+  const job = await jobRepo().findOneOrFail({ where: { id: ctx.job.id } });
+  return res.json({ job: toJob(job, "private") });
 }
 
-export async function completeJob(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
+/** Pro: work is done → waiting for the client. */
+export async function markDone(req: Request, res: Response) {
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertAwardedProOrAdmin(ctx, viewer(req));
+  await AppDataSource.transaction((m) =>
+    transitionJob(m, ctx.job.id, "mark_done", { pendingConfirmationAt: new Date() })
+  );
+  const days = config().autoConfirmDays;
+  await createNotification({
+    userId: ctx.job.homeownerId,
+    type: NotificationType.JOB_STATUS,
+    title: "Please confirm the work is complete",
+    body: `The professional marked "${ctx.job.title}" as done. Confirm to release the remaining payment, or open a dispute. It will be confirmed automatically in ${days} day${days === 1 ? "" : "s"}.`,
+    link: `/client/jobs/${ctx.job.id}`,
+    meta: { jobId: ctx.job.id, status: JobStatus.PENDING_CONFIRMATION },
+  });
+  const job = await jobRepo().findOneOrFail({ where: { id: ctx.job.id } });
+  return res.json({ job: toJob(job, "private"), autoReleased: null });
+}
 
-  const { role, id: userId } = req.user!;
-  const isOwner = job.homeownerId === userId;
-  const isAdmin = role === UserRole.ADMIN;
-
-  let isAwardedPro = false;
-  let awardedProId: string | undefined;
-  if (job.acceptedBidId) {
-    const accepted = await bidRepo().findOne({ where: { id: job.acceptedBidId } });
-    isAwardedPro = !!accepted && accepted.tradespersonId === userId;
-    awardedProId = accepted?.tradespersonId;
-  }
-
-  if (!isOwner && !isAdmin && !isAwardedPro) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-
-  if (role === UserRole.TRADESPERSON && !isAdmin) {
-    if (job.status !== JobStatus.IN_PROGRESS) {
-      return res.status(400).json({
-        message: "Tradesperson can only complete from in_progress",
-        code: "INVALID_STATUS",
-      });
-    }
-  } else {
-    if (job.status !== JobStatus.AWARDED && job.status !== JobStatus.IN_PROGRESS) {
-      return res.status(400).json({
-        message: "Job must be awarded or in progress to complete",
-        code: "INVALID_STATUS",
-      });
-    }
-  }
-
-  job.status = JobStatus.COMPLETED;
-  job.completedAt = new Date();
-  await jobRepo().save(job);
-
-  let autoReleased: { count: number; paymentStatus?: PaymentStatus } | null = null;
-
-  // Homeowner (or admin) confirming completion auto-releases any remaining escrow.
-  if ((isOwner || isAdmin) && job.acceptedBidId) {
-    const stillHeld = [
-      PaymentStatus.HELD,
-      PaymentStatus.PARTIALLY_RELEASED,
-      PaymentStatus.SIMULATED_PAID,
-      PaymentStatus.PENDING,
-    ].includes(job.paymentStatus);
-    if (stillHeld || job.paymentStatus !== PaymentStatus.RELEASED) {
-      const result = await autoReleaseRemainingEscrow(job, userId);
-      if (result.released.length > 0) {
-        autoReleased = {
-          count: result.released.length,
-          paymentStatus: result.paymentStatus,
-        };
-        job.paymentStatus = result.paymentStatus;
-      }
-    }
-  }
-
-  if (isOwner || isAdmin) {
-    if (awardedProId) {
-      await createNotification({
-        userId: awardedProId,
-        type: NotificationType.JOB_STATUS,
-        title: "Job completed",
-        body: autoReleased
-          ? `"${job.title}" was marked completed and remaining escrow was released. Great work!`
-          : `"${job.title}" was marked completed. Great work!`,
-        link: `/tradesperson/jobs/${job.id}`,
-        meta: { jobId: job.id, status: job.status, autoReleased },
-      });
-    }
-  } else if (isAwardedPro) {
+/** Client (or admin): confirm completion and release the remaining escrow. */
+export async function confirmComplete(req: Request, res: Response) {
+  const ctx = await loadJobContext(req.valid.params.id);
+  const v = viewer(req);
+  if (!isOwner(ctx, v) && !isAdmin(v)) throw forbidden("Only the client can confirm completion");
+  const result = await AppDataSource.transaction(async (m) => {
+    await transitionJob(m, ctx.job.id, "confirm", { completedAt: new Date() });
+    const job = await m.findOneOrFail(Job, { where: { id: ctx.job.id } });
+    return releaseRemaining(m, job, req.user!.id);
+  });
+  const autoReleased = result.released.length
+    ? { count: result.released.length, paymentStatus: result.paymentStatus }
+    : null;
+  if (ctx.acceptedProId) {
+    const total = result.released.reduce((s, m) => s + Number(m.amount), 0);
     await createNotification({
-      userId: job.homeownerId,
+      userId: ctx.acceptedProId,
       type: NotificationType.JOB_STATUS,
-      title: "Pro marked job complete",
-      body: `Please confirm completion for "${job.title}" and leave a review.`,
-      link: `/homeowner/jobs/${job.id}`,
-      meta: { jobId: job.id, status: job.status },
+      title: "Job completed",
+      body: autoReleased
+        ? `"${ctx.job.title}" was confirmed complete and ₹${total.toFixed(0)} was released. Great work!`
+        : `"${ctx.job.title}" was confirmed complete. Great work!`,
+      link: `/professional/jobs/${ctx.job.id}`,
+      meta: { jobId: ctx.job.id, status: JobStatus.COMPLETED, autoReleased },
     });
   }
+  const job = await jobRepo().findOneOrFail({ where: { id: ctx.job.id } });
+  return res.json({ job: toJob(job, "private"), autoReleased });
+}
 
-  return res.json({ job, autoReleased });
+/** Legacy endpoint: the professional marks done; the client/admin confirms. */
+export async function completeJob(req: Request, res: Response) {
+  const ctx = await loadJobContext(req.valid.params.id);
+  const v = viewer(req);
+  if (isAwardedPro(ctx, v)) return markDone(req, res);
+  if (isOwner(ctx, v) || isAdmin(v)) return confirmComplete(req, res);
+  throw forbidden("You don't have access to this job");
 }

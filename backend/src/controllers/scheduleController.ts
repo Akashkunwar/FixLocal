@@ -1,150 +1,107 @@
-import { Request, Response } from "express";
-import { param } from "../utils/params";
+import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
-import { Bid } from "../entities/Bid";
 import { Job, JobStatus, ScheduleStatus } from "../entities/Job";
 import { UserRole } from "../entities/User";
 import { NotificationType } from "../entities/Notification";
 import { createNotification } from "../utils/notifications";
+import { toJob } from "../serializers";
+import {
+  assertJobAccess,
+  assertPrivateAccess,
+  loadJobContext,
+  type JobContext,
+} from "../policies/jobPolicy";
+import { viewer } from "./jobController";
+import { badRequest, conflict } from "../http/errors";
 
-const jobRepo = () => AppDataSource.getRepository(Job);
-const bidRepo = () => AppDataSource.getRepository(Bid);
+const SCHEDULABLE: JobStatus[] = [JobStatus.AWARDED, JobStatus.IN_PROGRESS];
 
-async function getAwardedProId(job: Job): Promise<string | undefined> {
-  if (!job.acceptedBidId) return undefined;
-  const accepted = await bidRepo().findOne({ where: { id: job.acceptedBidId } });
-  return accepted?.tradespersonId;
+function otherParty(ctx: JobContext, actorId: string): string | null {
+  if (actorId === ctx.job.homeownerId) return ctx.acceptedProId;
+  return ctx.job.homeownerId;
 }
 
-async function isParty(job: Job, userId: string, role: UserRole) {
-  if (role === UserRole.ADMIN) return true;
-  if (job.homeownerId === userId) return true;
-  const proId = await getAwardedProId(job);
-  return proId === userId;
+function linkFor(ctx: JobContext, userId: string) {
+  return userId === ctx.job.homeownerId ? `/client/jobs/${ctx.job.id}` : `/professional/jobs/${ctx.job.id}`;
 }
 
 export async function proposeSchedule(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertPrivateAccess(ctx, viewer(req));
+  if (ctx.job.status === JobStatus.OPEN) {
+    throw badRequest("Propose a visit window in your bid, or after the job is awarded", "JOB_STILL_OPEN");
   }
-
-  const allowed = [JobStatus.AWARDED, JobStatus.IN_PROGRESS, JobStatus.OPEN];
-  // For open jobs, only the bidding pro proposes via the bid itself;
-  // after award both parties can propose/counter on the job.
-  if (job.status === JobStatus.OPEN) {
-    return res.status(400).json({
-      message: "Propose a visit window when placing a bid, or after the job is awarded",
-      code: "JOB_STILL_OPEN",
-    });
+  if (!SCHEDULABLE.includes(ctx.job.status)) {
+    throw conflict("Visits can only be scheduled on awarded or in-progress jobs", "INVALID_STATUS");
   }
-  if (!allowed.includes(job.status) && job.status !== JobStatus.AWARDED && job.status !== JobStatus.IN_PROGRESS) {
-    return res.status(400).json({ message: "Cannot schedule in current status", code: "INVALID_STATUS" });
-  }
-  if (job.status !== JobStatus.AWARDED && job.status !== JobStatus.IN_PROGRESS) {
-    return res.status(400).json({ message: "Job must be awarded or in progress", code: "INVALID_STATUS" });
-  }
-
-  if (!(await isParty(job, req.user!.id, req.user!.role))) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-
-  const { start, end, note } = req.body ?? {};
-  if (!start) {
-    return res.status(400).json({ message: "start is required (ISO datetime)" });
-  }
-  const startDate = new Date(start);
-  const endDate = end ? new Date(end) : new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-    return res.status(400).json({ message: "Invalid start/end datetime" });
-  }
-  if (endDate <= startDate) {
-    return res.status(400).json({ message: "end must be after start" });
-  }
-
-  job.scheduledStart = startDate;
-  job.scheduledEnd = endDate;
-  job.scheduleStatus = ScheduleStatus.PROPOSED;
-  job.scheduleProposedByUserId = req.user!.id;
-  job.scheduleNote = note ? String(note).trim() : undefined;
-  await jobRepo().save(job);
-
-  const proId = await getAwardedProId(job);
-  const notifyId =
-    req.user!.id === job.homeownerId ? proId : job.homeownerId;
+  const { start, end, note } = req.valid.body;
+  const endDate = end ?? new Date(start.getTime() + 2 * 3600_000);
+  await AppDataSource.getRepository(Job).update(
+    { id: ctx.job.id },
+    {
+      scheduledStart: start,
+      scheduledEnd: endDate,
+      scheduleStatus: ScheduleStatus.PROPOSED,
+      scheduleProposedByUserId: req.user!.id,
+      scheduleNote: note || undefined,
+    }
+  );
+  const notifyId = otherParty(ctx, req.user!.id);
   if (notifyId) {
     await createNotification({
       userId: notifyId,
       type: NotificationType.JOB_STATUS,
       title: "Visit time proposed",
-      body: `A visit window was proposed for "${job.title}".`,
-      link:
-        notifyId === job.homeownerId
-          ? `/homeowner/jobs/${job.id}`
-          : `/tradesperson/jobs/${job.id}`,
-      meta: { jobId: job.id, scheduledStart: startDate.toISOString() },
+      body: `A visit window was proposed for "${ctx.job.title}".`,
+      link: linkFor(ctx, notifyId),
+      meta: { jobId: ctx.job.id, scheduledStart: start.toISOString() },
     });
   }
-
-  return res.json({ job });
+  const job = await AppDataSource.getRepository(Job).findOneOrFail({ where: { id: ctx.job.id } });
+  return res.json({ job: toJob(job, "private") });
 }
 
 export async function acceptSchedule(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertPrivateAccess(ctx, viewer(req));
+  if (!SCHEDULABLE.includes(ctx.job.status)) {
+    throw conflict("Visits can only be confirmed on awarded or in-progress jobs", "INVALID_STATUS");
   }
-  if (!(await isParty(job, req.user!.id, req.user!.role))) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
+  if (ctx.job.scheduleStatus !== ScheduleStatus.PROPOSED || !ctx.job.scheduledStart) {
+    throw badRequest("There is no proposed visit to accept", "NO_PROPOSAL");
   }
-  if (job.scheduleStatus !== ScheduleStatus.PROPOSED || !job.scheduledStart) {
-    return res.status(400).json({
-      message: "No proposed schedule to accept",
-      code: "NO_PROPOSAL",
-    });
+  if (ctx.job.scheduleProposedByUserId === req.user!.id && req.user!.role !== UserRole.ADMIN) {
+    throw badRequest("The other party must accept your proposal", "CANNOT_SELF_ACCEPT");
   }
-  if (job.scheduleProposedByUserId === req.user!.id && req.user!.role !== UserRole.ADMIN) {
-    return res.status(400).json({
-      message: "The other party must accept your proposal",
-      code: "CANNOT_SELF_ACCEPT",
-    });
-  }
-
-  job.scheduleStatus = ScheduleStatus.CONFIRMED;
-  await jobRepo().save(job);
-
-  const proId = await getAwardedProId(job);
-  const notifyId =
-    req.user!.id === job.homeownerId ? proId : job.homeownerId;
+  const updated = await AppDataSource.getRepository(Job).update(
+    { id: ctx.job.id, scheduleStatus: ScheduleStatus.PROPOSED },
+    { scheduleStatus: ScheduleStatus.CONFIRMED }
+  );
+  if (!updated.affected) throw conflict("The proposal changed; reload and try again", "STALE_PROPOSAL");
+  const notifyId = otherParty(ctx, req.user!.id);
   if (notifyId) {
     await createNotification({
       userId: notifyId,
       type: NotificationType.JOB_STATUS,
       title: "Visit time confirmed",
-      body: `Visit window confirmed for "${job.title}".`,
-      link:
-        notifyId === job.homeownerId
-          ? `/homeowner/jobs/${job.id}`
-          : `/tradesperson/jobs/${job.id}`,
-      meta: { jobId: job.id },
+      body: `Visit window confirmed for "${ctx.job.title}".`,
+      link: linkFor(ctx, notifyId),
+      meta: { jobId: ctx.job.id },
     });
   }
-
-  return res.json({ job });
+  const job = await AppDataSource.getRepository(Job).findOneOrFail({ where: { id: ctx.job.id } });
+  return res.json({ job: toJob(job, "private") });
 }
 
+/** Parties see the agreed visit; pros who can see the listing only see the client's preferred window. */
 export async function getSchedule(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: param(req, "id") } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
+  const ctx = await loadJobContext(req.valid.params.id);
+  const access = await assertJobAccess(ctx, viewer(req));
+  const job = ctx.job;
+  const preferred = { preferredStart: job.preferredStart || null, preferredEnd: job.preferredEnd || null };
+  if (access !== "private") {
+    return res.json({ schedule: { status: null, scheduledStart: null, scheduledEnd: null, proposedByUserId: null, note: null, ...preferred } });
   }
-  if (!(await isParty(job, req.user!.id, req.user!.role)) && job.status === JobStatus.OPEN) {
-    // open job: any authenticated pro can see preferred times; owner always
-    if (job.homeownerId !== req.user!.id && req.user!.role !== UserRole.ADMIN) {
-      // still allow reading preferred window on open jobs for bidders
-    }
-  }
-
   return res.json({
     schedule: {
       status: job.scheduleStatus,
@@ -152,8 +109,7 @@ export async function getSchedule(req: Request, res: Response) {
       scheduledEnd: job.scheduledEnd || null,
       proposedByUserId: job.scheduleProposedByUserId || null,
       note: job.scheduleNote || null,
-      preferredStart: job.preferredStart || null,
-      preferredEnd: job.preferredEnd || null,
+      ...preferred,
     },
   });
 }

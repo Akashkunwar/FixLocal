@@ -1,3 +1,5 @@
+import { localDatesAhead } from "../domain/time";
+
 /** Availability heat helpers (7-day strip + score) for browse / shortlist / invites. */
 
 export const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
@@ -49,49 +51,34 @@ function hoursToLevel(hours: number): number {
   return 3;
 }
 
-/** Mini 7-day heat from weeklyAvailability (local calendar days). */
+/** 7-day availability strip in the pro's time zone. */
 export function buildAvailabilityHeat(
-  weekly: Record<string, any> | null | undefined,
-  blockedDates?: string[] | null
+  weekly: Record<string, { enabled?: boolean; start?: string; end?: string; slots?: { start: string; end: string }[] } | undefined> | null | undefined,
+  blockedDates?: string[] | null,
+  timezone?: string | null,
+  now: Date = new Date()
 ): AvailabilityHeat {
   const blocked = new Set((blockedDates || []).map((d) => String(d).slice(0, 10)));
-  const jsToKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-  const labels: Record<string, string> = {
-    mon: "M",
-    tue: "T",
-    wed: "W",
-    thu: "T",
-    fri: "F",
-    sat: "S",
-    sun: "S",
-  };
+  const labels: Record<string, string> = { mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S", sun: "S" };
   const clean =
     weekly != null &&
     typeof weekly === "object" &&
     DAY_KEYS.some((d) => weekly[d] && typeof weekly[d] === "object");
-  const now = new Date();
-  const days: DayHeat[] = [];
   let totalHours = 0;
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    const date = `${y}-${m}-${day}`;
-    const key = jsToKey[d.getDay()];
+  const days: DayHeat[] = localDatesAhead(7, timezone, now).map(({ date, dayKey }) => {
     const isBlocked = blocked.has(date);
-    const hours = isBlocked || !clean ? 0 : slotHours(weekly?.[key]);
+    const hours = isBlocked || !clean ? 0 : slotHours(weekly?.[dayKey]);
     totalHours += hours;
-    days.push({
-      key,
-      label: labels[key] || key[0].toUpperCase(),
+    return {
+      key: dayKey,
+      label: labels[dayKey] || dayKey[0].toUpperCase(),
       date,
-      enabled: !isBlocked && Boolean(weekly?.[key]?.enabled),
+      enabled: !isBlocked && Boolean(weekly?.[dayKey]?.enabled),
       blocked: isBlocked,
       hours,
       level: hoursToLevel(hours),
-    });
-  }
+    };
+  });
   const score = Math.min(100, Math.round((totalHours / 40) * 100));
   return { days, score, totalHours: Math.round(totalHours * 10) / 10, clean };
 }

@@ -1,4 +1,6 @@
+import { numeric } from "../db/numeric";
 import {
+  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -19,6 +21,8 @@ export enum MilestoneStatus {
 
 @Entity("payment_milestones")
 @Index(["jobId"])
+@Index("UQ_milestone_job_sequence", ["jobId", "sequence"], { unique: true })
+@Check("CHK_milestone_amount", `"amount" >= 0`)
 export class PaymentMilestone {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -36,7 +40,7 @@ export class PaymentMilestone {
   @Column({ type: "int" })
   sequence!: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2 })
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric })
   amount!: number;
 
   @Column({ type: "int" })
@@ -64,9 +68,9 @@ export class PaymentMilestone {
   @Column({ type: "text", nullable: true })
   refundNote?: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

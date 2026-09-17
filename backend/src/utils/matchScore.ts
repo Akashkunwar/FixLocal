@@ -1,4 +1,5 @@
 import { haversineKm } from "./geo";
+import { categoryKeywords, matchingKeywords } from "../domain/categories";
 import {
   DEFAULT_MATCH_WEIGHTS,
   type MatchWeights,
@@ -23,7 +24,6 @@ export type ScoreablePro = {
   /** Average hours from job post → first bid (historical). Null = unknown. */
   avgResponseHours?: number | null;
   name?: string | null;
-  email?: string | null;
 };
 
 export type MatchScoreBreakdown = {
@@ -39,55 +39,19 @@ export type MatchScoreBreakdown = {
   weights?: MatchWeights;
 };
 
-function tokenize(s?: string | null): string[] {
-  if (!s) return [];
-  return s
-    .toLowerCase()
-    .split(/[,;/|]+|\s+/)
-    .map((t) => t.trim())
-    .filter((t) => t.length >= 2);
-}
-
-/** Map job category slug → skill tokens that count as a strong match. */
-const CATEGORY_ALIASES: Record<string, string[]> = {
-  plumbing: ["plumbing", "plumber", "leak", "pipe", "bathroom", "fitting", "tap", "drain"],
-  electrical: ["electrical", "electrician", "wiring", "fan", "light", "socket", "switch"],
-  carpentry: ["carpentry", "carpenter", "wood", "furniture", "door", "cabinet"],
-  painting: ["painting", "painter", "paint", "waterproofing", "texture", "wall"],
-  appliance: ["appliance", "ac", "fridge", "washing", "microwave", "repair"],
-  cleaning: ["cleaning", "cleaner", "housekeeping", "janitor", "sanitation", "deep clean"],
-  construction: ["construction", "mason", "tiling", "welding", "fabricator", "civil", "skilled trade"],
-  office_facilities: ["office", "facilities", "facility", "pantry", "receptionist", "maintenance", "fm"],
-  tech_services: ["cctv", "networking", "network", "amc", "it support", "wifi", "camera", "server"],
-  moving: ["moving", "mover", "drivers", "driver", "helpers", "helper", "packing", "relocation"],
-  other: ["handyman", "general", "repair", "maintenance"],
-};
-
-/** Skill overlap on a 0–1 scale, then scaled by weight. */
+/** Skill overlap on a 0–1 scale (whole-word keyword matches), then scaled by weight. */
 export function skillOverlapScore(
   category: string | null | undefined,
   skills: string | null | undefined,
   weight = DEFAULT_MATCH_WEIGHTS.skills
 ): { score: number; hits: string[] } {
   const cat = (category || "").toLowerCase().trim();
-  const skillTokens = tokenize(skills);
-  if (!cat || skillTokens.length === 0) return { score: 0, hits: [] };
-
-  const aliases = CATEGORY_ALIASES[cat] || [cat];
-  const hits: string[] = [];
-  for (const sk of skillTokens) {
-    for (const a of aliases) {
-      if (sk === a || sk.includes(a) || a.includes(sk)) {
-        if (!hits.includes(sk)) hits.push(sk);
-      }
-    }
-  }
-  const raw = (skills || "").toLowerCase();
-  if (raw.includes(cat) && !hits.includes(cat)) hits.push(cat);
-
+  if (!cat || !skills) return { score: 0, hits: [] };
+  const hits = matchingKeywords(cat, skills);
   if (hits.length === 0) return { score: 0, hits: [] };
-  const strong = hits.some((h) => h === cat || aliases.slice(0, 2).includes(h));
-  // Fraction of weight (mirrors prior 35-based curve)
+  const primary = categoryKeywords(cat).slice(0, 3);
+  const strong = hits.some((h) => primary.includes(h));
+  // Fraction of weight (mirrors the original 35-point curve)
   const frac = strong
     ? Math.min(1, (22 + Math.min(hits.length, 4) * 3) / 35)
     : Math.min(1, (8 + hits.length * 4) / 35);
@@ -185,13 +149,4 @@ export function scoreProForJob(
   };
 }
 
-/** Escrow amount: prefer structured quote when present and positive. */
-export function escrowAmountFromBid(bid: {
-  amount: number | string;
-  quoteAmount?: number | string | null;
-}): { amount: number; source: "quote" | "bid" } {
-  const q = Number(bid.quoteAmount);
-  if (Number.isFinite(q) && q > 0) return { amount: q, source: "quote" };
-  const a = Number(bid.amount);
-  return { amount: Number.isFinite(a) && a > 0 ? a : 0, source: "bid" };
-}
+export { escrowAmountFromBid } from "../domain/escrow";
