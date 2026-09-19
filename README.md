@@ -143,11 +143,11 @@ Frontend settings ([`frontend/.env.example`](frontend/.env.example)):
 
 | Command | What it covers |
 | --- | --- |
-| `cd backend && npm test` | 160+ API tests on a throwaway database (`fixlocal_test`, Redis DB 15): every audit finding's repro, an 840-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, performance smoke |
+| `cd backend && npm test` | 168 API tests on a throwaway database (`fixlocal_test`, Redis DB 15): every audit finding's repro, an 840-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request) |
 | `cd backend && npm run test:coverage` | The same with a coverage report |
 | `cd frontend && npm test` | UI unit tests: token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary |
-| `cd frontend && npm run test:e2e` | 20 Playwright journeys in a real browser against a real API |
-| `npm run lint` / `npm run typecheck` | In both packages |
+| `cd frontend && npm run test:e2e` | 26 Playwright tests in a real browser against a real API |
+| `npm run lint` / `npm run typecheck` | In both packages; lint fails on any warning |
 
 The end-to-end suite starts its own API on port **3101** with a fresh `fixlocal_e2e` database (Redis DB 14), and a Vite server on port **5174**. It never touches the development database or the servers on 3001/5173. The first run needs `npx playwright install chromium`.
 
@@ -170,9 +170,19 @@ The E2E journeys cover:
 15. Mobile layout.
 16. Public pages and legacy URLs.
 
+Plus: each role is redirected away from other roles' pages, pending pros see why they can't bid, portfolio and case-study editing, bid withdrawal, and server errors when posting a job.
+
 `.github/workflows/ci.yml` runs lint, type checks, both unit suites with coverage, the E2E suite, `npm audit --audit-level=high`, and the Docker builds on every push and pull request. Dependabot keeps dependencies current.
 
-The `frontend/scripts/*-smoke.mjs` scripts (`npm run waveNN:smoke`, `npm run e2e:*`) are **legacy** checks from the course. They read `API_URL`, `FE_URL` and `SEED_PASSWORD`, and some assume behaviour that has since changed (e.g. unverified accounts posting jobs). The suites above replace them.
+The `frontend/scripts/wave*-smoke.mjs` scripts are **legacy** API checks from the course. Some requests they make were changed on purpose by the audit fixes (chat threads, the amount the client saw when accepting, stream tickets, account templates, 10-character passwords), so they run through a small compatibility shim (`scripts/legacy-compat.mjs`) that translates those calls without relaxing the API. Run all 27 against a throwaway stack with a database reset before each one:
+
+```bash
+API_URL=http://127.0.0.1:3102 FE_URL=http://127.0.0.1:5175 \
+RESET_CMD="npm --prefix ../backend run db:reset-e2e && npm --prefix ../backend run seed" \
+npm run legacy:smoke
+```
+
+`RESET_CMD` inherits your environment, so set `DB_NAME` (ending in `_e2e` or `_test`) and `REDIS_URL` for the throwaway stack. The browser scripts `e2e-*.mjs` and `demo-smoke.mjs` target the UI from before the Client/Professional redesign and are kept for reference only; the Playwright suite covers what they checked.
 
 ## Security model
 
