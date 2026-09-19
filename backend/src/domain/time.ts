@@ -4,26 +4,46 @@ export const DEFAULT_TIMEZONE = "Asia/Kolkata";
 
 type DayKey = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
 
+// Building an Intl.DateTimeFormat is expensive (~50µs); list pages call these helpers
+// thousands of times per request, so keep one formatter per zone.
+const formatters = new Map<string, Intl.DateTimeFormat>();
+const zoneValidity = new Map<string, boolean>();
+
+function formatterFor(timeZone: string) {
+  let fmt = formatters.get(timeZone);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      weekday: "short",
+    });
+    formatters.set(timeZone, fmt);
+  }
+  return fmt;
+}
+
 function parts(date: Date, timeZone: string) {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    weekday: "short",
-  });
   const out: Record<string, string> = {};
-  for (const p of fmt.formatToParts(date)) out[p.type] = p.value;
+  for (const p of formatterFor(timeZone).formatToParts(date)) out[p.type] = p.value;
   return out;
 }
 
 function safeZone(tz?: string | null) {
-  try {
-    new Intl.DateTimeFormat("en-CA", { timeZone: tz || DEFAULT_TIMEZONE });
-    return tz || DEFAULT_TIMEZONE;
-  } catch {
-    return DEFAULT_TIMEZONE;
+  const zone = tz || DEFAULT_TIMEZONE;
+  let valid = zoneValidity.get(zone);
+  if (valid === undefined) {
+    try {
+      formatterFor(zone);
+      valid = true;
+    } catch {
+      valid = false;
+    }
+    // Only remember a bounded number of distinct inputs (time zones are a small, fixed set).
+    if (zoneValidity.size < 1000) zoneValidity.set(zone, valid);
   }
+  return valid ? zone : DEFAULT_TIMEZONE;
 }
 
 /** YYYY-MM-DD for the given instant in the zone. */

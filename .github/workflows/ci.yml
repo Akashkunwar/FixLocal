@@ -42,6 +42,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run test:coverage
+        env:
+          # Shared runners plus coverage instrumentation are ~3x slower than a laptop.
+          PERF_BUDGET_SCALE: "3"
       - run: npm audit --omit=dev --audit-level=high
 
   frontend:

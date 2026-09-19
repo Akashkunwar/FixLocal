@@ -6,14 +6,31 @@ import { AuditHardening1790000000002 } from "../src/migrations/1790000000002-Aud
 
 const dbName = process.env.MIGRATION_TEST_DB || "fixlocal_migrate";
 
+const connection = {
+  type: "postgres" as const,
+  host: process.env.DB_HOST || "localhost",
+  port: Number(process.env.DB_PORT || 5432),
+  username: process.env.DB_USERNAME || "fixlocal",
+  password: process.env.DB_PASSWORD || "fixlocal",
+};
+
+/** The test owns its database: create it on a fresh server (e.g. CI). */
+async function ensureDatabase() {
+  const admin = new DataSource({ ...connection, database: "postgres" });
+  await admin.initialize();
+  try {
+    const exists = await admin.query("SELECT 1 FROM pg_database WHERE datname = $1", [dbName]);
+    if (!exists.length) await admin.query(`CREATE DATABASE "${dbName}"`);
+  } finally {
+    await admin.destroy();
+  }
+}
+
 describe("migrations (H-9)", () => {
   it("run up, down and up again on an empty database, with no drift from the entities", async () => {
+    await ensureDatabase();
     const ds = new DataSource({
-      type: "postgres",
-      host: process.env.DB_HOST || "localhost",
-      port: Number(process.env.DB_PORT || 5432),
-      username: process.env.DB_USERNAME || "fixlocal",
-      password: process.env.DB_PASSWORD || "fixlocal",
+      ...connection,
       database: dbName,
       entities: ALL_ENTITIES,
       migrations: [Baseline1790000000001, AuditHardening1790000000002],
