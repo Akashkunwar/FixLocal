@@ -137,6 +137,14 @@ async function main() {
   }
   steps.push("AMC accept flow");
 
+  // Publishing job photos needs the client's consent (M-7).
+  await apiOk(`/api/jobs/${job.id}/photo-consent`, {
+    method: "POST",
+    token: home.token,
+    body: { consent: true },
+  });
+  steps.push("client allowed photo publishing");
+
   // Ensure completion photos exist (may already) — soft inject via profile path if none
   let fresh = await apiOk(`/api/jobs/${job.id}`, { token: pro.token });
   let before = fresh.job?.beforePhotoUrls || [];

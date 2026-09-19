@@ -111,7 +111,7 @@ async function main() {
   steps.push("FE index reachable");
 
   const checks = [
-    ["/src/App.tsx", ["CLIENT_PREFIXES", "PRO_PREFIXES"]],
+    ["/src/App.tsx", ["CLIENT_ROOT", "PRO_ROOT", "LegacyRedirect"]],
     ["/src/lib/paths.ts", ["CLIENT_ROOT", "PRO_ROOT", "/client", "/professional", "/homeowner", "/tradesperson", "siteType"]],
     ["/src/pages/RegisterPage.tsx", ["I post work", "I bid on work"]],
     ["/src/pages/LandingPage.tsx", ["pros?category=", "Find pros", "Browse jobs"]],

@@ -282,25 +282,16 @@ async function main() {
     method: "POST",
     token: home.token,
   });
-  const soft = await apiOk(`/api/bids/${bid4Id}/viewed-no-reply?forceHours=5`, {
-    method: "POST",
-    token: pro.token,
-  });
+  // The ?forceHours test override was removed from the API; the reminder timing (due after
+  // quoteViewNudgeHours, sent once) is covered in backend/test/bids.test.ts.
+  const soft = await apiOk(`/api/bids/${bid4Id}/viewed-no-reply`, { token: pro.token });
   if (soft.viewedNoReply?.thresholdHours !== 6) {
     throw new Error(`expected thresholdHours=6 got ${soft.viewedNoReply?.thresholdHours}`);
   }
   if (soft.viewedNoReply?.due === true) {
-    throw new Error("forceHours=5 should not be due when threshold=6");
+    throw new Error("should not be due right after viewing (threshold=6h)");
   }
   steps.push("nudge threshold respects quoteViewNudgeHours=6");
-
-  const hard = await apiOk(`/api/bids/${bid4Id}/viewed-no-reply?forceHours=7&force=1`, {
-    method: "POST",
-    token: pro.token,
-  });
-  if (!hard.viewedNoReply?.due) throw new Error("forceHours=7 should be due");
-  if (!hard.viewedNoReply?.nudged) throw new Error("expected nudged on force");
-  steps.push("nudge fires at forceHours=7 with threshold=6");
 
   console.log("wave19:smoke OK");
   for (const s of steps) console.log(" -", s);

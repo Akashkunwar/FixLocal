@@ -1,4 +1,9 @@
 /**
+ * SUPERSEDED — kept for reference only. This browser script targets the UI from before the
+ * Client/Professional redesign (e.g. /homeowner URLs, a one-page job form) and no longer runs.
+ * Its checks live on in the Playwright suite: `npm run test:e2e` (frontend/e2e/*.spec.ts).
+ */
+/**
  * README demo smoke: admin verifies pro → home posts job → pro bids →
  * home accepts → complete → optional dispute.
  * Requires: backend :3001, frontend :5173, seed users present.

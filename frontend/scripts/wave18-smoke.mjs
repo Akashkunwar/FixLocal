@@ -211,7 +211,8 @@ async function main() {
   }
 
   // Find a pro with clean heat below absurd threshold, or use minHeat=99 to force block when clean
-  const cleanPro = sl.find((p) => p.availabilityHeat?.clean);
+  // Heat gates are 0–100 and can only be made stricter, so a pro already at 100 can't be blocked.
+  const cleanPro = sl.find((p) => p.availabilityHeat?.clean && Number(p.availabilityHeat.score || 0) < 100);
   if (cleanPro) {
     const score = Number(cleanPro.availabilityHeat.score || 0);
     const gateMin = score + 1; // always strictly above current score (incl. 100→101)
@@ -290,31 +291,26 @@ async function main() {
     token: home.token,
   });
 
-  const nudge = await apiOk(`/api/bids/${bid3Id}/viewed-no-reply?forceHours=5&force=1`, {
-    method: "POST",
-    token: pro.token,
-  });
-  if (!nudge.viewedNoReply?.due) throw new Error("viewedNoReply.due expected true");
-  if (!nudge.viewedNoReply?.nudged) throw new Error("expected nudged=true on force");
-  steps.push(`viewed-no-reply nudged (threshold ${nudge.viewedNoReply.thresholdHours}h)`);
+  // The ?forceHours / &force test override was removed from the API; the time-based reminder
+  // now comes from the background worker (covered in backend/test/bids.test.ts).
+  const nudge = await apiOk(`/api/bids/${bid3Id}/viewed-no-reply`, { token: pro.token });
+  if (nudge.viewedNoReply?.due !== false) throw new Error("viewedNoReply.due should be false right after viewing");
+  steps.push(`viewed-no-reply state (threshold ${nudge.viewedNoReply.thresholdHours}h, not yet due)`);
 
   const proNotes = await apiOk("/api/notifications?limit=40", { token: pro.token });
   const proList = Array.isArray(proNotes.notifications || proNotes.items)
     ? proNotes.notifications || proNotes.items
     : [];
-  const vnr = proList.find(
-    (n) => n.meta?.viewedNoReply === true && n.meta?.bidId === bid3Id
-  );
-  if (!vnr) throw new Error("pro viewed-no-reply notify missing");
-  steps.push("pro viewed-no-reply notify ok");
+  // Viewing a revised quote notifies the pro straight away; the later "no reply" reminder
+  // needs real time to pass and is tested in backend/test/bids.test.ts.
+  const viewedNote = proList.find((n) => n.meta?.quoteViewed === true && n.meta?.bidId === bid3Id);
+  if (!viewedNote) throw new Error("pro quote-viewed notify missing");
+  steps.push("pro quote-viewed notify ok");
 
   // Soft flag on listBids
   const list = await apiOk(`/api/jobs/${job3Id}/bids`, { token: pro.token });
   const b3 = (list.bids || []).find((b) => b.id === bid3Id);
   if (!b3?.viewedNoReply) throw new Error("listBids missing viewedNoReply soft flag");
-  if (b3.viewedNoReply.nudgeSentAt == null && !b3.viewedNoReply.nudged) {
-    // nudge already persisted on bid from force check
-  }
   steps.push(
     `listBids viewedNoReply.due=${b3.viewedNoReply.due} nudgeSent=${Boolean(b3.quoteViewedNudgeSentAt || b3.viewedNoReply.nudgeSentAt)}`
   );

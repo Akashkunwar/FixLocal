@@ -180,6 +180,14 @@ async function main() {
     steps.push("job already has multi completion photos");
   }
 
+  // Publishing job photos needs the client's consent (M-7).
+  await apiOk(`/api/jobs/${job.id}/photo-consent`, {
+    method: "POST",
+    token: home.token,
+    body: { consent: true },
+  });
+  steps.push("client allowed photo publishing");
+
   const pickBefore = before[before.length - 1] || before[0];
   const pickAfter = after[0];
   const published = await apiOk(`/api/jobs/${job.id}/publish-case-study`, {
@@ -192,10 +200,12 @@ async function main() {
       afterUrl: pickAfter,
     },
   });
-  if (published.caseStudy?.beforeUrl !== pickBefore) {
+  // Publishing makes public copies of the picked photos (C-4), so compare the images, not URLs.
+  const bytes = async (url) => Buffer.from(await (await fetch(`${API}${url}`)).arrayBuffer());
+  if (!(await bytes(published.caseStudy?.beforeUrl)).equals(await bytes(pickBefore))) {
     throw new Error("pair picker beforeUrl not honored");
   }
-  if (pickAfter && published.caseStudy?.afterUrl !== pickAfter) {
+  if (pickAfter && !(await bytes(published.caseStudy?.afterUrl)).equals(await bytes(pickAfter))) {
     throw new Error("pair picker afterUrl not honored");
   }
   steps.push("publish-case-study honors picked pair URLs");
@@ -251,7 +261,8 @@ async function main() {
     ],
     [
       "src/pages/SettingsPage.tsx",
-      ["Named job templates", "namedJobTemplates", "Sync templates to account"],
+      // Templates save straight to the account now (no separate "sync" step).
+      ["Named job templates", "namedJobTemplates", "deleteNamedJobTemplate"],
     ],
   ];
 
@@ -265,8 +276,9 @@ async function main() {
 
   const beRoot = path.join(root, "..", "backend");
   const beChecks = [
-    ["src/entities/User.ts", ["namedJobTemplates"]],
-    ["src/controllers/authController.ts", ["namedJobTemplates", "sourceJobId"]],
+    // Templates moved from JSON columns on User to the user_templates table (L-7).
+    ["src/entities/UserTemplate.ts", ["namedJob"]],
+    ["src/validation/templates.ts", ["namedJobTemplates", "sourceJobId"]],
   ];
   for (const [rel, needles] of beChecks) {
     const src = fs.readFileSync(path.join(beRoot, rel), "utf8");

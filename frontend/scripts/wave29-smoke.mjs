@@ -54,6 +54,53 @@ async function main() {
   const pro = await login("pro@fixlocal.local");
   steps.push("login client + professional");
 
+  // Case studies may only reference files uploaded to FixLocal (H-10): upload two photos first.
+  const zlib = await import("zlib");
+  const png = (shade) => {
+    const crcTable = Array.from({ length: 256 }, (_, n) => {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      return c >>> 0;
+    });
+    const crc = (b) => {
+      let c = 0xffffffff;
+      for (const x of b) c = crcTable[(c ^ x) & 255] ^ (c >>> 8);
+      return (c ^ 0xffffffff) >>> 0;
+    };
+    const chunk = (type, data) => {
+      const len = Buffer.alloc(4);
+      len.writeUInt32BE(data.length);
+      const td = Buffer.concat([Buffer.from(type), data]);
+      const c = Buffer.alloc(4);
+      c.writeUInt32BE(crc(td));
+      return Buffer.concat([len, td, c]);
+    };
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(4, 0);
+    ihdr.writeUInt32BE(4, 4);
+    ihdr[8] = 8;
+    ihdr[9] = 2;
+    const raw = Buffer.concat(Array.from({ length: 4 }, () => Buffer.from([0, ...Array(12).fill(shade)])));
+    return Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk("IHDR", ihdr),
+      chunk("IDAT", zlib.deflateSync(raw)),
+      chunk("IEND", Buffer.alloc(0)),
+    ]);
+  };
+  const galleryFd = new FormData();
+  galleryFd.append("photos", new Blob([png(40)], { type: "image/png" }), "before.png");
+  galleryFd.append("photos", new Blob([png(200)], { type: "image/png" }), "after.png");
+  const galleryRes = await fetch(`${API}/api/profile/gallery`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${pro.token}` },
+    body: galleryFd,
+  });
+  if (!galleryRes.ok) throw new Error(`gallery upload → ${galleryRes.status}`);
+  const gallery = (await galleryRes.json()).profile.galleryUrls;
+  const [beforeUrl, afterUrl] = gallery.slice(-2);
+  steps.push("uploaded before/after photos");
+
   // Case studies upsert on profile
   const caseId = `smoke-case-${Date.now()}`;
   const updated = await apiOk("/api/profile", {
@@ -65,8 +112,8 @@ async function main() {
           id: caseId,
           title: "Kitchen leak before/after",
           notes: "Replaced angle valve; no drip after 24h.",
-          beforeUrl: "/uploads/demo-before.jpg",
-          afterUrl: "/uploads/demo-after.jpg",
+          beforeUrl,
+          afterUrl,
           category: "plumbing",
         },
       ],
