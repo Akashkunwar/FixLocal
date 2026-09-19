@@ -149,6 +149,37 @@ describe("professional profiles (H-5)", () => {
     expect((await api().post(`/api/jobs/${job.id}/publish-case-study`).set((await pro()).auth).send({})).status).toBe(403);
   });
 
+  it("publishes the before/after pair the pro picked, using the URLs the app shows", async () => {
+    const { owner, worker, job } = await awardedJob({ stage: "in_progress" });
+    const { png, jpegWithGps } = await import("./helpers");
+    await api()
+      .post(`/api/jobs/${job.id}/completion-photos`)
+      .set(worker.auth)
+      .attach("after", await png(), { filename: "a1.png", contentType: "image/png" })
+      .attach("after", await jpegWithGps(), { filename: "a2.jpg", contentType: "image/jpeg" })
+      .expect(200);
+    await api().post(`/api/jobs/${job.id}/mark-done`).set(worker.auth).expect(200);
+    await api().post(`/api/jobs/${job.id}/confirm`).set(owner.auth).expect(200);
+    await api().post(`/api/jobs/${job.id}/photo-consent`).set(owner.auth).send({ consent: true }).expect(200);
+
+    // The app only ever sees signed URLs (…?exp=…&sig=…).
+    const shown = (await api().get(`/api/jobs/${job.id}`).set(worker.auth)).body.job.afterPhotoUrls as string[];
+    expect(shown).toHaveLength(2);
+    expect(shown[1]).toMatch(/\?exp=\d+&sig=/);
+    const picked = shown[1];
+
+    const res = await api().post(`/api/jobs/${job.id}/publish-case-study`).set(worker.auth).send({ afterUrl: picked });
+    expect(res.status).toBe(200);
+    const bytes = async (url: string) => (await api().get(url).buffer(true).parse((r, cb) => {
+      const chunks: Buffer[] = [];
+      r.on("data", (c: Buffer) => chunks.push(c));
+      r.on("end", () => cb(null, Buffer.concat(chunks)));
+    })).body as Buffer;
+    const published = await bytes(res.body.caseStudy.afterUrl);
+    expect(published.equals(await bytes(picked))).toBe(true);
+    expect(published.equals(await bytes(shown[0]))).toBe(false);
+  });
+
   it("earnings and analytics come from released escrow", async () => {
     const { worker } = await awardedJob({ stage: "completed", amount: 2500 });
     const other = await awardedJob({ stage: "in_progress", amount: 999 });
@@ -266,6 +297,35 @@ describe("invites (M-1)", () => {
     expect(res.body.code).toBe("SHORTLIST_HEAT_TOO_LOW");
     const ranked = await api().get(`/api/jobs/${job.id}/shortlist-ranked`).set(owner.auth);
     expect(ranked.body.shortlist[0].inviteBlockedByHeat).toBe(true);
+  });
+
+  it("a client can make the availability gate stricter, never looser", async () => {
+    const owner = await client();
+    const slot = { enabled: true, start: "09:00", end: "13:00" };
+    const halfTime = await pro({
+      profile: { weeklyAvailability: { mon: slot, tue: slot, wed: slot, thu: slot, fri: slot } },
+    });
+    await api().post("/api/favorites").set(owner.auth).send({ targetType: "pro", targetId: halfTime.user.id }).expect(201);
+    const ranked = await api().get(`/api/jobs/${(await createJob(owner)).id}/shortlist-ranked`).set(owner.auth);
+    const score = ranked.body.shortlist[0].availabilityHeat.score as number;
+    expect(score).toBeGreaterThan(25);
+    expect(score).toBeLessThan(100);
+
+    const strict = await invite(owner.auth, (await createJob(owner)).id, {
+      tradespersonId: halfTime.user.id,
+      source: "shortlist",
+      minHeat: score + 1,
+    });
+    expect(strict.status).toBe(400);
+    expect(strict.body).toMatchObject({ code: "SHORTLIST_HEAT_TOO_LOW", minHeat: score + 1 });
+
+    const lenient = await invite(owner.auth, (await createJob(owner)).id, {
+      tradespersonId: halfTime.user.id,
+      source: "shortlist",
+      minHeat: 1,
+    });
+    expect(lenient.status).toBe(200);
+    expect((await invite(owner.auth, (await createJob(owner)).id, { tradespersonId: halfTime.user.id, minHeat: 101 })).status).toBe(400);
   });
 
   it("only the owner can invite or see invites", async () => {

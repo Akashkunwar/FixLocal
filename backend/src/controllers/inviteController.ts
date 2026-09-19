@@ -53,6 +53,8 @@ type InviteOptions = {
   source: string;
   shortlistRank?: number | null;
   smartScore?: number | null;
+  /** Client-requested gate; only ever makes the default stricter. */
+  minHeat?: number | null;
   actorId: string;
 };
 
@@ -84,7 +86,7 @@ async function invitePro(ctx: JobContext, opts: InviteOptions): Promise<InviteRe
   });
   if (onShortlist) {
     const heat = buildAvailabilityHeat(profile.weeklyAvailability, profile.blockedDates, profile.user.timezone);
-    const gate = shortlistInviteBlockedByHeat(heat, DEFAULT_SHORTLIST_INVITE_MIN_HEAT);
+    const gate = shortlistInviteBlockedByHeat(heat, Math.max(DEFAULT_SHORTLIST_INVITE_MIN_HEAT, opts.minHeat ?? 0));
     if (gate.blocked) {
       throw badRequest(gate.reason || "Availability too low for a shortlist invite", "SHORTLIST_HEAT_TOO_LOW", {
         minHeat: gate.minHeat,
@@ -179,6 +181,7 @@ export async function inviteSuggestedPro(req: Request, res: Response) {
     source: b.source,
     shortlistRank: b.shortlistRank,
     smartScore: b.smartScore,
+    minHeat: b.minHeat,
     actorId: req.user!.id,
   });
   return res.json({
@@ -228,6 +231,7 @@ export async function bulkInviteSuggestedPros(req: Request, res: Response) {
         source: b.source,
         shortlistRank: b.shortlistRanks?.[tradespersonId],
         smartScore: b.smartScores?.[tradespersonId],
+        minHeat: b.minHeat,
         actorId: req.user!.id,
       });
       results.push({

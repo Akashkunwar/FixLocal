@@ -187,6 +187,8 @@ export const inviteBody = z.object({
   ),
   shortlistRank: optionalInt(1, 1000),
   smartScore: optionalNumber(-1000, 1000),
+  /** A stricter availability gate for shortlist invites (can raise the default, never lower it). */
+  minHeat: optionalInt(0, 100),
 });
 
 export const bulkInviteBody = z.object({
@@ -198,6 +200,7 @@ export const bulkInviteBody = z.object({
   ),
   shortlistRanks: z.record(z.string(), z.coerce.number()).optional(),
   smartScores: z.record(z.string(), z.coerce.number()).optional(),
+  minHeat: optionalInt(0, 100),
 });
 
 export const DECLINE_REASONS = ["busy", "schedule", "too_far", "rate", "specialty", "other"] as const;

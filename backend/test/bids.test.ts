@@ -258,3 +258,56 @@ describe("quotes and counter-offers", () => {
     expect((await api().get(`/api/bids/${bid.id}/escrow-what-if?amount=-3`).set(owner.auth)).status).toBe(400);
   });
 });
+
+describe("viewed-but-no-reply reminders", () => {
+  const hours = (h: number) => new Date(Date.now() + h * 3600_000);
+
+  async function viewedRevisedQuote() {
+    const owner = await client();
+    const p = await pro();
+    await api().patch("/api/auth/me").set(p.auth).send({ quoteViewNudgeHours: 6 }).expect(200);
+    const job = await createJob(owner);
+    const bid = await placeBid(p, job.id, { amount: 2500, quoteAmount: 2400, quoteNotes: "base" });
+    await api().patch(`/api/bids/${bid.id}/quote`).set(p.auth).send({ quoteAmount: 2300, quoteNotes: "revised" }).expect(200);
+    const viewed = await api().post(`/api/bids/${bid.id}/quote-viewed`).set(owner.auth);
+    expect(viewed.body).toMatchObject({ viewed: true, notified: true });
+    return { owner, p, bid };
+  }
+
+  const reminders = (userId: string) =>
+    rows(`SELECT 1 FROM "notifications" WHERE "userId" = $1 AND "title" = 'Viewed but no reply'`, [userId]);
+
+  it("uses the pro's own threshold and reminds once after it passes", async () => {
+    const { sendQuoteViewNudges } = await import("../src/workers");
+    const { p, bid } = await viewedRevisedQuote();
+
+    const state = await api().get(`/api/bids/${bid.id}/viewed-no-reply`).set(p.auth);
+    expect(state.body.viewedNoReply).toMatchObject({ thresholdHours: 6, due: false, nudged: false });
+
+    // Other tests in this file leave viewed quotes behind, so count this pro's reminders only.
+    await sendQuoteViewNudges(hours(5));
+    expect(await reminders(p.user.id)).toHaveLength(0);
+    await sendQuoteViewNudges(hours(7));
+    expect(await reminders(p.user.id)).toHaveLength(1);
+    await sendQuoteViewNudges(hours(8));
+    expect(await reminders(p.user.id)).toHaveLength(1);
+
+    const after = await api().get(`/api/bids/${bid.id}/viewed-no-reply`).set(p.auth);
+    expect(after.body.viewedNoReply.nudged).toBe(true);
+  });
+
+  it("doesn't remind a pro who revised the quote after the client looked", async () => {
+    const { sendQuoteViewNudges } = await import("../src/workers");
+    const { p, bid } = await viewedRevisedQuote();
+    await api().patch(`/api/bids/${bid.id}/quote`).set(p.auth).send({ quoteAmount: 2200 }).expect(200);
+    await sendQuoteViewNudges(hours(7));
+    expect(await reminders(p.user.id)).toHaveLength(0);
+  });
+
+  it("no longer accepts the old ?forceHours test override", async () => {
+    const { p, bid } = await viewedRevisedQuote();
+    const res = await api().get(`/api/bids/${bid.id}/viewed-no-reply?forceHours=7&force=1`).set(p.auth);
+    expect(res.body.viewedNoReply.due).toBe(false);
+    expect(await reminders(p.user.id)).toHaveLength(0);
+  });
+});

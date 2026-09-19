@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AddressInfo } from "net";
-import { acceptBid, admin, api, app, client, createJob, placeBid, png, pro } from "./helpers";
+import { acceptBid, admin, api, client, listenLocal, createJob, placeBid, png, pro } from "./helpers";
 
 async function openJobWithTwoBidders() {
   const owner = await client();
@@ -115,7 +115,7 @@ describe("private chat threads (H-2)", () => {
 
   it("live updates only reach the right thread (SSE)", async () => {
     const { owner, p1, p2, job } = await openJobWithTwoBidders();
-    const server = app().listen(0);
+    const server = await listenLocal();
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const ticketFor = async (auth: Record<string, string>) => (await api().post("/api/auth/sse-ticket").set(auth)).body.ticket;
     const collect = async (url: string) => {

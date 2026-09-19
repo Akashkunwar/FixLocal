@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import http from "http";
 import bcrypt from "bcryptjs";
 import request from "supertest";
 import sharp from "sharp";
@@ -20,7 +21,42 @@ export function app(): Express {
   return appInstance;
 }
 
-export const api = () => request(app());
+/**
+ * Test servers bind to 127.0.0.1 explicitly. Letting supertest listen on all interfaces and then
+ * connect to 127.0.0.1 occasionally hit another local program that owned the same port number on
+ * 127.0.0.1 (seen as random 401/404 responses with empty bodies).
+ * Binding to a host is asynchronous, so always wait for "listening" before using the address.
+ */
+export function listenLocal(): Promise<http.Server> {
+  return new Promise((resolve, reject) => {
+    const s = http.createServer(app());
+    s.once("error", reject);
+    s.listen(0, "127.0.0.1", () => resolve(s));
+  });
+}
+
+let server: http.Server | null = null;
+
+/** Started once per test file by test/setup.ts. */
+export async function startTestServer() {
+  if (!server) server = await listenLocal();
+  return server;
+}
+
+export function testServer(): http.Server {
+  if (!server) throw new Error("Test server not started; test/setup.ts starts it in beforeAll");
+  return server;
+}
+
+export async function closeTestServer() {
+  if (!server) return;
+  const s = server;
+  server = null;
+  s.closeAllConnections();
+  await new Promise<void>((resolve) => s.close(() => resolve()));
+}
+
+export const api = () => request(testServer());
 
 export type TestUser = { user: User; token: string; auth: { Authorization: string } };
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import request from "supertest";
-import { admin, api, app, client, createJob, PASSWORD, pro, rows, uniqueEmail } from "./helpers";
+import { admin, api, client, createJob, listenLocal, PASSWORD, pro, rows, uniqueEmail } from "./helpers";
 import { consoleMailer } from "../src/services/mailer";
 import { overrideConfig, config } from "../src/config";
 
@@ -156,7 +156,7 @@ describe("sessions (H-3)", () => {
     const c = await client();
     const t = await api().post("/api/auth/sse-ticket").set(c.auth);
     expect(t.status).toBe(200);
-    const server = app().listen(0);
+    const server = await listenLocal();
     try {
       const port = (server.address() as { port: number }).port;
       const url = `http://127.0.0.1:${port}/api/notifications/stream?ticket=${t.body.ticket}`;

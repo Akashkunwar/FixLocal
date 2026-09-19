@@ -25,6 +25,8 @@ function scan(value: unknown, path: string, depth = 0) {
 (globalThis as Record<string, unknown>).__FIXLOCAL_JSON_INSPECTOR__ = (url: string, body: unknown) => scan(body, url);
 
 beforeAll(async () => {
+  const { startTestServer } = await import("./helpers");
+  await startTestServer();
   process.on("unhandledRejection", onCrash);
   process.on("uncaughtException", onCrash);
   if (!AppDataSource.isInitialized) await AppDataSource.initialize();
@@ -46,6 +48,8 @@ afterEach(() => {
 });
 
 afterAll(async () => {
+  const { closeTestServer } = await import("./helpers");
+  await closeTestServer();
   process.off("unhandledRejection", onCrash);
   process.off("uncaughtException", onCrash);
   closeAllStreams();
