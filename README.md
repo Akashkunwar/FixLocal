@@ -1,461 +1,229 @@
 # FixLocal
 
-Polished local **work marketplace** (App Dev Lab / BSCS4010) — blue-collar, technical, office, and home services.
+A local work marketplace. **Clients** post jobs (repairs, cleaning, office and facilities, tech, moving and more) with photos, a budget and a map pin. Admin-verified **professionals** bid. The client compares bids, negotiates, and hires. The job then moves through scheduling, chat, work, confirmation, reviews and (if needed) a dispute. Payments use **simulated escrow milestones** (Deposit 30% · Progress 40% · Completion 30%); no real money moves.
 
-**Clients** post jobs (office, cleaning, repairs, tech, moving, and more) with photos and budgets. Admin-verified **professionals** bid. Clients compare portfolios, ratings, and price, then hire. Jobs move through a clear timeline with **simulated escrow milestones**, visit scheduling, in-app messaging, notifications, reviews, favorites, and admin dispute handling with an **audit log**. Payments are **simulated** only — no Stripe.
+> Internal role keys are `HOMEOWNER` / `TRADESPERSON`; everything users see says **Client** / **Professional**. URLs are `/client/*` and `/professional/*` (old `/homeowner/*` and `/tradesperson/*` links redirect).
 
-> Internal role keys remain `HOMEOWNER` / `TRADESPERSON` (and routes `/homeowner`, `/tradesperson`); all user-facing copy says **Client** / **Professional**.
+The history of features built during the course is in [docs/FEATURE_HISTORY.md](docs/FEATURE_HISTORY.md).
 
-## Stack
+## Contents
 
-| Layer | Tech |
+- [Architecture](#architecture)
+- [Quick start with Docker](#quick-start-with-docker)
+- [Local development](#local-development)
+- [Upgrading an existing development database](#upgrading-an-existing-development-database)
+- [Configuration](#configuration)
+- [Testing](#testing)
+- [Security model](#security-model)
+- [Project layout](#project-layout)
+- [Before a real launch](#before-a-real-launch)
+
+## Architecture
+
+| Layer | Technology |
 | --- | --- |
-| Frontend | React 18, Vite, TypeScript, Tailwind CSS, react-router |
-| Backend | Express, TypeORM, PostgreSQL, JWT, multer |
-| Optional | Redis (caches open-job lists) |
+| Frontend | React 18, Vite, TypeScript, Tailwind CSS, React Router 7, Leaflet |
+| Backend | Node.js 22, Express 5, TypeORM 0.3, PostgreSQL, zod validation, pino logging |
+| Cache / live updates | Redis (optional in development): auth-state cache, rate limits, open-job cache, cross-instance chat fan-out |
+| Files | Local disk (`UPLOADS_DIR`), served through `/api/files/:name` with signed, expiring URLs |
+| Tests | Vitest + Supertest (API), Vitest + Testing Library (UI), Playwright (end to end) |
 
-## Roles
+```
+browser ──► nginx (web) ──► /api/*  ──► Express API ──► PostgreSQL
+             │  serves the built SPA        │  └──────► Redis
+             └─ same origin, so the refresh cookie works
+```
 
-- **Admin** — verify/suspend pros, manage users, stats, disputes (with **milestone refunds**), force-cancel, **audit log**, **match-quality** (scored + **heatBoost** on top pros) + **tunable match weights** (+ **heat weight in presets** incl. **availability-first** + **best-value blend** with optional **SLA/heat third weight** + audit snapshots + **rollback** of weights+heat **and** blend)
-- **Client** (internal: homeowner) — multi-step job wizard (draft autosave, **map pin**), compare/accept bids (quote→escrow + **what-if milestone calculator** (inline + side-by-side on bid compare) + **best value** blend (match + escrow + optional SLA/heat, **admin-tunable** + **why-value drawer** + per-bid counter sparkline + peer amount hint) + **quote revision history** + **counter-offer / request revise** (+ **homeowner note templates** with **Settings create/edit** + User sync) + **counter history / decline** + **counter negotiation timeline / sparkline** + **−10% presets** + **counter analytics / time-to-address SLA** (aggregate + **per-job**)), **suggested pros** (invite + analytics + score explain + **heat-aware ranking** + **shortlist funnel**), **escrow releases** (or auto-release on complete), schedule visits, chat, complete with **before/after photos**, review, dispute with evidence, favorites/**shortlist** (**smart-ranked** by match+tags), faceted search + saved searches (**available this week** + SLA + **availability heat** / min heat + best-invite hint), notification prefs (+ **configurable nudge hours**), **response SLA** (+ **7/30d trends**), quote-Δ notify **deep-links** to the bid card
-- **Professional** (internal: tradesperson) — rich portfolio + gallery + **weekly availability** (multi-slot + blocked dates) + **not-interested categories**, bid with optional visit window + **quote revisions** (homeowner **counter-offer** + **counter reply templates** (decline **chips**, no browser prompt) + **quote-viewed** alerts + **counter SLA**), earnings + **analytics** (SLA sparkline), configurable **viewed-no-reply nudge hours**, start/complete work, before/after photos, chat
+Main ideas:
 
-## Prerequisites
+- **Auth**: a short-lived access token (15 min) kept only in memory, plus a rotating refresh token in an `httpOnly` cookie (`fl_refresh`, path `/api/auth`). Reusing an old refresh token revokes the whole session family. Changing the password, "sign out everywhere", suspension and account deletion revoke everything at once.
+- **Authorization** lives in `backend/src/policies`: one place decides who can see a job (full details, listing only, or nothing), who can post in which chat thread, and who can act at each job stage. A table-driven test checks 840 action × state × actor combinations.
+- **Job lifecycle** is a state machine: `open → awarded → in_progress → pending_confirmation → completed`, plus `cancelled` and `disputed`. The pro marks work done; the client confirms (or it auto-confirms after `AUTO_CONFIRM_DAYS`), which releases any remaining escrow.
+- **Money** is recorded in a ledger (`ledger_entries`); earnings and admin totals come from the ledger, not from bid amounts. Accepting a bid, releasing milestones and confirming completion use row locks and optional `Idempotency-Key` headers, so double clicks and races can't double-pay.
+- **Chat** is one private thread per (job, professional). Live updates use server-sent events with one-time tickets (no tokens in URLs), with polling as a fallback.
+- **Schema changes** go through migrations only (`synchronize` is off).
 
-- Node.js 20+
-- PostgreSQL
-- npm
-- Redis optional
+## Quick start with Docker
 
-## Database
+Runs Postgres, Redis, the API and the web app (nginx) together.
 
 ```bash
-psql postgres -c "CREATE USER fixlocal WITH PASSWORD 'fixlocal';"
+cp .env.example .env
+# put two random secrets in .env:
+#   JWT_SECRET=$(openssl rand -base64 48)
+#   FILE_URL_SECRET=$(openssl rand -base64 48)
+docker compose up --build
+```
+
+Open http://localhost:8080. Migrations run automatically when the API starts.
+
+The Docker stack runs in production mode, so:
+
+- New accounts must verify their email. There is no real email provider yet, so the links are printed in the API log: `docker compose logs api | grep verify-email`.
+- Demo data is not loaded. To add it (development only): `docker compose run --rm -e NODE_ENV=development api node dist/scripts/seed.js`.
+- Behind HTTPS, set `COOKIE_SECURE=true` and `APP_URL=https://your-domain`.
+
+## Local development
+
+Prerequisites: **Node.js 22.12+**, **PostgreSQL 14+**, and optionally **Redis 6+** (the API works without it, with an in-memory fallback).
+
+```bash
+# 1. database (once)
+psql postgres -c "CREATE USER fixlocal WITH PASSWORD 'fixlocal' CREATEDB;"
 psql postgres -c "CREATE DATABASE fixlocal OWNER fixlocal;"
-```
 
-Or Docker:
-
-```bash
-docker run --name fixlocal-pg \
-  -e POSTGRES_USER=fixlocal \
-  -e POSTGRES_PASSWORD=fixlocal \
-  -e POSTGRES_DB=fixlocal \
-  -p 5432:5432 -d postgres:15
-```
-
-TypeORM `synchronize` creates/updates tables on backend start (non-production).
-
-## Backend
-
-```bash
+# 2. API — http://localhost:3001
 cd backend
-cp .env.example .env   # if needed
+cp .env.example .env
 npm install
-npm run seed
+npm run db:migrate
+npm run seed           # demo accounts and sample jobs
 npm run dev
-```
 
-API: http://localhost:3001 · Health: `curl http://localhost:3001/health`
-
-## Frontend
-
-```bash
-cd frontend
-cp .env.example .env   # VITE_API_URL=http://localhost:3001
+# 3. web app — http://localhost:5173 (proxies /api to the API)
+cd ../frontend
+cp .env.example .env
 npm install
 npm run dev
 ```
 
-App: http://localhost:5173
+`CREATEDB` is only needed so the test suites can create their own databases (`fixlocal_test`, `fixlocal_migrate`, `fixlocal_e2e`).
 
-## Demo accounts
+For local development you can set `DEV_AUTO_VERIFY_EMAIL=true` (skip email verification) and `DEV_OUTBOX=true` (see sent emails at `GET /api/dev/outbox`) in `backend/.env`. Both are ignored in production.
 
-Password for all: **`Password123!`**
+### Demo accounts
+
+Created by `npm run seed`. Password: `SEED_PASSWORD` from `backend/.env` (default `Password123!`). Re-running the seed doesn't reset existing passwords unless `SEED_RESET=true`. The seed refuses to run with `NODE_ENV=production`.
 
 | Email | Role | Notes |
 | --- | --- | --- |
-| admin@fixlocal.local | Admin | Seeded |
-| home@fixlocal.local | Client | Priya — sample jobs |
+| admin@fixlocal.local | Admin | |
+| home@fixlocal.local | Client | Priya, sample jobs |
 | home2@fixlocal.local | Client | Rahul |
-| pro@fixlocal.local | Professional | Arjun — **verified**, has review |
-| pro2@fixlocal.local | Professional | Sneha — **verified** |
-| pro3@fixlocal.local | Professional | Vikram — **pending** verification |
-
-## Suggested walkthrough (wave 10)
-
-1. Log in as **admin** → Overview · Users · Verify · **Audit** (empty until you act).
-2. Log in as **client** (`home@`) → Post a job (photos are compressed in-browser) or open an open job.
-3. Log in as **pro** (`pro@`) → Browse with **area / budget** filters (optionally **Save search**) → Place a bid with an optional **visit window**.
-4. Client → Accept bid → payment status becomes **held** with Deposit / Progress / Completion milestones.
-5. Check the pro’s public profile **weekly availability**; propose a visit and note any soft conflict hint.
-6. Professional → Start work → Mark done; client can **Release milestones** in order, or **Complete** the job to **auto-release** remaining escrow.
-7. On escrow panel → **Print / Download** a milestone summary (HTML, print-to-PDF friendly).
-8. **Settings** → toggle notification categories (stored on the user + localStorage).
-9. Admin → Suspend a user or resolve a dispute → confirm entry on **Audit**.
-10. Pro/homeowner → on an awarded job, upload **before/after** completion photos (shown on job detail).
-11. Admin → open a dispute → select escrow milestones to **refund/reverse** when resolving.
-12. Pro → **Analytics** — win rate, avg rating, earnings over last 6 months.
-13. Pro → Portfolio → add a second daily slot and **blocked dates**; visit proposals show conflict hints.
-14. Browser → installable via **PWA** (manifest + light service worker).
-15. On an awarded job → **Messages** → attach an image/PDF with the paperclip.
-16. Pro → **Analytics** → category mix + response cards.
-17. Homeowner → open job → click a suggested **match score** for sk/rt/rs/ds explainability; check **Invite analytics** after inviting.
-18. Pro → Portfolio → set **Not interested categories**; confirm soft-skip on suggestions.
-19. Homeowner → save an **invite template** (or sync from Settings); print escrow invoice to PDF.
-17. Homeowner → favorite a pro → pro updates availability (or admin verifies) → check notification bell.
-18. Pro browse → filter by **City** + **Neighborhood** (e.g. Bengaluru · Indiranagar).
-
-19. Pro browse → sort **Nearest** — cards show ~km from your portfolio coords.
-20. Homeowner → Find pros → **Nearest** — distance badges from Bengaluru demo centre.
-21. Pro → place bid with **quote notes** (and optional PDF) → homeowner bid compare shows quote card.
-22. On awarded/open chat → pro sends a **structured quote** via the quote icon.
-23. Watch notification bell / chat for **live** badge (SSE); disable network briefly to confirm polling fallback.
-24. Admin → **Match** — open jobs vs nearby verified pros bands (none / thin / ok / strong).
-
-
-
-25. Homeowner → Post a job → **Budget & location** → drag/click the **map pin** (Leaflet); coords save with the job.
-26. Admin → **Match** — see **best score** + top pros with sk/rt/rs/ds breakdown (skills · rating · response · distance).
-27. Homeowner → open job → **Suggested pros** cards with match scores.
-28. Pro places a bid with a **structured quote** different from bid amount → homeowner **Accept quote → escrow**; escrow holds the **quote** amount (simulated).
-
-29. Homeowner → open job → **Suggested pros** → **Invite** (optional message) → pro notification bell shows **Job invite**.
-30. After visit is **confirmed** → **Add to calendar** downloads an `.ics` file.
-31. Escrow panel shows **From quote** / **From bid** source badge after accept.
-
-
-32. Homeowner → invite same pro again → server returns **Already invited** (409).
-33. Pro → open invite from notification bell → lands on job **bid form** (`?invite=1#bid-form`) → optionally **Decline invite** (soft notify homeowner).
-34. Confirmed visit → **Download .ics** (Asia/Kolkata TZ) · **Google Calendar** · **Outlook** links.
-35. Escrow **Print** summary shows **Escrow source** (quote/bid).
-36. Admin → **Audit** → add an optional **admin note**.
-37. Homeowner → Find pros → open a verified profile → **Invite to job** (pick an open job).
-
-
-## Features (wave 1)
-
-- Full UI redesign (Tailwind design system, landing, auth, role dashboards)
-- Job post with photos, categories, budget, location, filters/search
-- Bid place/withdraw/accept with enriched pro cards
-- Status timeline (open → awarded → in progress → completed)
-- Ratings & reviews after completion
-- Rich tradesperson portfolio (bio, skills, rates, city, experience)
-- In-job messaging
-- In-app notifications (bids, accept/reject, status, disputes, messages, reviews)
-- Favorites (jobs & pros)
-- Public pro profile pages
-- Profile/settings
-- Richer seed data
-- Toasts, empty/loading states, basic a11y
-
-## Features (wave 2)
-
-- Portfolio **image gallery** uploads (multer) + display on public pro profile
-- Dispute **evidence attachments** + clearer admin resolution (notes, job status override, notify parties)
-- Admin **user management** (list/search homeowners & pros, suspend/unsuspend)
-- Richer admin **stats** (jobs by status, active bids, reviews, simulated GMV)
-- Reliable **polling** for chat (~3s) and notification bell (~4s open / ~15s background)
-- **Post-job wizard** with local draft autosave
-- Pro **earnings / completed-jobs** summary on My jobs
-- Homeowner bids empty state polish + Find pros CTA
-- Account suspension enforced at login
-
-## Features (wave 3)
-
-- **Simulated escrow / payment milestones** — on bid accept, funds are **held**; Deposit → Progress → Completion releases (sequential); clear payment status for both sides
-- **Pro availability / scheduling** — propose visit windows on bids or after award; homeowner/pro accept or counter; shown on job detail timeline
-- **Search polish** — job facets (category, area/city, budget range); pro facets (category/skill, city, rating min, max hourly rate); optional **saved searches** (localStorage)
-- **Client-side image compression** before job/gallery upload (canvas, no heavy deps)
-- **Admin audit log** for suspend/unsuspend, dispute resolve, force-cancel, verify actions
-- Legacy awarded jobs auto-create escrow milestones on first view
-
-## Features (wave 4)
-
-- **Auto-release remaining escrow** when the homeowner (or admin) marks a job **completed**
-- **Mobile polish** — sticky bottom nav, larger touch targets, notification panel + escrow cards that stack cleanly on small screens
-- **Pro weekly availability calendar** on portfolio + public profile, with soft **conflict hints** vs proposed visit times
-- **Milestone invoice-ish summary** — printable HTML / downloadable escrow summary (no heavy PDF deps)
-- **Notification preferences** in Settings (User `notificationPrefs` + localStorage); createNotification respects toggles
-- Empty-state CTAs tightened (Saved, admin jobs, etc.)
-
-## Features (wave 5)
+| pro@fixlocal.local | Professional | Arjun, verified, has a review |
+| pro2@fixlocal.local | Professional | Sneha, verified |
+| pro3@fixlocal.local | Professional | Vikram, pending verification |
 
-- **Before/after completion photos** on jobs (upload when completing or after; gallery on job detail for both parties)
-- **Dispute partial refunds / milestone reverse** (simulated) — admin can refund selected escrow milestones when resolving
-- **PWA basics** — web manifest + service worker for an installable feel (light offline shell)
-- **Pro analytics dashboard** — jobs won, win rate, avg rating, earnings over time from existing bid/job data
-- **Harder availability** — multi-slot day editing + optional **blocked dates** with schedule conflict hints
-- Seed/builds kept green; README walkthrough updated
+The login page only shows these accounts when the frontend has `VITE_DEMO_MODE=true`.
 
-## Features (wave 6)
+## Upgrading an existing development database
 
-- **Chat attachments** — image/PDF uploads on job messages (multer), shown inline in chat
-- **Richer pro analytics** — category mix, avg/median response-ish hours (job post → bid), 30-day bid activity, clearer cards/charts
-- **Favorite-pro alerts** — in-app notifications when a saved pro updates availability or is verified; match tips when posting a job that fits a favorited pro (and similar-job nudges)
-- **Area search polish** — separate **city** + **neighborhood** facets on job browse / find-pros; soft city-match ranking; optional `lat`/`lng` on jobs & profiles (no geo libs)
-- Job create wizard defaults city to Bengaluru; seed jobs tagged with city + coords
-- README + smoke notes refreshed
+Databases created before the migration setup (by the old `synchronize` option) need a one-time baseline. Your data is kept:
 
-## Features (wave 7)
+```bash
+cd backend
+npm run db:baseline    # records the baseline migration as already applied
+npm run db:migrate     # applies the audit-hardening migration
+```
 
-- **SSE live updates** — notification bell + job chat use `EventSource` (`/api/notifications/stream`, `/api/messages/:jobId/stream`) with JWT via `?token=`; automatic **polling fallback** if SSE fails
-- **Haversine ranking** — `nearLat` / `nearLng` / `maxKm` + `sort=distance` on job browse and find-pros; cards show approximate **km** when coords exist
-- **Structured quotes** — pros attach quote amount + notes + optional PDF/image on a **bid** or in **chat**; homeowners see a clear quote block on bid compare
-- **Admin match-quality lite** — `/admin/match` (and overview teaser): open jobs vs nearby verified pros (same city or ≤25 km)
-- `npm run wave7:smoke` API smoke for SSE / distance / quote / match-quality
+Then restart `npm run dev`. The API refuses to start while migrations are pending (set `MIGRATIONS_RUN=true` to apply them on start instead).
 
+What the hardening migration changes in existing data:
 
-## Features (wave 8)
+- Chat messages are assigned to per-professional threads. Messages on jobs that never had a bid are removed, and existing messages are marked read.
+- Invites and saved templates move from JSON columns into their own tables (`job_invites`, `user_templates`), and a payment ledger (`ledger_entries`) is back-filled from existing escrow milestones.
+- New constraints are added (one bid per pro per job, one accepted bid per job, one open dispute per job, money amounts non-negative).
 
-- **Richer match scoring** — verified pros scored vs a job (skills∩category, rating, response time, distance); admin Match page shows best score + top pros; homeowners see **Suggested pros** on open job detail
-- **Map pin picker** — Leaflet map on job create (click/drag pin); stores `lat`/`lng` (no PostGIS)
-- **Accept quote → escrow** — when a bid has `quoteAmount`, simulated escrow prefers the quote; clearer confirm/toast copy
-- **Frontend bundle split** — `React.lazy` + `Suspense` per route to shrink the main chunk
-- `npm run wave8:smoke` API smoke for scores / coords / suggested-pros / quote→escrow
+`npm run db:revert` undoes the latest migration.
 
-## Features (wave 9)
+## Configuration
 
-- **Invite suggested pro** — from open job detail; in-app `match` notification + optional message (`POST /api/jobs/:id/invite-pro`)
-- **ICS export** — **Add to calendar** on confirmed visit schedule (client `.ics` download)
-- **Escrow source** — `job.escrowSource` (`quote` | `bid`) stored on accept; shown on PaymentPanel + payments API
-- Soft UX polish (invite composer, escrow source copy, match prefs hint)
-- `npm run wave9:smoke` API smoke for invite / escrowSource / confirmed schedule → ICS shape
+Every backend setting is documented in [`backend/.env.example`](backend/.env.example) and validated at startup (`backend/src/config.ts`). In production the API refuses to start with a weak `JWT_SECRET` or a missing `FILE_URL_SECRET` (32+ characters each).
 
+Frontend settings ([`frontend/.env.example`](frontend/.env.example)):
 
-## Features (wave 10)
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `VITE_API_URL` | empty | Leave empty: the dev server and nginx proxy `/api`, so everything is same-origin |
+| `VITE_PROXY_TARGET` | `http://localhost:3001` | Where the Vite dev server sends `/api` |
+| `VITE_DEMO_MODE` | `false` | Show demo accounts on the login page |
+| `VITE_MAP_TILE_URL` / `VITE_MAP_ATTRIBUTION` | OpenStreetMap | OSM's public tiles are for light use only; use a provider with a production policy before launch |
 
-- **Invite guards** — server-side **already invited** (409), per-job invite cap, soft **cooldown** after decline
-- **Decline invite** — pros can soft-decline; homeowner gets an in-app match notification
-- **Invite deep-link** — notification opens `/tradesperson/jobs/:id?invite=1#bid-form` with banner + bid form scroll
-- **Calendar links** — Google + Outlook deeplinks; ICS uses **Asia/Kolkata** `VTIMEZONE` / `TZID`
-- **Escrow source on invoice** — printable/downloadable milestone summary shows quote vs bid source
-- **Admin audit notes** — optional freeform notes on Audit (`POST /api/admin/audit-notes`)
-- **Invite from Find Pros profile** — homeowners invite a verified pro to an open job from the public profile page
-- `npm run wave10:smoke` API smoke for invite guards / decline / deep-link / admin note / ICS TZ
+## Testing
 
-## Features (wave 11)
+| Command | What it covers |
+| --- | --- |
+| `cd backend && npm test` | 160+ API tests on a throwaway database (`fixlocal_test`, Redis DB 15): every audit finding's repro, an 840-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, performance smoke |
+| `cd backend && npm run test:coverage` | The same with a coverage report |
+| `cd frontend && npm test` | UI unit tests: token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary |
+| `cd frontend && npm run test:e2e` | 20 Playwright journeys in a real browser against a real API |
+| `npm run lint` / `npm run typecheck` | In both packages |
 
-- **Invite history** on homeowner job detail — who was invited, by whom, when, pending vs declined, optional decline reason/note
-- **Cooldown countdown UI** after a pro declines (1h soft cooldown from `declinedAt`)
-- **Decline reason chips** — Busy / Schedule conflict / Too far / Rate mismatch / Not my specialty / Other (+ optional note)
-- **Stronger invoice** — parties (homeowner + pro), escrow source, recent job-scoped audit note snippets
-- **Bulk invite** — select multiple suggested pros, one shared message + confirm; server `POST /api/jobs/:id/invite-pros` is rate-limit aware
-- `GET /api/jobs/:id/invites` for invite history + quota
-- Bugfix: invite cooldown now keyed off `declinedAt` (not original invite `createdAt`)
-- `npm run wave11:smoke` API smoke for history / bulk / decline chips / invoice parties+audit
+The end-to-end suite starts its own API on port **3101** with a fresh `fixlocal_e2e` database (Redis DB 14), and a Vite server on port **5174**. It never touches the development database or the servers on 3001/5173. The first run needs `npx playwright install chromium`.
 
+The E2E journeys cover:
 
+1. Client sign-up, email verification, and the job wizard with photos and a map pin.
+2. Pro sign-up, pending verification, licence upload, admin verification, filters, saved search, and a bid with a quote PDF.
+3. Bid comparison, counter-offer, pro revision, and acceptance with the escrow split.
+4. A quote changing between page load and acceptance.
+5. Scheduling and calendar export.
+6. Private chat threads, attachments, live updates, and polling fallback.
+7. Start work, before/after photos, mark done, confirm, reviews both ways, and the invoice.
+8. A dispute with evidence and a refund.
+9. Admin tools: stats, suspension, force-cancel, and audit rollback.
+10. Invites and declines.
+11. Shortlist and Find Pros filters.
+12. AMC (maintenance contract) proposals.
+13. Settings.
+14. Session expiry and logout.
+15. Mobile layout.
+16. Public pages and legacy URLs.
 
+`.github/workflows/ci.yml` runs lint, type checks, both unit suites with coverage, the E2E suite, `npm audit --audit-level=high`, and the Docker builds on every push and pull request. Dependabot keeps dependencies current.
 
+The `frontend/scripts/*-smoke.mjs` scripts (`npm run waveNN:smoke`, `npm run e2e:*`) are **legacy** checks from the course. They read `API_URL`, `FE_URL` and `SEED_PASSWORD`, and some assume behaviour that has since changed (e.g. unverified accounts posting jobs). The suites above replace them.
 
+## Security model
 
-
-## Features (wave 24)
-
-- **Invite + pro counter-template create/edit in Settings** — same pattern as homeowner notes: add / edit / remove chips beyond defaults + Sync to User (`inviteTemplates`, `counterTemplates`)
-- **Named best-value blend presets** — Match-heavy (70/30) · Price-heavy (30/70) · Balanced + SLA (50/35/15) on Admin → Match; audited like manual blend saves
-- **Live blend preview** — Admin → Match previews the current (or draft) blend against a sample of open jobs with competing bids (top ranked bids via `GET /api/admin/best-value-blend/preview`)
-- Soft polish on Settings/Match copy; `npm run wave24:smoke` API smoke for template upsert / blend presets / live preview
-
-## Features (wave 23)
-
-- **Custom homeowner note create/edit in Settings** — add / edit / remove counter-note chips beyond defaults + Sync to User (`homeownerCounterTemplates`)
-- **Admin audit on `best_value_blend`** — dedicated `best_value_blend_update` audit rows with before/after snapshots; **Rollback blend** on Admin → Audit (`POST /api/admin/best-value-blend/rollback`)
-- **Optional third blend weight** — fold **response SLA + availability heat** into best-value (`slaHeatPct`; 0 = off); Admin → Match toggle / weight; why-value drawer shows `sh` bar
-- Soft polish on bid compare + Match admin copy; `npm run wave23:smoke` API smoke for note upsert path / blend audit+rollback / slaHeatPct / listBids blend
-
-## Features (wave 22)
-
-- **Homeowner counter-note templates on User** — request-revise chips sync like invite/pro templates (`homeownerCounterTemplates` on Settings + `/api/auth/me`)
-- **Admin-tunable best-value blend** — `best_value_blend` AppConfig (match % vs lower-hold %); Admin → Match; returned on `GET .../bids` as `bestValueBlend`
-- **Why best value drawer** — per-bid explain (matchNorm · priceNorm · weights) + optional **per-bid counter sparkline**
-- **Availability-first match preset** — fourth preset with **heatWeight 20** (skills 20 / rating 15 / response 30 / distance 35)
-- **Soft peer counter amount hint** — from clean peer best-value holds on request-revise
-- Soft polish; `npm run wave22:smoke` API smoke for templates / blend / availability preset / listBids blend
-
-## Features (wave 21)
-
-- **Heat weight in match presets + audit rollback** — Balanced / Speed / Quality presets each bake a `heatWeight` (10 / 15 / 8); applying a preset sets heat; audit `before`/`after` snapshots include heat; rollback restores weights **and** heat when the snapshot is clean
-- **Admin Match table heatBoost** — match-quality top pros show `heatBoost` / `rankedScore` (and heat badge in Admin → Match)
-- **Best value bid blend** — homeowner bid compare blends match/ranked score (55%) with lower simulated escrow hold (45%); “Best value” cards + badge when ≥2 competing bids look clean
-- **Counter negotiation timeline / sparkline** — job detail plots suggested counter amounts over time across bids
-- **Homeowner counter-note templates** — request-revise chips (budget tight / smaller scope / flexible timing / meet in middle) fill notes cleanly (defaults only, no new schema)
-- Soft polish on match/audit copy; `npm run wave21:smoke` API smoke for presets+heat rollback / match-quality heatBoost / bid matchScore / counter timeline
-
-## Features (wave 20)
-
-- **Inline escrow what-if on bid compare** — Deposit / Progress / Completion panel on each bid (not only accept confirm); optional try-₹ amount; **side-by-side** cards when ≥2 competing active bids look clean
-- **Admin-tunable heat weight** — `match_heat_weight` in AppConfig (default **10**, max 20); Admin → Match slider; suggested-pros `heatBoost` / `rankedScore` / `heatWeight` respect it
-- **Per-job counter analytics** — `GET /api/bids/counter-analytics?jobId=` cards on homeowner job detail (sent / addressed / declined / avg address time)
-- **Counter template chips on decline** — pro declines homeowner counter via chip UI (busy / materials / floor / freeform); no `window.prompt`
-- Soft polish on bid compare copy; `npm run wave20:smoke` API smoke for heat weight / what-if compare / per-job analytics / decline templates
-
-## Features (wave 19)
-
-- **Counter accept/reject analytics + time-to-address SLA** — `GET /api/bids/counter-analytics` (also `/api/jobs/counter-analytics`, `/api/profile/counter-analytics`): sent / addressed / declined rates, avg/median hours to address or decline, after-address accept vs reject; homeowner dashboard + pro Analytics cards
-- **Heat-aware suggested-pros ranking** — `GET /api/jobs/:id/suggested-pros` adds `availabilityHeat`, `heatBoost` (0–N via admin heat weight), `rankedScore`; sorts by ranked score
-- **Escrow “what-if” calculator** — `GET|POST /api/bids/:id/escrow-what-if?amount=` previews Deposit / Progress / Completion split before accept; confirm dialog shows the split
-- **Pro counter templates** — busy / materials / won’t-go-below-X starters; Settings sync to User `counterTemplates`; decline-counter uses template chips (wave 20; no browser prompt)
-- **Configurable nudge hours** — User `quoteViewNudgeHours` (1–168) in Settings; viewed-no-reply uses per-pro preference (else env/`4`)
-- `npm run wave19:smoke` API smoke for analytics / heat rank / what-if / templates / nudge hours
-
-## Features (wave 18)
-
-- **Counter-offer history + decline** — prior counters archived on replace; pro can `POST /api/bids/:id/counter-offer/decline`; homeowner **suggested −10% / −15% / −20%** presets on request-revise
-- **Find Pros heat sort** — `sort=heat` on `GET /api/profile/browse` (clean + higher score first)
-- **Shortlist invite heat gate** — when availability heat is **clean**, invite-from-shortlist requires heat ≥ N (default **25**); unclean schedules are not blocked
-- **Viewed but no reply** — soft in-app flag + one-shot nudge after quote-viewed with no revise for `QUOTE_VIEW_NUDGE_HOURS` (default **4**); `POST /api/bids/:id/viewed-no-reply`
-- **Soft escrow hold preview** — accepting after an **addressed** counter with a different final amount returns `escrow.softHoldPreview` (simulated payments only)
-- `npm run wave18:smoke` API smoke for history / decline / heat sort / shortlist gate / nudge / escrow preview
-
-## Features (wave 17)
-
-- **Quote-Δ deep-link** — revise notify opens `/homeowner/jobs/:id?bid=:bidId#bid-:bidId` and highlights the bid card
-- **Homeowner counter-offer / request revise** — suggest amount + notes on open bids (`POST /api/bids/:id/counter-offer`); pro notified with deep-link; revising the quote marks the counter **addressed**
-- **Find Pros min heat** — filter by availability heat score (`minHeat` / `minAvailabilityScore` on `GET /api/profile/browse`)
-- Soft **pro alert when homeowner views a revised quote** (`POST /api/bids/:id/quote-viewed`, deduped per revision)
-- Soft polish on empty Find Pros copy; `npm run wave17:smoke` API smoke for deep-link / counter / minHeat / quote-viewed
-
-## Features (wave 16)
-
-- **Quote revision diff UI** — amount Δ (+/−) and notes before→after on homeowner bid compare; pro sees latest Δ
-- **Quote revise notify with delta** — homeowner alert includes amount/notes change summary (`meta.amountDelta`, `notesChanged`)
-- **Shortlist invite funnel** — rank → invite → bid analytics on job detail + homeowner dashboard (`GET /api/jobs/:id/shortlist-invite-analytics`, aggregate `/api/jobs/shortlist-invite-analytics`)
-- **Invite source tagging** — shortlist invites store `source` + `shortlistRank` (+ smartScore) for funnel accuracy
-- **Availability calendar heat** — 7-day heat strip on Find Pros cards from `weeklyAvailability`
-- Soft **best time to invite** hint when weekly schedule is clean
-- `npm run wave16:smoke` API smoke for quote Δ notify / shortlist funnel / browse heat+hint
-
-## Features (wave 15)
-
-
-- **Shortlist smart rank** — when inviting from shortlist on an open job, pros are ranked by live match score + tag boost vs the job category (`GET /api/jobs/:id/shortlist-ranked`)
-- **Quote revision history** — pros can revise structured quotes on active bids; prior amounts/notes are stored and shown on homeowner bid compare (`PATCH /api/bids/:id/quote`)
-- **Find Pros “available this week”** — combo filter with response SLA using `weeklyAvailability` / `blockedDates`
-- **SLA sparkline** — simple CSS/SVG bar+line trend on pro Analytics (plus weekly spark buckets from the API)
-- **Match preset rollback** — Admin Audit can restore a clean `before` snapshot from a `match_weights_update` row (`POST /api/admin/match-weights/rollback`)
-- `npm run wave15:smoke` API smoke for rank / quote history / avail+SLA / sparkline / rollback
-
-## Features (wave 14)
-
-- **SLA trends (7 / 30 days)** on pro Analytics; clean trends also shown on homeowner bid compare
-- **Shortlist notes & tags** on Favorites; **bulk invite from shortlist** on open job detail (and Favorites deep-link)
-- **Match weight presets** — Balanced / Speed-biased / Quality-biased on Admin → Match; **audit log** on every weight change
-- **Find Pros** filter by response SLA tier or max response hours (with SLA badges on results)
-- Soft **shortlist SLA-improve** notify when a saved pro’s reply tier gets faster (deduped 7d)
-- `npm run wave14:smoke` API smoke for trends / notes-tags / presets+audit / SLA browse / shortlist bulk
-
-
-## Features (wave 13)
-
-- **Response SLA badges** — invite→bid (preferred) and/or job→bid latency on bid cards, public pro profiles, suggested pros, and pro analytics (`lightning` / `fast` / `same_day` / `steady` / `slow`)
-- **Homeowner shortlist** — saved pros (favorites) as a cross-job shortlist; **Invite from shortlist** on open job detail
-- **Admin-tunable match weights** — persist sk/rt/rs/ds JSON in `app_configs` (default **35 / 25 / 20 / 20**); editable on Admin → Match
-- Soft polish: Match score drawer respects live weights; analytics SLA chip
-- `npm run wave13:smoke` API smoke for SLA / shortlist / match weights
-
-
-## Features (wave 12)
-
-- **Invite analytics** for homeowners — per-job + aggregate: invites sent, declined, opened/clicked (deep-link / notification read), bid-after-invite rates
-- **Match score explainability** — click a suggested pro’s score to open a drawer with **sk / rt / rs / ds** bars and hints
-- **Invite templates / saved messages** — localStorage starters + job/user saves; Settings sync to User `inviteTemplates`
-- **Stronger printable invoice** — print-CSS polish (A4, color-adjust, parties, dark totals, status pills); print-to-PDF HTML (no jsPDF)
-- **Pro not-interested categories** — soft-skip those categories from suggested pros (direct invite still allowed)
-- Invite history badges for opened / bid-after
-- `npm run wave12:smoke` API smoke for analytics / open tracking / soft-skip / templates / score breakdown
-
+- Passwords: bcrypt (cost 12), 10–128 characters, constant-time login (no user enumeration), per-email and per-IP rate limits.
+- Tokens: access token in memory only; refresh token `httpOnly`, rotated on every use, reuse detection, hashed at rest. `tokenVersion` revokes all sessions.
+- Email verification is required before posting jobs or bidding. Password reset tokens are single-use and expire in one hour.
+- Every request body, query and parameter is validated with zod; errors come back as `{ message, code }` and never leak stack traces.
+- Uploads: file type is checked from the file's content (JPG, PNG, WebP, PDF only). Images are re-encoded (removing EXIF/GPS) and stored under random names. Private files (job photos, chat attachments, dispute evidence, licences) are served only to people allowed to see them, through signed URLs that expire; portfolio images and avatars are public.
+- Contact details (email, phone, exact address, licence document) are only shown to people who need them: the hired pro, the client who hired them, and admins.
+- helmet security headers, a CORS allowlist, request IDs in logs, and graceful shutdown.
+- Admin actions (verification, suspension, disputes, force-cancel, weight changes) are written to an audit log.
 
 ## Project layout
 
 ```
 fixlocal/
-  backend/     Express + TypeORM API
-  frontend/    React + Vite app
-  docs/        Project report
+  backend/
+    src/
+      controllers/   request handlers
+      routes/        URL → middleware → controller
+      policies/      who may do what (job access, chat threads)
+      domain/        job state machine, escrow, matching, time zones
+      serializers/   the only way entities leave the API (no raw rows)
+      middleware/    auth, validation, uploads, rate limits, idempotency, errors
+      services/      files, mailer
+      workers/       auto-confirm, nudges, clean-up
+      migrations/    schema history
+    test/            API test suites
+    Dockerfile
+  frontend/
+    src/
+      api/           typed API client (token refresh lives here)
+      auth/          session state
+      pages/         routes (client, professional, admin)
+      components/
+      lib/
+    e2e/             Playwright journeys
+    Dockerfile, nginx.conf
+  docs/
+  docker-compose.yml
+  .github/           CI and Dependabot
 ```
 
-## Notes
+## Before a real launch
 
-- Redis: `brew services start redis` and keep `REDIS_URL` in `backend/.env`. If Redis is down, the API still works.
-- Admin cannot self-register; use the seed account.
-- Do not commit secrets; `.env` is local.
-- Uploads are stored under `backend/uploads/` and served at `/uploads/...`.
+These need a product or business decision and aren't done yet:
 
-### Wave 25 — marketplace pivot (Client / Professional + categories)
-- User-facing copy: **Client** / **Professional** (internal roles unchanged)
-- Landing rewritten for general work marketplace (not home-repairs-only)
-- Categories expanded: cleaning, construction, office & facilities, tech services, moving (+ existing home-repair specialties)
-- Demo account labels + seed jobs for new lead categories
-- `npm run wave25:smoke` — categories API + copy smoke
-
-
-### Wave 26 — marketplace IA (Client / Professional routes)
-- Route aliases: **`/client/*`** + **`/professional/*`** dual-mounted with legacy `/homeowner` / `/tradesperson`
-- Post-job UX: lead-group chips → specialty chips; optional **residential / office** site tag
-- Register role explainers: “I post work” (Client) / “I bid on work” (Professional)
-- Pro portfolio skills as specialty checkboxes (plus freeform extras)
-- Landing category deep-links → filtered Find Pros / Browse jobs (`?category=`)
-- Copy audit: UI keeps Client/Professional; internal keys stay HOMEOWNER/TRADESPERSON
-- `npm run wave26:smoke` — siteType API + route/IA smoke
-
-
-### Wave 27 — IA / product (no scoring/match math)
-- **Site-type filter chips** on Browse jobs + Find professionals (residential / office; API soft filter for pros)
-- **Job templates per lead group** on post-job (prefill title / description / specialty / site)
-- **Guided Client / Professional onboarding checklist** (dismissible, localStorage)
-- **Soft package / rate cards** on professional portfolio + public profile (visit / half-day / full-day from hourly range)
-- **Service-area multi-select chips** for professionals (Bengaluru neighborhoods + freeform)
-- `npm run wave27:smoke` — siteType browse/find + IA source smoke
-
-
-### Wave 28 — IA / product (no scoring/match math)
-- **Editable custom rate packages** on professional portfolio (beyond soft hourly estimates) + public profile
-- **Lead-group hub pages** from landing (`/categories/:groupSlug`) with specialties + Client/Professional CTAs
-- **Client visit-prep cards** on scheduled/confirmed jobs (soft checklist, localStorage)
-- **Pro intro / first-message templates** in empty job chat + Settings sync (`introTemplates`)
-- Soft polish: empty-state playbooks; **a11y** `aria-pressed` / `role="group"` on site + service-area chips
-- `npm run wave28:smoke` — custom packages API + hub route + introTemplates + IA source smoke
-
-
-### Wave 29 — IA / product (no scoring/match math)
-- **Past-work case-study cards** on professional portfolio + public profile (before/after URLs + notes; gallery quick-pick)
-- **Pro visit-day checklist** on awarded/scheduled jobs (mirrors client VisitPrepCard; localStorage)
-- **Soft job cadence** on post-job: one-time / weekly / monthly / AMC (+ optional note; store only, no full recurring engine)
-- Soft polish: cadence badges/notes on client + professional job detail
-- `npm run wave29:smoke` — caseStudies API + cadence create/patch + IA source smoke
-
-
-### Wave 30 — IA / product (no scoring/match math)
-- **Client “Repeat this job”** from completed jobs — prefills post-job wizard (title/category/siteType/cadence + location/budget soft copy); banner on create wizard; also on client dashboard cards
-- **Case-study one-click publish** — awarded professional publishes before/after completion photos to portfolio (`POST /api/jobs/:id/publish-case-study`)
-- **Soft AMC / recurring proposal card** on awarded jobs — pro proposes package + cadence; client accept / decline / counter reply (`POST .../amc-proposal`, `.../reply`); store only, no billing engine
-- Soft polish: Client/Professional copy; dashboard repeat affordance
-- `npm run wave30:smoke` — AMC propose/reply + publish-case-study + IA source smoke
-
-### Wave 31 — IA / product (no scoring/match math)
-- **AMC proposal pick-from portfolio rate packages** — one-click fill package name + amounts from custom / soft rate cards on the professional AMC form
-- **Named client job templates library** — save completed jobs by name (beyond one-shot repeat); apply on post-job; User sync + Settings
-- **Soft next-visit reminder / calendar hint** when AMC accepted — suggested date from cadence + `.ics` / Google Calendar (tentative; no schedule write)
-- **Case-study photo pair picker** when multiple before/after photos exist — choose which URLs to publish
-- Soft polish: Client/Professional copy; `npm run wave31:smoke` — rate-package fill IA + named templates API + AMC accept ICS + pair picker + source smoke
-
-### Wave 32 — IA / product (no scoring/match math)
-- **Client-initiated “Request AMC” card** — inverse of pro propose on awarded jobs (`POST /api/jobs/:id/amc-request` + pro `.../amc-request/reply` accept/decline/counter); soft only, no billing engine
-- **One-click portfolio package → bid quote fill** — professional bid form fills amount + structured quote from custom / soft rate packages
-- **Named-template search / filter by specialty** on post-job (library chips + All / specialty filters)
-- Soft polish: **case-study draft** autosave (title/notes localStorage) + **multi-event ICS stub** when AMC accepted and a visit is scheduled
-- Soft polish: Client/Professional copy; `npm run wave32:smoke` — AMC request/reply + bid package fill IA + named-template filter + multi-ICS + source smoke
-
-
-
-
-
-
-
-
-- Escrow is entirely simulated for demos/labs.
-- PWA: `frontend/public/manifest.webmanifest` + `sw.js`. Dev SW may need a hard refresh after updates.
-
-See also `docs/project-report.md`.
+- **Payments**: escrow is simulated. A real launch needs a licensed payment gateway with escrow or marketplace payouts (for example Razorpay Route or Stripe Connect), plus refunds, KYC for payouts, invoices and tax handling.
+- **Email**: messages are written to the log (console mailer). Plug a provider (SES, Postmark, SendGrid…) into `backend/src/services/mailer.ts`.
+- **Identity checks**: admins review uploaded licences by hand. Consider an ID-verification service.
+- **SMS / WhatsApp** notifications, if needed.
+- **Hosting**: object storage for uploads (S3 or similar) instead of local disk if you run more than one API instance; managed Postgres and Redis; HTTPS; backups; monitoring and alerting.
+- **Map tiles**: set `VITE_MAP_TILE_URL` to a provider whose terms allow production traffic.
+- **Legal**: terms of service, privacy policy, and cookie notice.

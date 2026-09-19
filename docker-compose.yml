@@ -1,0 +1,71 @@
+# Full stack for a local production-like run: `docker compose up --build`, then open http://localhost:8080
+# Copy .env.example to .env first and set the secrets.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fixlocal
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-fixlocal}
+      POSTGRES_DB: fixlocal
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fixlocal -d fixlocal"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USERNAME: fixlocal
+      DB_PASSWORD: ${DB_PASSWORD:-fixlocal}
+      DB_NAME: fixlocal
+      MIGRATIONS_RUN: "true"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (32+ random characters)}
+      FILE_URL_SECRET: ${FILE_URL_SECRET:?Set FILE_URL_SECRET in .env (32+ random characters)}
+      REDIS_URL: redis://redis:6379
+      UPLOADS_DIR: /app/uploads
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      CORS_ORIGINS: ${APP_URL:-http://localhost:8080}
+      # Set to true when the site is served over HTTPS.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TRUST_PROXY: "true"
+      LOG_LEVEL: info
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_MAP_TILE_URL: ${VITE_MAP_TILE_URL:-}
+        VITE_MAP_ATTRIBUTION: ${VITE_MAP_ATTRIBUTION:-}
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:
