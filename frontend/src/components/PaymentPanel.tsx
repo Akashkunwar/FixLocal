@@ -115,7 +115,11 @@ export function PaymentPanel({
               <button
                 type="button"
                 className="btn-secondary btn-sm touch-target"
-                onClick={() => printMilestoneInvoice(job, data)}
+                onClick={() => {
+                  if (printMilestoneInvoice(job, data) === "downloaded") {
+                    success("Pop-up blocked — the escrow summary was downloaded instead");
+                  }
+                }}
                 title="Print or save as PDF"
               >
                 <Printer className="h-3.5 w-3.5" />

@@ -1,12 +1,13 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Shell } from "../../components/Shell";
 import {
   acceptBid,
+  bidEscrowAmount,
   escrowWhatIf,
   cancelJob,
-  completeJob,
-  createDispute,
+  confirmJobComplete,
+  setPhotoConsent,
   getJob,
   listBids,
   getShortlistRanked,
@@ -30,14 +31,23 @@ import {
   type CounterAnalytics,
   type EscrowWhatIf,
 } from "../../api/jobs";
-import { createReview, getJobReview, addFavorite, removeFavorite, listFavorites } from "../../api/extras";
+import { getJobReview, addFavorite, removeFavorite, listFavorites, type JobReview } from "../../api/extras";
 import { Badge } from "../../components/ui/Badge";
 import { ResponseSlaBadge } from "../../components/ui/ResponseSlaBadge";
 import { Spinner } from "../../components/ui/Spinner";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { StatusTimeline } from "../../components/ui/StatusTimeline";
 import { StarRating } from "../../components/ui/StarRating";
-import { JobChat } from "../../components/JobChat";
+import { Countdown } from "../../components/Countdown";
+import { CounterAmountSparkline } from "./job/CounterAmountSparkline";
+import { ReviewPanel } from "./job/ReviewPanel";
+import { DisputeForm } from "./job/DisputeForm";
+import { ShortlistFunnelPanel } from "./job/ShortlistFunnelPanel";
+import { InviteHistoryList } from "./job/InviteHistoryList";
+import { CounterAnalyticsPanel } from "./job/CounterAnalyticsPanel";
+import { JobConversations } from "../../components/JobConversations";
+import { ReportButton } from "../../components/ReportButton";
+import { ApiError, isAbort } from "../../api/client";
 import { PaymentPanel } from "../../components/PaymentPanel";
 import { CompletionPhotosPanel } from "../../components/CompletionPhotosPanel";
 import { SchedulePanel } from "../../components/SchedulePanel";
@@ -47,6 +57,7 @@ import { clientPath } from "../../lib/paths";
 import { cadenceLabel, normalizeCadence } from "../../lib/jobCadence";
 import { saveRepeatDraft } from "../../lib/repeatJob";
 import {
+  mergeNamedJobTemplates,
   namedTemplateFromJob,
   upsertNamedJobTemplate,
 } from "../../lib/namedJobTemplates";
@@ -55,12 +66,8 @@ import { useAuth } from "../../auth/AuthContext";
 import { categoryEmoji, categoryLabel, fmtDate, fmtDateTime, money } from "../../lib/format";
 import { Heart, MapPin, Send, Users, Info, BarChart3 } from "lucide-react";
 import { MatchScorePanel } from "../../components/MatchScorePanel";
-import {
-  DEFAULT_INVITE_STARTERS,
-  loadMergedInviteTemplates,
-  upsertInviteTemplate,
-  type InviteTemplate,
-} from "../../lib/inviteTemplates";
+import { mergeInviteTemplates } from "../../lib/inviteTemplates";
+import { upsertTextTemplate } from "../../lib/textTemplates";
 import {
   normalizeWeeklyAvailability,
   type WeeklyAvailability,
@@ -78,63 +85,6 @@ import {
 
 
 
-function CounterAmountSparkline({
-  points,
-}: {
-  points: { t: number; amount: number; label: string; status: string; bidId: string }[];
-}) {
-  const vals = points.map((p) => p.amount).filter((a) => Number.isFinite(a) && a > 0);
-  if (vals.length < 2) return null;
-  const minA = Math.min(...vals);
-  const maxA = Math.max(...vals);
-  const span = Math.max(1, maxA - minA);
-  const w = 320;
-  const h = 48;
-  const pad = 4;
-  const step = (w - pad * 2) / Math.max(points.length - 1, 1);
-  const coords = points.map((p, i) => {
-    const x = pad + i * step;
-    const y = h - pad - ((p.amount - minA) / span) * (h - pad * 2);
-    return { x, y, ...p };
-  });
-  const poly = coords.map((c) => `${c.x},${c.y}`).join(" ");
-  return (
-    <div className="mt-2">
-      <svg viewBox={`0 0 ${w} ${h}`} className="h-12 w-full max-w-md" role="img" aria-label="Counter amount sparkline">
-        <polyline
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.75"
-          className="text-violet-600"
-          points={poly}
-        />
-        {coords.map((c, i) => (
-          <circle
-            key={`${c.bidId}-${c.t}-${i}`}
-            cx={c.x}
-            cy={c.y}
-            r={2.5}
-            className={
-              c.status === "declined"
-                ? "fill-rose-500"
-                : c.status === "addressed"
-                  ? "fill-emerald-600"
-                  : "fill-violet-700"
-            }
-          >
-            <title>
-              {c.label}: ₹{Math.round(c.amount)} · {c.status}
-            </title>
-          </circle>
-        ))}
-      </svg>
-      <p className="text-[10px] text-slate-400">
-        ₹{Math.round(minA)} → ₹{Math.round(maxA)} · {points.length} counters
-      </p>
-    </div>
-  );
-}
-
 export function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -143,13 +93,9 @@ export function JobDetailPage() {
   const [job, setJob] = useState<Job | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
   const [loading, setLoading] = useState(true);
-  const [disputeReason, setDisputeReason] = useState("");
-  const [disputeFiles, setDisputeFiles] = useState<File[]>([]);
   const [showDispute, setShowDispute] = useState(false);
-  const [disputeBusy, setDisputeBusy] = useState(false);
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState("");
-  const [review, setReview] = useState<{ rating: number; comment?: string } | null>(null);
+  const [review, setReview] = useState<JobReview | null>(null);
+  const [proReview, setProReview] = useState<JobReview | null>(null);
   const [saved, setSaved] = useState(false);
   const [proAvailability, setProAvailability] = useState<WeeklyAvailability | null>(null);
   const [proBlockedDates, setProBlockedDates] = useState<string[]>([]);
@@ -197,7 +143,7 @@ export function JobDetailPage() {
   const [shortlistBulkOpen, setShortlistBulkOpen] = useState(false);
   const [shortlistBulkMsg, setShortlistBulkMsg] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
-  const [templates, setTemplates] = useState<InviteTemplate[]>([]);
+  const inviteTemplates = useMemo(() => mergeInviteTemplates(user?.inviteTemplates), [user?.inviteTemplates]);
   const [tplLabel, setTplLabel] = useState("");
   const [highlightBidId, setHighlightBidId] = useState<string | null>(null);
   const [counterBidId, setCounterBidId] = useState<string | null>(null);
@@ -218,15 +164,26 @@ export function JobDetailPage() {
   const [whatIfCustom, setWhatIfCustom] = useState<Record<string, string>>({});
   const quoteViewedSent = useRef(new Set<string>());
 
+  const loadSeq = useRef(0);
+  const loadAbort = useRef<AbortController | null>(null);
+
+  /** Loads everything for the page; a newer call (or leaving the page) cancels older ones. */
   async function load() {
     if (!id) return;
-    setLoading(true);
+    loadAbort.current?.abort();
+    const ctrl = new AbortController();
+    loadAbort.current = ctrl;
+    const seq = ++loadSeq.current;
+    const current = () => seq === loadSeq.current && !ctrl.signal.aborted;
+    const soft = <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
+    if (!job || job.id !== id) setLoading(true);
     try {
       const [j, b, r] = await Promise.all([
-        getJob(id),
-        listBids(id),
-        getJobReview(id).catch(() => ({ review: null })),
+        getJob(id, ctrl.signal),
+        listBids(id, ctrl.signal),
+        soft(getJobReview(id, ctrl.signal)),
       ]);
+      if (!current()) return;
       setJob(j.job);
       setBids(b.bids);
       if (b.bestValueBlend?.matchPct != null && b.bestValueBlend?.pricePct != null) {
@@ -237,66 +194,36 @@ export function JobDetailPage() {
         });
       }
       setHoNoteTemplates(mergeHomeownerCounterNotes(user?.homeownerCounterTemplates));
-      setReview(r.review);
-      const accepted = b.bids.find((x) => x.id === j.job.acceptedBidId);
-      if (accepted?.tradespersonId) {
-        try {
-          const pub = await getPublicProfile(accepted.tradespersonId);
-          setProAvailability(
-            pub.profile.weeklyAvailability
-              ? normalizeWeeklyAvailability(pub.profile.weeklyAvailability)
-              : null
-          );
-          setProBlockedDates(pub.profile.blockedDates || []);
-        } catch {
-          setProAvailability(null);
-          setProBlockedDates([]);
-        }
-      } else {
-        setProAvailability(null);
-        setProBlockedDates([]);
-      }
-      if (j.job.status === "open") {
-        try {
-          const s = await getSuggestedPros(id, 5);
-          setSuggestedPros(s.suggestions || []);
-        } catch {
-          setSuggestedPros([]);
-        }
-      } else {
-        setSuggestedPros([]);
-      }
-      try {
-        const inv = await listJobInvites(id);
-        setInviteHistory(inv.invites || []);
-        setInviteQuota({ used: inv.used, limit: inv.limit, remaining: inv.remaining });
-        const pendingIds = (inv.invites || [])
-          .filter((x) => x.status === "pending")
-          .map((x) => x.tradespersonId);
-        setInvitedIds((prev) => [...new Set([...prev, ...pendingIds])]);
-      } catch {
-        setInviteHistory([]);
-        setInviteQuota(null);
-      }
-      try {
-        const a = await getJobInviteAnalytics(id);
-        setInviteAnalytics(a);
-      } catch {
-        setInviteAnalytics(null);
-      }
-      try {
-        const ca = await getCounterAnalytics({ jobId: id });
-        setCounterAnalytics(ca);
-      } catch {
-        setCounterAnalytics(null);
-      }
-      setTemplates(loadMergedInviteTemplates(id));
+      setReview(r?.review ?? null);
+      setProReview(r?.proReview ?? null);
 
-      try {
-        const ranked = await getShortlistRanked(id);
-        if (ranked.shortlistInviteMinHeat != null) {
-          setShortlistMinHeat(Number(ranked.shortlistInviteMinHeat) || 25);
-        }
+      const accepted = b.bids.find((x) => x.id === j.job.acceptedBidId);
+      const isOpen = j.job.status === "open";
+      const [pub, suggested, inv, inviteStats, counters, ranked] = await Promise.all([
+        accepted?.tradespersonId ? soft(getPublicProfile(accepted.tradespersonId)) : Promise.resolve(null),
+        isOpen ? soft(getSuggestedPros(id, 5)) : Promise.resolve(null),
+        soft(listJobInvites(id)),
+        soft(getJobInviteAnalytics(id)),
+        soft(getCounterAnalytics({ jobId: id })),
+        soft(getShortlistRanked(id)),
+      ]);
+      if (!current()) return;
+      setProAvailability(
+        pub?.profile.weeklyAvailability ? normalizeWeeklyAvailability(pub.profile.weeklyAvailability) : null
+      );
+      setProBlockedDates(pub?.profile.blockedDates || []);
+      setSuggestedPros(suggested?.suggestions || []);
+      setInviteHistory(inv?.invites || []);
+      setInviteQuota(inv ? { used: inv.used, limit: inv.limit, remaining: inv.remaining } : null);
+      if (inv) {
+        const pendingIds = inv.invites.filter((x) => x.status === "pending").map((x) => x.tradespersonId);
+        setInvitedIds((prev) => [...new Set([...prev, ...pendingIds])]);
+      }
+      setInviteAnalytics(inviteStats);
+      setCounterAnalytics(counters);
+
+      if (ranked) {
+        if (ranked.shortlistInviteMinHeat != null) setShortlistMinHeat(Number(ranked.shortlistInviteMinHeat) || 25);
         setShortlistPros(
           (ranked.shortlist || []).map((p) => ({
             userId: p.userId,
@@ -318,37 +245,37 @@ export function JobDetailPage() {
             shortlistInviteMinHeat: p.shortlistInviteMinHeat,
           }))
         );
-      } catch {
-        try {
-          const fav = await listFavorites("pro");
-          setShortlistPros(
-            (fav.favorites || [])
-              .filter((f: any) => f.targetType === "pro" && f.pro)
-              .map((f: any) => ({
-                userId: f.targetId,
-                name: f.pro?.name,
-                skills: f.pro?.skills,
-                averageRating: Number(f.pro?.averageRating || 0),
-                reviewCount: f.pro?.reviewCount || 0,
-                verificationStatus: f.pro?.verificationStatus,
-                notes: f.notes || null,
-                tags: f.tags || [],
-                responseSla: f.pro?.responseSla || null,
-              }))
-          );
-        } catch {
-          setShortlistPros([]);
-        }
+      } else {
+        const fav = await soft(listFavorites("pro"));
+        if (!current()) return;
+        setShortlistPros(
+          (fav?.favorites || [])
+            .filter((f) => f.targetType === "pro" && f.pro)
+            .map((f) => ({
+              userId: f.targetId,
+              name: f.pro?.name,
+              skills: f.pro?.skills,
+              averageRating: Number(f.pro?.averageRating || 0),
+              reviewCount: f.pro?.reviewCount || 0,
+              verificationStatus: f.pro?.verificationStatus,
+              notes: f.notes || null,
+              tags: f.tags || [],
+              responseSla: (f.pro?.responseSla as SuggestedPro["responseSla"]) || null,
+            }))
+        );
       }
-    } catch (e: any) {
-      error(e.message || "Failed to load job");
+    } catch (e) {
+      if (isAbort(e) || !current()) return;
+      error((e as Error).message || "Failed to load job");
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
+    return () => loadAbort.current?.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Deep-link from Favorites: ?shortlistInvite=id1,id2
@@ -402,12 +329,17 @@ export function JobDetailPage() {
     }
   }, [job, bids]);
 
+  // Re-render the page only when a cooldown ends; the visible countdowns tick on their own.
   useEffect(() => {
-    const hasCooldown = inviteHistory.some((i) => i.inCooldown && i.cooldownUntil);
-    if (!hasCooldown) return;
-    const tmr = window.setInterval(() => setNowTick(Date.now()), 1000);
-    return () => window.clearInterval(tmr);
-  }, [inviteHistory]);
+    const now = Date.now();
+    const next = inviteHistory
+      .map((i) => (i.inCooldown && i.cooldownUntil ? new Date(i.cooldownUntil).getTime() : 0))
+      .filter((t) => t > now)
+      .sort((a, b) => a - b)[0];
+    if (!next) return;
+    const tmr = window.setTimeout(() => setNowTick(Date.now()), next - now + 50);
+    return () => window.clearTimeout(tmr);
+  }, [inviteHistory, nowTick]);
 
   const cooldownByPro = useMemo(() => {
     const map = new Map<string, JobInvite>();
@@ -422,18 +354,6 @@ export function JobDetailPage() {
     }
     return map;
   }, [inviteHistory, nowTick]);
-
-  function formatCountdown(ms: number) {
-    const s = Math.max(0, Math.ceil(ms / 1000));
-    const m = Math.floor(s / 60);
-    const r = s % 60;
-    if (m >= 60) {
-      const h = Math.floor(m / 60);
-      const mm = m % 60;
-      return `${h}h ${mm}m`;
-    }
-    return `${m}:${String(r).padStart(2, "0")}`;
-  }
 
   function toggleSelectPro(userId: string) {
     setSelectedInviteIds((prev) =>
@@ -814,8 +734,9 @@ export function JobDetailPage() {
 
   async function onAccept(bidId: string) {
     const bid = bids.find((b) => b.id === bidId);
-    const hasQuote = bid?.quoteAmount != null && Number(bid.quoteAmount) > 0;
-    const escrowPreview = hasQuote ? Number(bid!.quoteAmount) : Number(bid?.amount || 0);
+    if (!bid) return;
+    const hasQuote = bid.quoteAmount != null && Number(bid.quoteAmount) > 0;
+    const escrowPreview = bidEscrowAmount(bid);
     const counter = bid?.counterOffer;
     const counterAddressed = counter?.status === "addressed";
     const counterSuggested =
@@ -857,7 +778,7 @@ export function JobDetailPage() {
     const ok = confirm(msg);
     if (!ok) return;
     try {
-      const r = await acceptBid(bidId);
+      const r = await acceptBid(bid);
       const src = r.escrow?.source === "quote" ? "quote" : "bid";
       const amt = r.escrow?.amount ?? escrowPreview;
       const previewNote = r.escrow?.softHoldPreview?.note;
@@ -869,24 +790,48 @@ export function JobDetailPage() {
             : `Accepted · ₹${Number(amt).toFixed(0)} held from bid (simulated escrow)`
       );
       load();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "QUOTE_CHANGED") {
+        const now = Number(e.details?.currentAmount);
+        error(
+          `The professional changed their quote${Number.isFinite(now) ? ` to ₹${now.toFixed(0)}` : ""}. Review the new amount and accept again.`
+        );
+        setHighlightBidId(bidId);
+        load();
+        return;
+      }
+      error((e as Error).message);
     }
   }
 
   async function onComplete() {
+    const pending = job?.status === "pending_confirmation";
+    const ok = confirm(
+      pending
+        ? "Confirm the work is complete? Any payment still held will be released to the professional."
+        : "Mark this job complete now? Any payment still held will be released to the professional, even though they haven't marked the work done."
+    );
+    if (!ok) return;
     try {
-      const r = await completeJob(id!);
+      const r = await confirmJobComplete(id!);
       if (r.autoReleased && r.autoReleased.count > 0) {
-        success(
-          `Job completed — ${r.autoReleased.count} remaining escrow milestone(s) auto-released`
-        );
+        success(`Job completed — ${r.autoReleased.count} remaining payment milestone(s) released`);
       } else {
         success("Job marked completed");
       }
       load();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
+    }
+  }
+
+  async function onPhotoConsent(consent: boolean) {
+    try {
+      const r = await setPhotoConsent(id!, consent);
+      setJob(r.job);
+      success(consent ? "The professional may publish photos from this job" : "Photo publishing turned off");
+    } catch (e) {
+      error((e as Error).message);
     }
   }
 
@@ -901,33 +846,9 @@ export function JobDetailPage() {
     }
   }
 
-  async function onDispute(e: FormEvent) {
-    e.preventDefault();
-    setDisputeBusy(true);
-    try {
-      await createDispute(id!, { reason: disputeReason, files: disputeFiles });
-      success("Dispute opened with evidence");
-      setShowDispute(false);
-      setDisputeReason("");
-      setDisputeFiles([]);
-      load();
-    } catch (err: any) {
-      error(err.message);
-    } finally {
-      setDisputeBusy(false);
-    }
-  }
 
-  async function onReview(e: FormEvent) {
-    e.preventDefault();
-    try {
-      await createReview(id!, rating, comment);
-      success("Thanks for your review!");
-      load();
-    } catch (err: any) {
-      error(err.message);
-    }
-  }
+
+
 
   async function toggleSave() {
     try {
@@ -954,12 +875,9 @@ export function JobDetailPage() {
   }
 
   const sortedBids = [...bids].sort((a, b) => Number(a.amount || 0) - Number(b.amount || 0));
-  const canMessage =
-    job.status === "open" ||
-    job.status === "awarded" ||
-    job.status === "in_progress" ||
-    job.status === "completed" ||
-    job.status === "disputed";
+  const liveWork = ["awarded", "in_progress", "pending_confirmation"].includes(job.status);
+  const hired = liveWork || job.status === "completed" || job.status === "disputed";
+  const canMessage = job.status === "open" || hired || (job.status === "cancelled" && !!job.acceptedBidId);
   const showEscrow =
     !!job.acceptedBidId ||
     ["held", "partially_released", "released", "refunded", "simulated_paid"].includes(
@@ -1029,9 +947,13 @@ export function JobDetailPage() {
               </div>
             )}
             <div className="flex flex-wrap gap-2 pt-2">
-              {(job.status === "awarded" || job.status === "in_progress") && (
-                <button type="button" className="btn-primary" onClick={onComplete}>
-                  Mark completed
+              {liveWork && (
+                <button
+                  type="button"
+                  className={job.status === "pending_confirmation" ? "btn-primary" : "btn-secondary"}
+                  onClick={onComplete}
+                >
+                  {job.status === "pending_confirmation" ? "Confirm work is complete" : "Mark completed"}
                 </button>
               )}
               {job.status === "completed" && (
@@ -1058,12 +980,16 @@ export function JobDetailPage() {
                         window.prompt("Name this job template", suggested)?.trim() ||
                         suggested;
                       const entry = namedTemplateFromJob(job, name);
-                      const list = upsertNamedJobTemplate(entry);
                       try {
-                        await updateProfile({ namedJobTemplates: list });
+                        await updateProfile({
+                          namedJobTemplates: upsertNamedJobTemplate(
+                            mergeNamedJobTemplates(user?.namedJobTemplates),
+                            entry
+                          ),
+                        });
                         success(`Saved “${entry.name}” to your job templates`);
-                      } catch (e: any) {
-                        success(`Saved “${entry.name}” locally (sync later in Settings)`);
+                      } catch (e) {
+                        error((e as Error).message || "Couldn't save the template");
                       }
                     }}
                   >
@@ -1076,50 +1002,31 @@ export function JobDetailPage() {
                   Cancel job
                 </button>
               )}
-              {(job.status === "awarded" ||
-                job.status === "in_progress" ||
-                job.status === "completed") && (
+              {(liveWork || job.status === "completed") && (
                 <button type="button" className="btn-secondary" onClick={() => setShowDispute(true)}>
                   Open dispute
                 </button>
               )}
             </div>
+            {job.status === "pending_confirmation" && (
+              <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200" role="status">
+                The professional marked this job as done. Confirm to release the remaining payment, or open a
+                dispute if something isn't right. It will be confirmed automatically in a few days if you don't respond.
+              </p>
+            )}
             {showDispute && (
-              <form onSubmit={onDispute} className="space-y-3 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200">
-                <label className="label">Why are you disputing?</label>
-                <textarea
-                  className="input"
-                  required
-                  placeholder="Describe the issue clearly for the admin."
-                  value={disputeReason}
-                  onChange={(e) => setDisputeReason(e.target.value)}
-                />
-                <div>
-                  <label className="label">Evidence (photos or PDF, up to 5)</label>
-                  <input
-                    className="input"
-                    type="file"
-                    accept="image/*,application/pdf"
-                    multiple
-                    onChange={(e) => setDisputeFiles(Array.from(e.target.files || []).slice(0, 5))}
-                  />
-                  {disputeFiles.length > 0 && (
-                    <p className="mt-1 text-xs text-slate-600">{disputeFiles.length} file(s) attached</p>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button type="submit" className="btn-primary btn-sm" disabled={disputeBusy}>
-                    {disputeBusy ? "Submitting…" : "Submit dispute"}
-                  </button>
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => setShowDispute(false)}>
-                    Cancel
-                  </button>
-                </div>
-              </form>
+              <DisputeForm
+                jobId={job.id}
+                onCancel={() => setShowDispute(false)}
+                onOpened={() => {
+                  setShowDispute(false);
+                  load();
+                }}
+              />
             )}
           </section>
 
-          {(job.status === "awarded" || job.status === "in_progress") && (
+          {liveWork && (
             <SchedulePanel
               job={job}
               userId={user?.id}
@@ -1130,9 +1037,7 @@ export function JobDetailPage() {
             />
           )}
 
-          {(job.status === "awarded" || job.status === "in_progress") && (
-            <VisitPrepCard job={job} />
-          )}
+          {(job.status === "awarded" || job.status === "in_progress") && <VisitPrepCard job={job} />}
           {job.cadence && normalizeCadence(job.cadence) !== "one_time" && (
             <p className="rounded-xl bg-violet-50 px-3 py-2 text-xs text-violet-900 ring-1 ring-violet-100">
               <span className="font-semibold">Cadence preference:</span>{" "}
@@ -1142,35 +1047,39 @@ export function JobDetailPage() {
             </p>
           )}
 
-          {(job.status === "awarded" ||
-            job.status === "in_progress" ||
-            job.status === "completed") && (
-            <AmcProposalCard job={job} role="client" onChanged={load} />
-          )}
+          {(liveWork || job.status === "completed") && <AmcProposalCard job={job} role="client" onChanged={load} />}
 
           {showEscrow && (
             <PaymentPanel
               job={job}
-              canRelease={job.status === "awarded" || job.status === "in_progress" || job.status === "completed"}
+              canRelease={liveWork || job.status === "completed"}
               onChanged={load}
             />
           )}
 
-          {(job.status === "awarded" ||
-            job.status === "in_progress" ||
-            job.status === "completed" ||
-            job.status === "disputed") && (
-            <CompletionPhotosPanel
-              job={job}
-              canEdit={
-                job.status === "awarded" ||
-                job.status === "in_progress" ||
-                job.status === "completed" ||
-                job.status === "disputed"
-              }
-              onChanged={load}
-            />
+          {hired && (
+            <CompletionPhotosPanel job={job} canEdit={hired} onChanged={load} />
           )}
+
+          {job.status === "completed" && (job.beforePhotoUrls?.length || job.afterPhotoUrls?.length) ? (
+            <section className="card p-5">
+              <label className="flex items-start gap-3 text-sm" htmlFor="photo-consent">
+                <input
+                  id="photo-consent"
+                  type="checkbox"
+                  className="mt-1"
+                  checked={!!job.photoConsent}
+                  onChange={(e) => onPhotoConsent(e.target.checked)}
+                />
+                <span>
+                  <span className="font-medium text-slate-900">Allow the professional to show these photos in their portfolio</span>
+                  <span className="block text-slate-500">
+                    Only the completion photos are shared, never your address. You can turn this off at any time.
+                  </span>
+                </span>
+              </label>
+            </section>
+          ) : null}
 
           {job.status === "open" && shortlistPros.length > 0 && (
             <section className="card p-6 space-y-3">
@@ -1367,48 +1276,7 @@ export function JobDetailPage() {
             </section>
           )}
 
-          {shortlistFunnel && shortlistFunnel.ranked > 0 && (
-            <section className="card p-5 space-y-3">
-              <div>
-                <h2 className="text-lg font-semibold">Shortlist invite funnel</h2>
-                <p className="text-xs text-slate-500">
-                  Rank → invite → bid conversion for pros on your shortlist
-                  {shortlistFunnel.avgRankBid != null
-                    ? ` · avg rank of bidders #${shortlistFunnel.avgRankBid}`
-                    : ""}
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {shortlistFunnel.funnel.map((s) => (
-                  <div key={s.stage} className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-400">{s.label}</p>
-                    <p className="text-xl font-bold text-slate-900">{s.count}</p>
-                    <p className="text-[11px] text-slate-500">
-                      {s.stage === "ranked" ? "pool" : `${s.rate}%`}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              {shortlistFunnel.byRank && shortlistFunnel.byRank.length > 0 && (
-                <ul className="space-y-1">
-                  {shortlistFunnel.byRank.slice(0, 8).map((r) => (
-                    <li
-                      key={r.rank}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-2.5 py-1.5 text-xs ring-1 ring-slate-100"
-                    >
-                      <span className="font-medium text-slate-800">
-                        Rank #{r.rank}
-                        {r.names?.length ? ` · ${r.names.slice(0, 2).join(", ")}` : ""}
-                      </span>
-                      <span className="text-slate-500">
-                        invited {r.invited} · bid {r.bidAfter}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          )}
+          {shortlistFunnel && shortlistFunnel.ranked > 0 && <ShortlistFunnelPanel funnel={shortlistFunnel} />}
 
           {job.status === "open" && (suggestedPros.length > 0 || inviteHistory.length > 0) && (
             <section className="card p-4 sm:p-6 space-y-4">
@@ -1489,7 +1357,7 @@ export function JobDetailPage() {
                               </p>
                               {inCool && (
                                 <p className="mt-1 text-[11px] font-medium text-amber-800">
-                                  Cooldown · retry in {formatCountdown(coolMs)}
+                                  Cooldown · retry in <Countdown until={cool!.cooldownUntil!} />
                                 </p>
                               )}
                             </div>
@@ -1526,7 +1394,7 @@ export function JobDetailPage() {
                                   already
                                     ? "Already invited"
                                     : inCool
-                                      ? `Cooldown ${formatCountdown(coolMs)}`
+                                      ? `Cooldown until ${new Date(cool!.cooldownUntil!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                                       : "Invite to bid"
                                 }
                               >
@@ -1560,7 +1428,7 @@ export function JobDetailPage() {
                           <div>
                             <label className="label">Optional shared message</label>
                             <div className="mb-2 flex flex-wrap gap-1.5">
-                              {[...DEFAULT_INVITE_STARTERS, ...templates].slice(0, 6).map((tpl) => (
+                              {inviteTemplates.slice(0, 6).map((tpl) => (
                                 <button
                                   key={`b-${tpl.id}`}
                                   type="button"
@@ -1613,7 +1481,7 @@ export function JobDetailPage() {
                       <div>
                         <label className="label">Optional message</label>
                         <div className="mb-2 flex flex-wrap gap-1.5">
-                          {[...DEFAULT_INVITE_STARTERS, ...templates].slice(0, 8).map((tpl) => (
+                          {inviteTemplates.slice(0, 8).map((tpl) => (
                             <button
                               key={tpl.id}
                               type="button"
@@ -1643,19 +1511,21 @@ export function JobDetailPage() {
                             type="button"
                             className="btn-ghost btn-sm"
                             disabled={!inviteMessage.trim()}
-                            onClick={() => {
-                              if (!id || !inviteMessage.trim()) return;
-                              const next = upsertInviteTemplate(
-                                {
-                                  id: `tpl-${Date.now()}`,
-                                  label: tplLabel.trim() || "Saved",
-                                  body: inviteMessage.trim(),
-                                },
-                                { jobId: id, userLevel: true }
-                              );
-                              setTemplates(next);
-                              setTplLabel("");
-                              success("Invite template saved");
+                            onClick={async () => {
+                              if (!inviteMessage.trim()) return;
+                              try {
+                                await updateProfile({
+                                  inviteTemplates: upsertTextTemplate(
+                                    inviteTemplates,
+                                    { label: tplLabel.trim() || "Saved", body: inviteMessage },
+                                    "tpl"
+                                  ),
+                                });
+                                setTplLabel("");
+                                success("Invite template saved");
+                              } catch (e) {
+                                error((e as Error).message || "Couldn't save template");
+                              }
                             }}
                           >
                             Save template
@@ -1721,85 +1591,7 @@ export function JobDetailPage() {
 
               {inviteHistory.length > 0 && (
                 <div className={suggestedPros.length > 0 || (inviteAnalytics && inviteAnalytics.sent > 0) ? "border-t border-slate-100 pt-4" : ""}>
-                  <h3 className="text-sm font-semibold text-slate-900">Invite history</h3>
-                  <p className="text-xs text-slate-500 mb-2">
-                    Who was invited, when, and pending vs declined
-                    {inviteQuota ? ` · ${inviteQuota.used}/{inviteQuota.limit} used` : ""}
-                  </p>
-                  <ul className="space-y-2">
-                    {inviteHistory.map((inv) => {
-                      const coolMs =
-                        inv.inCooldown && inv.cooldownUntil
-                          ? Math.max(0, new Date(inv.cooldownUntil).getTime() - nowTick)
-                          : 0;
-                      const reasonLabel: Record<string, string> = {
-                        busy: "Busy / fully booked",
-                        schedule: "Schedule conflict",
-                        too_far: "Too far",
-                        rate: "Rate mismatch",
-                        specialty: "Not my specialty",
-                        other: "Other",
-                      };
-                      return (
-                        <li
-                          key={inv.id}
-                          className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200 text-sm"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-medium text-slate-900">
-                              {inv.tradespersonName || "Pro"}{" "}
-                              <span
-                                className={
-                                  inv.status === "declined"
-                                    ? "text-[10px] uppercase tracking-wide text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded-full"
-                                    : "text-[10px] uppercase tracking-wide text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-full"
-                                }
-                              >
-                                {inv.status}
-                              </span>
-                              {inv.opened && (
-                                <span className="ml-1 text-[10px] uppercase tracking-wide text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded-full">
-                                  opened
-                                </span>
-                              )}
-                              {inv.bidAfterInvite && (
-                                <span className="ml-1 text-[10px] uppercase tracking-wide text-violet-800 bg-violet-50 px-1.5 py-0.5 rounded-full">
-                                  bid
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-[11px] text-slate-500">
-                              Invited by {inv.invitedByName || "you"} · {fmtDateTime(inv.invitedAt)}
-                              {inv.declinedAt ? ` · declined ${fmtDateTime(inv.declinedAt)}` : ""}
-                            </p>
-                            {(inv.declineReason || inv.declineNote) && (
-                              <p className="text-[11px] text-slate-600 mt-0.5">
-                                {[
-                                  inv.declineReason
-                                    ? reasonLabel[inv.declineReason] || inv.declineReason
-                                    : null,
-                                  inv.declineNote,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" — ")}
-                              </p>
-                            )}
-                            {coolMs > 0 && (
-                              <p className="text-[11px] font-medium text-amber-800 mt-0.5">
-                                Re-invite in {formatCountdown(coolMs)}
-                              </p>
-                            )}
-                          </div>
-                          <Link
-                            to={`/pros/${inv.tradespersonId}`}
-                            className="text-xs text-brand-700 no-underline hover:underline"
-                          >
-                            Profile
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <InviteHistoryList invites={inviteHistory} quota={inviteQuota} now={nowTick} />
                 </div>
               )}
             </section>
@@ -1814,50 +1606,7 @@ export function JobDetailPage() {
               </p>
             </div>
 
-            {counterAnalytics && counterAnalytics.sent > 0 && (
-              <div className="mb-4 rounded-xl bg-violet-50/80 p-3 ring-1 ring-violet-100">
-                <div className="mb-2 flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-violet-700" />
-                  <h3 className="text-sm font-semibold text-slate-900">Counter analytics (this job)</h3>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[
-                    { label: "Sent", value: counterAnalytics.sent },
-                    {
-                      label: "Addressed",
-                      value: counterAnalytics.addressed,
-                      sub: `${counterAnalytics.addressRate}%`,
-                    },
-                    {
-                      label: "Declined",
-                      value: counterAnalytics.declined,
-                      sub: `${counterAnalytics.declineRate}%`,
-                    },
-                    {
-                      label: "Avg address",
-                      value:
-                        counterAnalytics.avgTimeToAddressHours != null
-                          ? `${counterAnalytics.avgTimeToAddressHours}h`
-                          : "—",
-                      sub:
-                        counterAnalytics.afterAddressedAccepted > 0
-                          ? `${counterAnalytics.afterAddressedAccepted} hired after`
-                          : counterAnalytics.pending
-                            ? `${counterAnalytics.pending} pending`
-                            : undefined,
-                    },
-                  ].map((c) => (
-                    <div key={c.label} className="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-violet-100">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-400">{c.label}</p>
-                      <p className="text-xl font-bold text-slate-900">{c.value}</p>
-                      {"sub" in c && c.sub ? (
-                        <p className="text-[11px] text-slate-500">{c.sub}</p>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {counterAnalytics && counterAnalytics.sent > 0 && <CounterAnalyticsPanel stats={counterAnalytics} />}
 
             {bestValueBlend && job.status === "open" && (
               <div className="mb-4 rounded-xl bg-sky-50/80 p-3 ring-1 ring-sky-100">
@@ -2483,31 +2232,16 @@ export function JobDetailPage() {
           </section>
 
           {job.status === "completed" && (
-            <section className="card p-6">
-              <h2 className="text-lg font-semibold mb-3">Review</h2>
-              {review ? (
-                <div>
-                  <StarRating value={review.rating} readonly />
-                  {review.comment && <p className="mt-2 text-sm text-slate-600">{review.comment}</p>}
-                </div>
-              ) : (
-                <form onSubmit={onReview} className="space-y-3">
-                  <StarRating value={rating} onChange={setRating} />
-                  <textarea
-                    className="input"
-                    placeholder="How was the experience?"
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                  />
-                  <button type="submit" className="btn-primary">
-                    Submit review
-                  </button>
-                </form>
-              )}
-            </section>
+            <ReviewPanel jobId={job.id} review={review} proReview={proReview} onSaved={load} />
           )}
 
-          {canMessage && <JobChat jobId={job.id} />}
+          {canMessage && (
+            <JobConversations
+              jobId={job.id}
+              initialProId={searchParams.get("chat") || undefined}
+              hiredProId={bids.find((b) => b.id === job.acceptedBidId)?.tradespersonId}
+            />
+          )}
         </div>
 
         <aside className="space-y-4">
@@ -2544,6 +2278,13 @@ export function JobDetailPage() {
               )}
             </dl>
           </div>
+          {job.acceptedBidId && (
+            <ReportButton
+              targetType="user"
+              targetId={bids.find((b) => b.id === job.acceptedBidId)?.tradespersonId}
+              label="Report this professional"
+            />
+          )}
         </aside>
       </div>
     

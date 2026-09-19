@@ -172,6 +172,7 @@ export function FindProsPage() {
             <input
               className="input pl-9"
               placeholder="Search skills, city, name…"
+              aria-label="Search professionals"
               value={facets.q}
               onChange={(e) => setFacets({ ...facets, q: e.target.value })}
               onKeyDown={(e) => e.key === "Enter" && load()}
@@ -180,17 +181,20 @@ export function FindProsPage() {
           <input
             className="input w-auto min-w-[120px]"
             placeholder="City"
+            aria-label="City"
             value={facets.city}
             onChange={(e) => setFacets({ ...facets, city: e.target.value })}
           />
           <input
             className="input w-auto min-w-[130px]"
             placeholder="Neighborhood"
+            aria-label="Neighborhood"
             value={facets.neighborhood}
             onChange={(e) => setFacets({ ...facets, neighborhood: e.target.value })}
           />
           <select
             className="input w-auto"
+            aria-label="Category"
             value={facets.category}
             onChange={(e) => setFacets({ ...facets, category: e.target.value })}
           >
@@ -207,6 +211,7 @@ export function FindProsPage() {
           </select>
           <select
             className="input w-auto"
+            aria-label="Minimum rating"
             value={facets.ratingMin}
             onChange={(e) => setFacets({ ...facets, ratingMin: e.target.value })}
           >
@@ -220,11 +225,13 @@ export function FindProsPage() {
             type="number"
             min={0}
             placeholder="Max ₹/hr"
+            aria-label="Maximum hourly rate"
             value={facets.rateMax}
             onChange={(e) => setFacets({ ...facets, rateMax: e.target.value })}
           />
           <select
             className="input w-auto"
+            aria-label="Sort by"
             value={facets.sort}
             onChange={(e) => setFacets({ ...facets, sort: e.target.value })}
           >
@@ -237,6 +244,7 @@ export function FindProsPage() {
             value={facets.slaTier}
             onChange={(e) => setFacets({ ...facets, slaTier: e.target.value })}
             title="Response SLA tier"
+            aria-label="Reply speed"
           >
             <option value="">Any reply SLA</option>
             <option value="fast_or_better">Fast or better (≤6h)</option>
@@ -254,6 +262,7 @@ export function FindProsPage() {
             value={facets.maxResponseHours}
             onChange={(e) => setFacets({ ...facets, maxResponseHours: e.target.value })}
             title="Max average response hours"
+            aria-label="Maximum average reply hours"
           />
           <label
             className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
@@ -276,6 +285,7 @@ export function FindProsPage() {
             value={facets.minHeat}
             onChange={(e) => setFacets({ ...facets, minHeat: e.target.value })}
             title="Minimum availability heat score (free hours vs 40h week)"
+            aria-label="Minimum availability heat"
           >
             <option value="">Any availability heat</option>
             <option value="25">Heat 25+</option>

@@ -4,6 +4,7 @@ import {
   getProfile,
   updateProfile,
   uploadGallery,
+  uploadLicenseDoc,
   removeGalleryImage,
   mediaUrl,
   type TradespersonProfile,
@@ -44,6 +45,7 @@ import {
 export function ProfilePage() {
   const { success, error } = useToast();
   const [profile, setProfile] = useState<TradespersonProfile | null>(null);
+  const [licenseUploading, setLicenseUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -149,6 +151,21 @@ export function ProfilePage() {
     }
   }
 
+  async function onLicensePick(file: File | undefined) {
+    if (!file) return;
+    setLicenseUploading(true);
+    try {
+      const doc = file.type === "application/pdf" ? file : (await compressImageFiles([file]))[0];
+      const r = await uploadLicenseDoc(doc);
+      setProfile(r.profile);
+      success("Document uploaded. An admin will review it.");
+    } catch (err) {
+      error((err as Error).message || "Upload failed");
+    } finally {
+      setLicenseUploading(false);
+    }
+  }
+
   async function onRemove(url: string) {
     try {
       const r = await removeGalleryImage(url);
@@ -173,7 +190,7 @@ export function ProfilePage() {
       {profile && (
         <div className="mb-6 card flex flex-wrap items-center gap-4 p-4 sm:p-5">
           <div>
-            <p className="font-semibold text-lg">{profile.name || profile.email}</p>
+            <p className="font-semibold text-lg">{profile.name || profile.email || "Your profile"}</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <StarRating value={Math.round(Number(profile.averageRating))} readonly />
               <span className="text-sm text-slate-500">({profile.reviewCount} reviews)</span>
@@ -184,6 +201,36 @@ export function ProfilePage() {
             <p className="text-sm text-amber-800 bg-amber-50 rounded-xl px-3 py-2 ring-1 ring-amber-200">
               Waiting for admin verification before you can bid.
             </p>
+          )}
+          {profile.verificationStatus !== "suspended" && (
+            <div className="w-full border-t border-slate-100 pt-3 text-sm">
+              <p className="font-medium text-slate-900">Licence or ID document</p>
+              <p className="text-xs text-slate-500">
+                PDF, JPG, PNG or WebP. Only admins can see it; it's used to verify your account.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                {profile.licenseDocUrl ? (
+                  <a href={mediaUrl(profile.licenseDocUrl)} target="_blank" rel="noopener noreferrer">
+                    View uploaded document
+                  </a>
+                ) : (
+                  <span className="text-slate-500">Nothing uploaded yet.</span>
+                )}
+                <label className="btn-secondary btn-sm cursor-pointer">
+                  {licenseUploading ? "Uploading…" : profile.licenseDocUrl ? "Replace" : "Upload"}
+                  <input
+                    type="file"
+                    className="sr-only"
+                    accept="application/pdf,image/jpeg,image/png,image/webp"
+                    disabled={licenseUploading}
+                    onChange={(e) => {
+                      void onLicensePick(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
           )}
         </div>
       )}

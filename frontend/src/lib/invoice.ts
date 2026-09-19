@@ -178,18 +178,29 @@ export function downloadMilestoneInvoice(job: Job, payments: JobPayments) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Some browsers start the download asynchronously; revoking at once can cancel it.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function printMilestoneInvoice(job: Job, payments: JobPayments) {
+/**
+ * Opens the invoice in a new window and starts printing.
+ * `noopener` would make window.open return null, so the opener link is cut by hand instead.
+ * Falls back to a download when pop-ups are blocked.
+ */
+export function printMilestoneInvoice(job: Job, payments: JobPayments): "printed" | "downloaded" {
   const html = buildMilestoneInvoiceHtml(job, payments);
-  const w = window.open("", "_blank", "noopener,noreferrer,width=800,height=900");
+  const w = window.open("", "_blank", "width=800,height=900");
   if (!w) {
     downloadMilestoneInvoice(job, payments);
-    return;
+    return "downloaded";
   }
+  w.opener = null;
+  w.document.open();
   w.document.write(html);
   w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 250);
+  return "printed";
 }
 
 function escapeHtml(s: string) {
@@ -197,5 +208,6 @@ function escapeHtml(s: string) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

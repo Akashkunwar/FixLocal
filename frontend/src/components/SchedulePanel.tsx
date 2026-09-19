@@ -216,8 +216,9 @@ export function SchedulePanel({
         <form onSubmit={onPropose} className="space-y-3 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
           <div className="grid gap-2 sm:grid-cols-2">
             <div>
-              <label className="label">Start</label>
+              <label className="label" htmlFor="schedule-start">Start</label>
               <input
+                id="schedule-start"
                 className="input"
                 type="datetime-local"
                 required
@@ -226,8 +227,9 @@ export function SchedulePanel({
               />
             </div>
             <div>
-              <label className="label">End</label>
+              <label className="label" htmlFor="schedule-end">End</label>
               <input
+                id="schedule-end"
                 className="input"
                 type="datetime-local"
                 value={end}
@@ -241,8 +243,9 @@ export function SchedulePanel({
             </p>
           )}
           <div>
-            <label className="label">Note (optional)</label>
+            <label className="label" htmlFor="schedule-note">Note (optional)</label>
             <input
+              id="schedule-note"
               className="input"
               value={note}
               onChange={(e) => setNote(e.target.value)}

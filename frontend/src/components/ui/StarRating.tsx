@@ -21,7 +21,9 @@ export function StarRating({
           disabled={readonly}
           className={clsx(!readonly && "hover:scale-110 transition", readonly && "cursor-default")}
           onClick={() => onChange?.(n)}
-          aria-label={`${n} star`}
+          role={readonly ? undefined : "radio"}
+          aria-checked={readonly ? undefined : n === value}
+          aria-label={`${n} star${n > 1 ? "s" : ""}`}
         >
           <Star
             style={{ width: size, height: size }}

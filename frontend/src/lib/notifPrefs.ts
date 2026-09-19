@@ -36,29 +36,11 @@ export const DEFAULT_NOTIF_PREFS: Record<NotifPrefKey, boolean> = {
   match: true,
 };
 
-const LS_KEY = "fixlocal_notif_prefs";
-
-export function readLocalNotifPrefs(): Record<NotifPrefKey, boolean> | null {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return null;
-    return { ...DEFAULT_NOTIF_PREFS, ...JSON.parse(raw) };
-  } catch {
-    return null;
+/** Account preferences on top of the defaults (the server is the only store). */
+export function mergeNotifPrefs(server?: Partial<Record<string, boolean>> | null): Record<NotifPrefKey, boolean> {
+  const out = { ...DEFAULT_NOTIF_PREFS };
+  for (const key of Object.keys(out) as NotifPrefKey[]) {
+    if (typeof server?.[key] === "boolean") out[key] = server[key] as boolean;
   }
-}
-
-export function writeLocalNotifPrefs(prefs: Record<NotifPrefKey, boolean>) {
-  localStorage.setItem(LS_KEY, JSON.stringify(prefs));
-}
-
-export function mergeNotifPrefs(
-  server?: Partial<Record<string, boolean>> | null
-): Record<NotifPrefKey, boolean> {
-  const local = readLocalNotifPrefs();
-  return {
-    ...DEFAULT_NOTIF_PREFS,
-    ...(local || {}),
-    ...(server || {}),
-  } as Record<NotifPrefKey, boolean>;
+  return out;
 }

@@ -1,6 +1,13 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
-import { listMessages, sendMessage, type ChatMessage } from "../api/extras";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  listMessages,
+  markThreadRead,
+  messageStreamPath,
+  sendMessage,
+  type ChatMessage,
+} from "../api/extras";
 import { mediaUrl } from "../api/jobs";
+import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { fmtDateTime, initials, money } from "../lib/format";
 import { useToast } from "./Toast";
@@ -11,10 +18,20 @@ import clsx from "clsx";
 import { mergeIntroTemplates } from "../lib/introTemplates";
 
 function isImageUrl(url: string) {
-  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(url.split("?")[0] || "");
+  return /\.(png|jpe?g|webp)$/i.test(url.split("?")[0] || "");
 }
 
-export function JobChat({ jobId }: { jobId: string }) {
+const POLL_MIN_MS = 3_000;
+const POLL_MAX_MS = 60_000;
+
+type Props = {
+  jobId: string;
+  /** Which professional's conversation (clients and admins). Pros always get their own. */
+  proId?: string | null;
+  title?: string;
+};
+
+export function JobChat({ jobId, proId, title = "Messages" }: Props) {
   const { user } = useAuth();
   const { error } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -22,74 +39,104 @@ export function JobChat({ jobId }: { jobId: string }) {
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [live, setLive] = useState(false);
+  const [denied, setDenied] = useState(false);
+  const [canSend, setCanSend] = useState(true);
   const [showQuote, setShowQuote] = useState(false);
-  const [introChips, setIntroChips] = useState(() =>
-    mergeIntroTemplates(
-      typeof window !== "undefined"
-        ? (JSON.parse(localStorage.getItem("fixlocal_user") || "null") as any)?.introTemplates
-        : null
-    )
-  );
   const [quoteAmount, setQuoteAmount] = useState("");
   const [quoteNotes, setQuoteNotes] = useState("");
   const [quoteFile, setQuoteFile] = useState<File | null>(null);
-  const bottom = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const sseOk = useRef(false);
+  const lastCount = useRef(0);
+  const introChips = mergeIntroTemplates(user?.role === "TRADESPERSON" ? user.introTemplates : null);
 
-  async function load() {
+  /** "ok" | "error" (retry with backoff) | "denied" (stop: this viewer has no access). */
+  const load = useCallback(async (): Promise<"ok" | "error" | "denied"> => {
     try {
-      const r = await listMessages(jobId);
+      const r = await listMessages(jobId, proId);
       setMessages(r.messages);
-    } catch {
-      /* may be forbidden before bid — silent */
+      setCanSend(r.canSend);
+      setDenied(false);
+      if (r.messages.length && document.visibilityState === "visible" && user?.role !== "ADMIN") {
+        markThreadRead(jobId, proId).catch(() => undefined);
+      }
+      return "ok";
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403 || e.status === 404 || e.status === 400)) {
+        setDenied(true);
+        return "denied";
+      }
+      return "error";
     }
-  }
+  }, [jobId, proId, user?.role]);
 
   useEffect(() => {
-    if (user?.role === "TRADESPERSON") {
-      setIntroChips(mergeIntroTemplates(user.introTemplates));
-    }
-  }, [user?.id, user?.role, user?.introTemplates]);
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let delay = POLL_MIN_MS;
+    setMessages([]);
+    lastCount.current = 0;
 
-  useEffect(() => {
-    load();
-    const sse = openSse(`/api/messages/${jobId}/stream`, {
+    const sse = openSse(messageStreamPath(jobId, proId), {
       onOpen: () => {
         sseOk.current = true;
         setLive(true);
+        delay = POLL_MIN_MS;
       },
       onError: () => {
         sseOk.current = false;
         setLive(false);
       },
+      onDenied: () => setDenied(true),
       onEvent: (event, data) => {
-        if (event === "message") {
-          const payload = data as { message?: ChatMessage };
-          if (payload?.message) {
-            setMessages((xs) => {
-              if (xs.some((m) => m.id === payload.message!.id)) return xs;
-              return [...xs, payload.message!];
-            });
-          } else {
-            load();
-          }
+        if (event !== "message") return;
+        const payload = data as { message?: ChatMessage };
+        if (!payload?.message) {
+          void load();
+          return;
+        }
+        setMessages((xs) => (xs.some((m) => m.id === payload.message!.id) ? xs : [...xs, payload.message!]));
+        if (payload.message.sender.id !== user?.id && user?.role !== "ADMIN") {
+          markThreadRead(jobId, proId).catch(() => undefined);
         }
       },
     });
 
-    const t = window.setInterval(() => {
-      if (!sseOk.current) load();
-    }, 3000);
-
-    return () => {
-      clearInterval(t);
+    // Refused (403/404): stop polling and drop the stream instead of retrying forever.
+    const stop = () => {
+      stopped = true;
       sse.close();
     };
-  }, [jobId]);
 
+    // Poll only while the live stream is down: every 3s, backing off to 60s while requests fail.
+    const next = (result: "ok" | "error" | "denied") => {
+      if (result === "denied") return stop();
+      delay = result === "ok" ? POLL_MIN_MS : Math.min(POLL_MAX_MS, delay * 2);
+      if (!stopped) timer = setTimeout(poll, sseOk.current ? POLL_MAX_MS : delay);
+    };
+    const poll = async () => {
+      if (stopped) return;
+      if (sseOk.current) return next("ok");
+      next(await load());
+    };
+
+    void load().then(next);
+
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      sse.close();
+      sseOk.current = false;
+    };
+  }, [jobId, proId, load, user?.id, user?.role]);
+
+  // Keep the newest message in view, but only when a message was added (and without scrolling the page).
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > lastCount.current && listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+    lastCount.current = messages.length;
   }, [messages]);
 
   async function onPick(list: FileList | null) {
@@ -100,8 +147,8 @@ export function JobChat({ jobId }: { jobId: string }) {
       const other = picked.filter((f) => !f.type.startsWith("image/"));
       const compressed = images.length ? await compressImageFiles(images) : [];
       setFiles((prev) => [...prev, ...compressed, ...other].slice(0, 4));
-    } catch {
-      setFiles((prev) => [...prev, ...picked].slice(0, 4));
+    } catch (e) {
+      error((e as Error).message || "Could not read that image");
     }
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -116,7 +163,7 @@ export function JobChat({ jobId }: { jobId: string }) {
     if (!body.trim() && !files.length && !quote) return;
     setSending(true);
     try {
-      const r = await sendMessage(jobId, body.trim(), files, quote);
+      const r = await sendMessage(jobId, body.trim(), files, quote, proId);
       setMessages((xs) => (xs.some((m) => m.id === r.message.id) ? xs : [...xs, r.message]));
       setBody("");
       setFiles([]);
@@ -124,11 +171,19 @@ export function JobChat({ jobId }: { jobId: string }) {
       setQuoteNotes("");
       setQuoteFile(null);
       setShowQuote(false);
-    } catch (err: any) {
-      error(err.message || "Could not send");
+    } catch (err) {
+      error((err as Error).message || "Could not send");
     } finally {
       setSending(false);
     }
+  }
+
+  if (denied) {
+    return (
+      <div className="card p-4 text-sm text-slate-500" role="status">
+        This conversation isn't available to you.
+      </div>
+    );
   }
 
   const canQuote = user?.role === "TRADESPERSON";
@@ -136,13 +191,13 @@ export function JobChat({ jobId }: { jobId: string }) {
   return (
     <div className="card flex flex-col overflow-hidden">
       <div className="border-b border-slate-100 px-4 py-3">
-        <h3 className="font-semibold text-slate-900">Messages</h3>
+        <h3 className="font-semibold text-slate-900">{title}</h3>
         <p className="text-xs text-slate-500">
-          {live ? "Live (SSE)" : "Polling"} · text, images, PDF
+          {live ? "Live" : "Updating periodically"} · text, images, PDF
           {canQuote ? ", or structured quote" : ""}
         </p>
       </div>
-      <div className="max-h-72 space-y-3 overflow-y-auto bg-slate-50/50 px-4 py-4">
+      <div ref={listRef} className="max-h-72 space-y-3 overflow-y-auto bg-slate-50/50 px-4 py-4" aria-live="polite">
         {messages.length === 0 && (
           <div className="py-4 text-center space-y-3">
             <p className="text-sm text-slate-400">No messages yet. Say hello!</p>
@@ -173,7 +228,7 @@ export function JobChat({ jobId }: { jobId: string }) {
           return (
             <div key={m.id} className={clsx("flex gap-2", mine && "flex-row-reverse")}>
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-800">
-                {initials(m.sender.name, m.sender.email)}
+                {initials(m.sender.name, m.sender.role)}
               </div>
               <div
                 className={clsx(
@@ -182,7 +237,7 @@ export function JobChat({ jobId }: { jobId: string }) {
                 )}
               >
                 <p className={clsx("text-[11px] mb-0.5", mine ? "text-brand-100" : "text-slate-400")}>
-                  {m.sender.name || m.sender.email} · {fmtDateTime(m.createdAt)}
+                  {m.sender.name || (m.sender.role === "TRADESPERSON" ? "Professional" : "Client")} · {fmtDateTime(m.createdAt)}
                 </p>
                 {m.quote && (
                   <div
@@ -233,7 +288,7 @@ export function JobChat({ jobId }: { jobId: string }) {
                             mine ? "text-brand-100" : "text-brand-700"
                           )}
                         >
-                          {url.split("/").pop() || "File"}
+                          {(url.split("?")[0].split("/").pop() || "File").endsWith(".pdf") ? "PDF attachment" : "Attachment"}
                         </a>
                       )
                     )}
@@ -243,7 +298,6 @@ export function JobChat({ jobId }: { jobId: string }) {
             </div>
           );
         })}
-        <div ref={bottom} />
       </div>
       {files.length > 0 && (
         <div className="flex flex-wrap gap-2 border-t border-slate-100 px-3 pt-2">
@@ -274,6 +328,8 @@ export function JobChat({ jobId }: { jobId: string }) {
               className="input"
               type="number"
               min={1}
+              max={10000000}
+              aria-label="Quote amount in rupees"
               placeholder="Quote amount (₹)"
               value={quoteAmount}
               onChange={(e) => setQuoteAmount(e.target.value)}
@@ -281,7 +337,8 @@ export function JobChat({ jobId }: { jobId: string }) {
             <input
               className="input"
               type="file"
-              accept="image/*,application/pdf"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              aria-label="Quote attachment"
               onChange={(e) => setQuoteFile(e.target.files?.[0] || null)}
             />
           </div>
@@ -294,11 +351,16 @@ export function JobChat({ jobId }: { jobId: string }) {
           />
         </div>
       )}
+      {!canSend ? (
+        <p className="border-t border-slate-100 p-3 text-xs text-slate-500">
+          This conversation is read-only.
+        </p>
+      ) : (
       <form onSubmit={onSend} className="flex gap-2 border-t border-slate-100 p-3">
         <input
           ref={fileRef}
           type="file"
-          accept="image/*,application/pdf"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
           multiple
           className="hidden"
           onChange={(e) => onPick(e.target.files)}
@@ -343,6 +405,7 @@ export function JobChat({ jobId }: { jobId: string }) {
           Send
         </button>
       </form>
+      )}
     </div>
   );
 }

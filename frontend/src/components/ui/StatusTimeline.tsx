@@ -5,6 +5,7 @@ const labels: Record<string, string> = {
   open: "Posted",
   awarded: "Awarded",
   in_progress: "In progress",
+  pending_confirmation: "Confirm",
   completed: "Completed",
 };
 

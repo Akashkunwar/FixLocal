@@ -12,6 +12,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { clientPath } from "../../lib/paths";
 import { saveRepeatDraft } from "../../lib/repeatJob";
 import {
+  mergeNamedJobTemplates,
   namedTemplateFromJob,
   upsertNamedJobTemplate,
 } from "../../lib/namedJobTemplates";
@@ -20,7 +21,7 @@ import { useToast } from "../../components/Toast";
 export function HomeownerDashboard() {
   const { user, updateProfile } = useAuth();
   const navigate = useNavigate();
-  const { success } = useToast();
+  const { success, error: toastError } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteStats, setInviteStats] = useState<InviteAnalytics | null>(null);
@@ -202,7 +203,7 @@ export function HomeownerDashboard() {
         </div>
         <select className="input w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All statuses</option>
-          {["open", "awarded", "in_progress", "completed", "cancelled", "disputed"].map((s) => (
+          {["open", "awarded", "in_progress", "pending_confirmation", "completed", "cancelled", "disputed"].map((s) => (
             <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
           ))}
         </select>
@@ -291,12 +292,16 @@ export function HomeownerDashboard() {
                         window.prompt("Name this job template", suggested)?.trim() ||
                         suggested;
                       const entry = namedTemplateFromJob(job, name);
-                      const list = upsertNamedJobTemplate(entry);
                       try {
-                        await updateProfile({ namedJobTemplates: list });
+                        await updateProfile({
+                          namedJobTemplates: upsertNamedJobTemplate(
+                            mergeNamedJobTemplates(user?.namedJobTemplates),
+                            entry
+                          ),
+                        });
                         success(`Saved “${entry.name}” to your job templates`);
-                      } catch {
-                        success(`Saved “${entry.name}” locally (sync later in Settings)`);
+                      } catch (e) {
+                        toastError((e as Error).message || "Couldn't save the template");
                       }
                     }}
                   >

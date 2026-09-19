@@ -4,6 +4,7 @@ export function statusClass(status: string) {
     bidding_closed: "bg-slate-100 text-slate-700 ring-1 ring-slate-200",
     awarded: "bg-blue-50 text-blue-800 ring-1 ring-blue-200",
     in_progress: "bg-indigo-50 text-indigo-800 ring-1 ring-indigo-200",
+    pending_confirmation: "bg-sky-50 text-sky-800 ring-1 ring-sky-200",
     completed: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200",
     cancelled: "bg-rose-50 text-rose-800 ring-1 ring-rose-200",
     disputed: "bg-amber-50 text-amber-900 ring-1 ring-amber-200",
@@ -33,11 +34,17 @@ export function statusClass(status: string) {
     dispute_resolve: "bg-amber-50 text-amber-900 ring-1 ring-amber-200",
     force_cancel: "bg-rose-50 text-rose-800 ring-1 ring-rose-200",
     verify_tradesperson: "bg-sky-50 text-sky-800 ring-1 ring-sky-200",
+    report_resolve: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200",
+    user_delete: "bg-rose-50 text-rose-800 ring-1 ring-rose-200",
+    auto_confirm: "bg-sky-50 text-sky-800 ring-1 ring-sky-200",
+    open_report: "bg-amber-50 text-amber-900 ring-1 ring-amber-200",
+    resolved: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200",
+    dismissed: "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
   };
   return map[status] || "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
 }
 
-export const JOB_TIMELINE = ["open", "awarded", "in_progress", "completed"] as const;
+export const JOB_TIMELINE = ["open", "awarded", "in_progress", "pending_confirmation", "completed"] as const;
 
 export function timelineIndex(status: string) {
   if (status === "cancelled" || status === "disputed") return -1;
@@ -51,6 +58,8 @@ export function statusLabel(status: string) {
     favor_homeowner: "Favor client",
     favor_tradesperson: "Favor professional",
     verify_tradesperson: "Verify professional",
+    pending_confirmation: "Awaiting confirmation",
+    auto_confirm: "Auto-confirmed",
     HOMEOWNER: "Client",
     TRADESPERSON: "Professional",
     ADMIN: "Admin",

@@ -6,6 +6,7 @@ import {
   type AdminTradesperson,
 } from "../../api/admin";
 import { Badge } from "../../components/ui/Badge";
+import { mediaUrl } from "../../api/jobs";
 import { Spinner } from "../../components/ui/Spinner";
 import { useToast } from "../../components/Toast";
 
@@ -59,11 +60,28 @@ export function AdminTradespeoplePage() {
         <ul className="grid gap-3">
           {list.map((p) => (
             <li key={p.id} className="card flex flex-wrap items-center justify-between gap-3 p-5">
-              <div>
-                <p className="font-semibold">{p.email || p.userId}</p>
-                <p className="text-sm text-slate-500">{p.skills || "No skills listed"}</p>
+              <div className="min-w-0">
+                <p className="font-semibold">{p.name || p.email || p.userId}</p>
+                <p className="text-sm text-slate-500">
+                  {p.email}
+                  {p.phone ? ` · ${p.phone}` : ""}
+                  {p.emailVerified === false ? " · email not verified" : ""}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {p.skills || "No skills listed"}
+                  {p.yearsExperience != null ? ` · ${p.yearsExperience} yrs` : ""}
+                </p>
                 <p className="text-sm text-slate-400">{p.serviceAreas}</p>
-                <div className="mt-2"><Badge status={p.verificationStatus} /></div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Badge status={p.verificationStatus} />
+                  {p.licenseDocUrl ? (
+                    <a className="text-sm text-brand-700 underline" href={mediaUrl(p.licenseDocUrl)} target="_blank" rel="noreferrer">
+                      View licence / ID document
+                    </a>
+                  ) : (
+                    <span className="text-xs text-amber-700">No licence or ID uploaded yet</span>
+                  )}
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button type="button" className="btn-primary btn-sm" onClick={() => setVerify(p.userId, "verified")}>Verify</button>

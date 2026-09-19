@@ -12,12 +12,14 @@ const PRIMARY: { key: keyof AdminStats; label: string }[] = [
   { key: "pendingVerifications", label: "Pending verifications" },
   { key: "openDisputes", label: "Open disputes" },
   { key: "suspendedUsers", label: "Suspended users" },
+  { key: "openReports", label: "Open reports" },
 ];
 
 const JOBS: { key: keyof AdminStats; label: string }[] = [
   { key: "openJobs", label: "Open" },
   { key: "awardedJobs", label: "Awarded" },
   { key: "inProgressJobs", label: "In progress" },
+  { key: "pendingConfirmationJobs", label: "Awaiting confirmation" },
   { key: "completedJobs", label: "Completed" },
   { key: "disputedJobs", label: "Disputed" },
   { key: "cancelledJobs", label: "Cancelled" },

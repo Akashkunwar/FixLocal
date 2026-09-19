@@ -2,6 +2,7 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { dashboardPath } from "../api/client";
 import { NotificationBell } from "./NotificationBell";
+import { EmailVerifyBanner } from "./EmailVerifyBanner";
 import { LogOut, Wrench } from "lucide-react";
 import clsx from "clsx";
 import { initials, roleLabel } from "../lib/format";
@@ -28,6 +29,7 @@ const adminLinks = [
   { to: "/admin/users", label: "Users" },
   { to: "/admin/tradespeople", label: "Verify" },
   { to: "/admin/disputes", label: "Disputes" },
+  { to: "/admin/reports", label: "Reports" },
   { to: "/admin/jobs", label: "Jobs" },
   { to: "/admin/audit", label: "Audit" },
   { to: "/admin/match", label: "Match" },
@@ -54,8 +56,8 @@ export function Shell({
         ? clientLinks
         : proLinks;
 
-  function onLogout() {
-    logout();
+  async function onLogout() {
+    await logout();
     navigate("/login", { replace: true });
   }
 
@@ -124,6 +126,7 @@ export function Shell({
           </div>
         </div>
       </header>
+      <EmailVerifyBanner />
 
       <main className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8">
         {(title || actions) && (

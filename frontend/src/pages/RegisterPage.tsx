@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { ApiError, dashboardPath } from "../api/client";
 import { useToast } from "../components/Toast";
 import { Wrench } from "lucide-react";
+import { safeNext } from "../lib/paths";
 import clsx from "clsx";
 
 const ROLE_CARDS = [
@@ -47,8 +48,8 @@ export function RegisterPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (password.length < 6) {
-      setErr("Password must be at least 6 characters");
+    if (password.length < 10) {
+      setErr("Password must be at least 10 characters");
       return;
     }
     setBusy(true);
@@ -58,9 +59,13 @@ export function RegisterPage() {
         name: name.trim() || undefined,
         phone: phone.trim() || undefined,
       });
-      success("Account created!");
-      const next = params.get("next");
-      if (next && next.startsWith("/") && !next.startsWith("//")) {
+      success(
+        u.emailVerified === false
+          ? "Account created! Check your inbox for a link to verify your email."
+          : "Account created!"
+      );
+      const next = safeNext(params.get("next"));
+      if (next) {
         navigate(next, { replace: true });
       } else {
         navigate(dashboardPath(u.role), { replace: true });
@@ -127,7 +132,8 @@ export function RegisterPage() {
         </div>
         <div>
           <label className="label" htmlFor="password">Password</label>
-          <input id="password" className="input" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input id="password" className="input" type="password" required minLength={10} maxLength={128} aria-describedby="password-hint" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <p id="password-hint" className="mt-1 text-xs text-slate-500">At least 10 characters. Avoid common passwords.</p>
         </div>
         <button type="submit" className="btn-primary w-full" disabled={busy}>
           {busy ? "Creating…" : "Create account"}

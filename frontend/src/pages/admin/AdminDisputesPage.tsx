@@ -14,7 +14,7 @@ export function AdminDisputesPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"open" | "resolved" | "">("open");
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [jobStatus, setJobStatus] = useState<Record<string, string>>({});
+  const [jobStatus, setJobStatus] = useState<Record<string, "" | "cancelled" | "completed" | "restore">>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [milestonesByJob, setMilestonesByJob] = useState<Record<string, PaymentMilestone[]>>({});
   const [refundSel, setRefundSel] = useState<Record<string, string[]>>({});
@@ -69,11 +69,12 @@ export function AdminDisputesPage() {
         refundMilestoneIds: refundSel[id]?.length ? refundSel[id] : undefined,
       });
       const refunded = r.dispute.refundMeta?.totalRefunded;
-      success(
-        refunded
-          ? `Dispute resolved · ₹${Number(refunded).toFixed(0)} milestone(s) refunded (simulated)`
-          : "Dispute resolved"
-      );
+      const released = r.dispute.refundMeta?.totalReleased;
+      const parts = [
+        refunded ? `₹${Number(refunded).toFixed(0)} refunded` : null,
+        released ? `₹${Number(released).toFixed(0)} released` : null,
+      ].filter(Boolean);
+      success(`Dispute resolved · job is now ${r.job.status.replace(/_/g, " ")}${parts.length ? ` · ${parts.join(" · ")} (simulated)` : ""}`);
       load();
     } catch (e: any) {
       error(e.message);
@@ -124,7 +125,7 @@ export function AdminDisputesPage() {
                     <ul className="flex flex-wrap gap-2">
                       {d.evidenceUrls!.map((url) => {
                         const href = mediaUrl(url);
-                        const isPdf = url.toLowerCase().endsWith(".pdf");
+                        const isPdf = url.split("?")[0].toLowerCase().endsWith(".pdf");
                         return (
                           <li key={url}>
                             {isPdf ? (
@@ -154,13 +155,14 @@ export function AdminDisputesPage() {
                           {milestones.map((m) => {
                             const checked = (refundSel[d.id] || []).includes(m.id);
                             const already = m.status === "refunded";
+                            const released = m.status === "released";
                             return (
                               <li key={m.id}>
                                 <label className="flex items-center gap-2 text-sm text-slate-700">
                                   <input
                                     type="checkbox"
                                     className="h-4 w-4 rounded border-slate-300"
-                                    disabled={already}
+                                    disabled={already || released}
                                     checked={already || checked}
                                     onChange={() => toggleRefund(d.id, m.id)}
                                   />
@@ -173,30 +175,38 @@ export function AdminDisputesPage() {
                           })}
                         </ul>
                         <p className="text-xs text-slate-400">
-                          Select held, pending, or released milestones to reverse/refund when resolving.
+                          Tick held or pending milestones to refund them. Money already released can't be refunded.
+                          "Favor client" refunds everything not yet released; "Favor professional" releases it.
                         </p>
                       </div>
                     )}
                     <textarea
                       className="input"
+                      aria-label="Resolution notes"
                       placeholder="Resolution notes (visible in audit trail)"
                       value={notes[d.id] || ""}
                       onChange={(e) => setNotes({ ...notes, [d.id]: e.target.value })}
                     />
                     <div>
-                      <label className="label">After resolution, set job to</label>
+                      <label className="label" htmlFor={`dispute-status-${d.id}`}>After resolution, set job to</label>
                       <select
+                        id={`dispute-status-${d.id}`}
                         className="input w-auto"
                         value={jobStatus[d.id] || ""}
-                        onChange={(e) => setJobStatus({ ...jobStatus, [d.id]: e.target.value })}
+                        onChange={(e) =>
+                          setJobStatus({ ...jobStatus, [d.id]: e.target.value as "" | "cancelled" | "completed" | "restore" })
+                        }
                       >
                         <option value="">Default for outcome</option>
-                        <option value="cancelled">Cancelled</option>
-                        <option value="completed">Completed</option>
-                        <option value="in_progress">In progress</option>
+                        <option value="cancelled">Cancelled (refund what's left)</option>
+                        <option value="completed">Completed (release what's left)</option>
+                        <option value="restore">
+                          Back to {d.previousJobStatus ? d.previousJobStatus.replace(/_/g, " ") : "previous status"}
+                        </option>
                       </select>
                       <p className="mt-1 text-xs text-slate-400">
-                        Defaults: favor client → cancelled · favor professional → completed · no action → cancelled
+                        Defaults: favor client → cancelled · favor professional → completed · no action → back to{" "}
+                        {d.previousJobStatus ? d.previousJobStatus.replace(/_/g, " ") : "previous status"}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -233,12 +243,11 @@ export function AdminDisputesPage() {
                     {d.resolutionNotes && (
                       <p className="bg-slate-50 rounded-xl p-3">Notes: {d.resolutionNotes}</p>
                     )}
-                    {d.refundMeta && (
+                    {d.refundMeta && (d.refundMeta.totalRefunded > 0 || (d.refundMeta.totalReleased ?? 0) > 0) && (
                       <p className="bg-emerald-50 text-emerald-900 rounded-xl p-3">
-                        Refunded (simulated): {money(d.refundMeta.totalRefunded)}
-                        {d.refundMeta.labels?.length
-                          ? ` · ${d.refundMeta.labels.join(", ")}`
-                          : ""}
+                        {d.refundMeta.totalRefunded > 0 && <>Refunded (simulated): {money(d.refundMeta.totalRefunded)}</>}
+                        {d.refundMeta.labels?.length ? ` · ${d.refundMeta.labels.join(", ")}` : ""}
+                        {(d.refundMeta.totalReleased ?? 0) > 0 && <> Released to the professional: {money(d.refundMeta.totalReleased)}</>}
                       </p>
                     )}
                   </div>

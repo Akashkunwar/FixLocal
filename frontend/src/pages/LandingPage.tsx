@@ -3,7 +3,7 @@ import { ArrowRight, BadgeCheck, Briefcase, MessageSquare, Shield, Star, Wrench 
 import { CATEGORIES, categoryGroups } from "../lib/format";
 import { useAuth } from "../auth/AuthContext";
 import { dashboardPath } from "../api/client";
-import { clientPath, proPath } from "../lib/paths";
+import { clientPath } from "../lib/paths";
 import {
   LEAD_GROUPS,
   categoriesForLeadGroup,

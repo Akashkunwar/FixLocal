@@ -7,6 +7,7 @@ import {
   listJobs,
   mediaUrl,
   type Job,
+  type PublicReview,
   type TradespersonProfile,
 } from "../api/jobs";
 import { addFavorite } from "../api/extras";
@@ -35,8 +36,10 @@ export function ProPublicPage() {
   const { user } = useAuth();
   const { success, error } = useToast();
   const [profile, setProfile] = useState<TradespersonProfile | null>(null);
-  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<PublicReview[]>([]);
+  const [contactRevealed, setContactRevealed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [openJobs, setOpenJobs] = useState<Job[]>([]);
   const [inviteJobId, setInviteJobId] = useState("");
   const [inviteMessage, setInviteMessage] = useState("");
@@ -51,13 +54,25 @@ export function ProPublicPage() {
 
   useEffect(() => {
     if (!userId) return;
+    let active = true;
+    setLoading(true);
+    setLoadError(null);
     getPublicProfile(userId)
       .then((r) => {
+        if (!active) return;
         setProfile(r.profile);
         setReviews(r.reviews);
+        setContactRevealed(!!r.contactRevealed);
       })
-      .catch((e) => error(e.message))
-      .finally(() => setLoading(false));
+      .catch((e: Error) => {
+        if (active) setLoadError(e.message || "Profile not found");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [userId]);
 
   useEffect(() => {
@@ -89,13 +104,22 @@ export function ProPublicPage() {
     }
   }
 
+  if (loadError) {
+    return (
+      <Shell title="Pro profile">
+        <p className="card p-6 text-sm text-slate-600" role="alert">
+          {loadError}
+        </p>
+      </Shell>
+    );
+  }
   if (loading || !profile) {
     return <Shell title="Pro profile"><Spinner /></Shell>;
   }
 
   return (
     <Shell
-      title={profile.name || profile.email || "Professional"}
+      title={profile.name || "Professional"}
       subtitle={profile.city || "Local pro"}
       actions={
         <div className="flex flex-wrap gap-2">
@@ -203,6 +227,14 @@ export function ProPublicPage() {
                 </p>
               </div>
             </div>
+            {contactRevealed && (profile.email || profile.phone) && (
+              <p className="mt-3 text-sm text-slate-600">
+                Contact:{" "}
+                {profile.phone && <a href={`tel:${profile.phone}`}>{profile.phone}</a>}
+                {profile.phone && profile.email && " · "}
+                {profile.email && <a href={`mailto:${profile.email}`}>{profile.email}</a>}
+              </p>
+            )}
             <p className="mt-4 text-slate-700 whitespace-pre-wrap">{profile.bio || "No bio yet."}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {(profile.skills || "")

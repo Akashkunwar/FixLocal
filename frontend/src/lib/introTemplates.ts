@@ -1,60 +1,7 @@
-/** Pro intro / first-message templates for in-job chat (localStorage + optional User sync). */
+/** Professional first-message templates for in-job chat (stored on the account). */
+import { accountTextTemplates, type TextTemplate } from "./textTemplates";
 
-export type IntroTemplate = {
-  id: string;
-  label: string;
-  body: string;
-  createdAt: string;
-};
-
-const USER_KEY = "fixlocal_intro_templates";
-
-function safeParse(raw: string | null): IntroTemplate[] {
-  if (!raw) return [];
-  try {
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    return arr
-      .map((t: any, i: number) => ({
-        id: String(t?.id || `intro-${i}`),
-        label: String(t?.label || "Template").slice(0, 80),
-        body: String(t?.body || "").slice(0, 500),
-        createdAt: String(t?.createdAt || new Date().toISOString()),
-      }))
-      .filter((t: IntroTemplate) => t.body.trim().length > 0)
-      .slice(0, 20);
-  } catch {
-    return [];
-  }
-}
-
-export function loadUserIntroTemplates(): IntroTemplate[] {
-  return safeParse(localStorage.getItem(USER_KEY));
-}
-
-export function saveUserIntroTemplates(list: IntroTemplate[]) {
-  localStorage.setItem(USER_KEY, JSON.stringify(list.slice(0, 20)));
-}
-
-export function upsertIntroTemplate(
-  tpl: Omit<IntroTemplate, "createdAt"> & { createdAt?: string }
-): IntroTemplate[] {
-  const entry: IntroTemplate = {
-    id: tpl.id || `intro-${Date.now()}`,
-    label: (tpl.label || "Template").trim().slice(0, 80) || "Template",
-    body: (tpl.body || "").trim().slice(0, 500),
-    createdAt: tpl.createdAt || new Date().toISOString(),
-  };
-  if (!entry.body) return loadUserIntroTemplates();
-  const list = loadUserIntroTemplates().filter((t) => t.id !== entry.id);
-  list.unshift(entry);
-  saveUserIntroTemplates(list);
-  return list;
-}
-
-export function deleteIntroTemplate(id: string) {
-  saveUserIntroTemplates(loadUserIntroTemplates().filter((t) => t.id !== id));
-}
+export type IntroTemplate = TextTemplate;
 
 export const DEFAULT_INTRO_STARTERS: IntroTemplate[] = [
   {
@@ -77,22 +24,6 @@ export const DEFAULT_INTRO_STARTERS: IntroTemplate[] = [
   },
 ];
 
-export function mergeIntroTemplates(
-  server?: { id: string; label: string; body: string; createdAt?: string }[] | null
-): IntroTemplate[] {
-  const local = loadUserIntroTemplates();
-  const fromServer = Array.isArray(server)
-    ? server.map((x) => ({
-        id: x.id,
-        label: x.label,
-        body: x.body,
-        createdAt: x.createdAt || new Date().toISOString(),
-      }))
-    : [];
-  if (local.length) return local;
-  if (fromServer.length) {
-    saveUserIntroTemplates(fromServer);
-    return fromServer;
-  }
-  return DEFAULT_INTRO_STARTERS;
+export function mergeIntroTemplates(server?: Parameters<typeof accountTextTemplates>[0]): IntroTemplate[] {
+  return accountTextTemplates(server, DEFAULT_INTRO_STARTERS);
 }

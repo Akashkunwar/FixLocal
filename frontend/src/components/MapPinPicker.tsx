@@ -5,6 +5,13 @@ import "leaflet/dist/leaflet.css";
 /** Bengaluru demo centre */
 export const BLR_CENTER = { lat: 12.9716, lng: 77.5946 };
 
+// OpenStreetMap's public tiles are fine for development only; set VITE_MAP_TILE_URL
+// to a provider with a production usage policy before launch.
+const TILE_URL = import.meta.env.VITE_MAP_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_ATTRIBUTION =
+  import.meta.env.VITE_MAP_ATTRIBUTION ||
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
 const DEFAULT_ZOOM = 12;
 
 // Fix default marker icons under Vite (broken relative paths)
@@ -44,10 +51,7 @@ export function MapPinPicker({ lat, lng, onChange, height = 260, className }: Pr
       zoom: DEFAULT_ZOOM,
       scrollWheelZoom: false,
     });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-      maxZoom: 19,
-    }).addTo(map);
+    L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map);
 
     const marker = L.marker([startLat, startLng], {
       draggable: true,

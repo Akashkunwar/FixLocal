@@ -4,9 +4,6 @@ export const PRO_ROOT = "/professional";
 export const LEGACY_CLIENT_ROOT = "/homeowner";
 export const LEGACY_PRO_ROOT = "/tradesperson";
 
-export const CLIENT_PREFIXES = [CLIENT_ROOT, LEGACY_CLIENT_ROOT] as const;
-export const PRO_PREFIXES = [PRO_ROOT, LEGACY_PRO_ROOT] as const;
-
 function join(root: string, sub = ""): string {
   if (!sub) return root;
   return `${root}${sub.startsWith("/") ? sub : `/${sub}`}`;
@@ -20,6 +17,13 @@ export function clientPath(sub = ""): string {
 /** Canonical professional path (preferred in new links). */
 export function proPath(sub = ""): string {
   return join(PRO_ROOT, sub);
+}
+
+/** Only same-site paths are allowed as a post-login redirect (blocks //evil.com and /\\evil.com). */
+export function safeNext(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return null;
+  return raw;
 }
 
 export type SiteType = "residential" | "office";

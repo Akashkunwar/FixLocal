@@ -85,8 +85,9 @@ export function CreateJobPage() {
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [repeatBanner, setRepeatBanner] = useState(() => peekRepeatBanner());
-  const [namedLibrary, setNamedLibrary] = useState<NamedJobTemplate[]>(() =>
-    mergeNamedJobTemplates(undefined)
+  const namedLibrary = useMemo(
+    () => mergeNamedJobTemplates(user?.namedJobTemplates),
+    [user?.namedJobTemplates]
   );
   const [namedQuery, setNamedQuery] = useState("");
   const [namedSpecialty, setNamedSpecialty] = useState<string>("all");
@@ -108,10 +109,6 @@ export function CreateJobPage() {
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
   }, [draft]);
-
-  useEffect(() => {
-    setNamedLibrary(mergeNamedJobTemplates(user?.namedJobTemplates));
-  }, [user?.namedJobTemplates]);
 
   const specialtyOptions = useMemo(
     () => CATEGORIES.filter((c) => c.group === draft.leadGroup),
@@ -670,12 +667,17 @@ export function CreateJobPage() {
                 id="photos"
                 className="input"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
                 multiple
                 onChange={async (e) => {
-                  const picked = Array.from(e.target.files || []).slice(0, 5);
-                  const compressed = await compressImageFiles(picked);
-                  setFiles(compressed);
+                  const input = e.currentTarget;
+                  const picked = Array.from(input.files || []).slice(0, 5);
+                  try {
+                    setFiles(await compressImageFiles(picked));
+                  } catch (err) {
+                    input.value = "";
+                    error((err as Error).message);
+                  }
                 }}
               />
               {previews.length > 0 && (

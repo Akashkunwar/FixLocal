@@ -162,7 +162,7 @@ export function CompletionPhotosPanel({
                     className="h-24 w-24 rounded-xl object-cover ring-1 ring-slate-200"
                   />
                 </a>
-                {canEdit && (
+                {canEdit && job.status !== "disputed" && (
                   <button
                     type="button"
                     className="absolute -right-1 -top-1 rounded-full bg-slate-900/80 px-1.5 text-[10px] text-white opacity-0 group-hover:opacity-100"
@@ -254,8 +254,9 @@ export function CompletionPhotosPanel({
               <input
                 className="input"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 multiple
+                aria-label="Before photos"
                 onChange={(e) => setBeforeFiles(Array.from(e.target.files || []).slice(0, 4))}
               />
             </div>
@@ -264,8 +265,9 @@ export function CompletionPhotosPanel({
               <input
                 className="input"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 multiple
+                aria-label="After photos"
                 onChange={(e) => setAfterFiles(Array.from(e.target.files || []).slice(0, 4))}
               />
             </div>
@@ -281,7 +283,15 @@ export function CompletionPhotosPanel({
         </div>
       )}
 
-      {canPublishCaseStudy && hasPhotos && (
+      {canPublishCaseStudy && hasPhotos && job.status === "completed" && !job.photoConsent && (
+        <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200">
+          To show these photos in your portfolio, ask the client to allow it on their job page.
+        </p>
+      )}
+      {job.status === "disputed" && canEdit && (
+        <p className="text-xs text-amber-800">Photos can be added but not removed while the job is in dispute.</p>
+      )}
+      {canPublishCaseStudy && hasPhotos && job.status === "completed" && job.photoConsent && (
         <div className="space-y-3 rounded-xl bg-sky-50 p-4 ring-1 ring-sky-100">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>

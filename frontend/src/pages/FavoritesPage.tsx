@@ -198,13 +198,18 @@ export function FavoritesPage() {
                         aria-label="Select for bulk invite"
                       />
                     )}
-                    {f.targetType === "job" && f.job ? (
-                      <Link to={jobLink(f.targetId)} className="min-w-0 no-underline text-inherit">
-                        <p className="font-semibold text-slate-900">
-                          {(f.job as any).title}
+                    {f.targetType === "job" && f.job?.unavailable ? (
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-500">{f.job.title}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          This job is no longer open to you.
                         </p>
+                      </div>
+                    ) : f.targetType === "job" && f.job ? (
+                      <Link to={jobLink(f.targetId)} className="min-w-0 no-underline text-inherit">
+                        <p className="font-semibold text-slate-900">{f.job.title}</p>
                         <div className="mt-1">
-                          <Badge status={(f.job as any).status} />
+                          <Badge status={f.job.status} />
                         </div>
                       </Link>
                     ) : f.targetType === "pro" && f.pro ? (
@@ -213,7 +218,7 @@ export function FavoritesPage() {
                           to={`/pros/${f.targetId}`}
                           className="font-semibold text-slate-900 no-underline hover:text-brand-700"
                         >
-                          {f.pro.name || f.pro.email}
+                          {f.pro.name || "Professional"}
                         </Link>
                         <p className="text-sm text-slate-500">{f.pro.skills}</p>
                         <div className="mt-1 flex flex-wrap gap-1.5">

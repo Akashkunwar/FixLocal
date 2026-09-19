@@ -2,7 +2,8 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Shell } from "../../components/Shell";
 import {
-  completeJob,
+  createDispute,
+  markJobDone,
   getJob,
   listBids,
   mediaUrl,
@@ -30,7 +31,10 @@ import { StatusTimeline } from "../../components/ui/StatusTimeline";
 import { useToast } from "../../components/Toast";
 import { useAuth } from "../../auth/AuthContext";
 import { categoryLabel, fmtDate, fmtDateTime, money } from "../../lib/format";
-import { addFavorite } from "../../api/extras";
+import { addFavorite, createReview, getJobReview, type JobReview } from "../../api/extras";
+import { ApiError } from "../../api/client";
+import { ReportButton } from "../../components/ReportButton";
+import { StarRating } from "../../components/ui/StarRating";
 import { Heart } from "lucide-react";
 import { mergeCounterTemplates } from "../../lib/counterTemplates";
 import {
@@ -95,15 +99,41 @@ export function ProJobDetailPage() {
   const [counterDeclineFloor, setCounterDeclineFloor] = useState("");
   const [counterDeclineBusy, setCounterDeclineBusy] = useState(false);
 
+  const [otherBidCount, setOtherBidCount] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [clientReview, setClientReview] = useState<JobReview | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [disputeOpen, setDisputeOpen] = useState(false);
+  const [disputeReason, setDisputeReason] = useState("");
+  const [disputeFiles, setDisputeFiles] = useState<File[]>([]);
+
   async function load() {
     if (!id) return;
-    setLoading(true);
+    if (!job) setLoading(true);
     try {
-      const [j, b] = await Promise.all([getJob(id), listBids(id)]);
+      const j = await getJob(id);
+      // Pros only see their own bid; no bid yet is a normal state.
+      const b = await listBids(id).catch((e) => {
+        if (e instanceof ApiError && e.status === 403) return { bids: [] as Bid[], otherActiveBidCount: undefined };
+        throw e;
+      });
       setJob(j.job);
       setBids(b.bids);
-    } catch (e: any) {
-      error(e.message);
+      setOtherBidCount(b.otherActiveBidCount ?? 0);
+      setLoadError(null);
+      if (j.job.status === "completed" && j.access === "private") {
+        getJobReview(id)
+          .then((r) => setClientReview(r.proReview))
+          .catch(() => setClientReview(null));
+      }
+    } catch (e) {
+      const err = e as ApiError;
+      setLoadError(
+        err.code === "NOT_VERIFIED"
+          ? "Your professional account needs to be verified by FixLocal before you can view job details."
+          : err.message
+      );
     } finally {
       setLoading(false);
     }
@@ -255,11 +285,36 @@ export function ProJobDetailPage() {
 
   async function onComplete() {
     try {
-      await completeJob(id!);
-      success("Marked complete — homeowner can confirm and release milestones");
+      await markJobDone(id!);
+      success("Marked as done — the client has been asked to confirm and release the remaining payment");
       load();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
+    }
+  }
+
+  async function onReviewClient(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await createReview(id!, reviewRating, reviewComment.trim() || undefined);
+      success("Thanks — your review of the client was saved");
+      load();
+    } catch (err) {
+      error((err as Error).message);
+    }
+  }
+
+  async function onDispute(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await createDispute(id!, { reason: disputeReason, files: disputeFiles });
+      success("Dispute opened — an admin will review it");
+      setDisputeOpen(false);
+      setDisputeReason("");
+      setDisputeFiles([]);
+      load();
+    } catch (err) {
+      error((err as Error).message);
     }
   }
 
@@ -288,6 +343,16 @@ export function ProJobDetailPage() {
     }
   }
 
+  if (loadError && !job) {
+    return (
+      <Shell title="Job">
+        <div className="card p-6 text-slate-700" role="alert">
+          {loadError}
+        </div>
+      </Shell>
+    );
+  }
+
   if (loading || !job) {
     return (
       <Shell title="Job">
@@ -297,6 +362,7 @@ export function ProJobDetailPage() {
   }
 
   const isAwardedToMe = myBid?.status === "accepted";
+  const liveWork = ["awarded", "in_progress", "pending_confirmation"].includes(job.status);
   const showEscrow =
     isAwardedToMe &&
     (job.acceptedBidId ||
@@ -422,8 +488,10 @@ export function ProJobDetailPage() {
             </div>
             <p className="text-slate-700 whitespace-pre-wrap">{job.description}</p>
             <p className="text-sm text-slate-500">
-              {job.area || job.address || "Location TBD"} · Budget {money(job.budgetMin)} –{" "}
-              {money(job.budgetMax)}
+              {job.exactLocation
+                ? [job.address, job.area, job.pincode].filter(Boolean).join(", ") || "Location TBD"
+                : `${[job.area, job.city].filter(Boolean).join(", ") || "Location TBD"} (exact address shared once you're hired)`}{" "}
+              · Budget {money(job.budgetMin)} – {money(job.budgetMax)}
             </p>
             {job.photoUrls?.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -448,10 +516,50 @@ export function ProJobDetailPage() {
                   Mark work done
                 </button>
               )}
+              {isAwardedToMe && (liveWork || job.status === "completed") && (
+                <button type="button" className="btn-secondary" onClick={() => setDisputeOpen((v) => !v)}>
+                  Open dispute
+                </button>
+              )}
             </div>
+            {isAwardedToMe && job.status === "pending_confirmation" && (
+              <p className="rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-900 ring-1 ring-sky-100" role="status">
+                Waiting for the client to confirm. If they don't respond, the job is confirmed automatically and the
+                remaining payment is released.
+              </p>
+            )}
+            {disputeOpen && (
+              <form onSubmit={onDispute} className="space-y-3 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200">
+                <label className="label" htmlFor="pro-dispute-reason">
+                  What went wrong?
+                </label>
+                <textarea
+                  id="pro-dispute-reason"
+                  className="input"
+                  required
+                  maxLength={4000}
+                  value={disputeReason}
+                  onChange={(e) => setDisputeReason(e.target.value)}
+                />
+                <label className="label" htmlFor="pro-dispute-files">
+                  Evidence (photos or PDF, up to 5)
+                </label>
+                <input
+                  id="pro-dispute-files"
+                  className="input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  multiple
+                  onChange={(e) => setDisputeFiles(Array.from(e.target.files || []).slice(0, 5))}
+                />
+                <button type="submit" className="btn-primary btn-sm">
+                  Submit dispute
+                </button>
+              </form>
+            )}
           </section>
 
-          {isAwardedToMe && (job.status === "awarded" || job.status === "in_progress") && (
+          {isAwardedToMe && liveWork && (
             <SchedulePanel
               job={job}
               userId={user?.id}
@@ -465,10 +573,7 @@ export function ProJobDetailPage() {
             <ProVisitDayCard job={job} />
           )}
 
-          {isAwardedToMe &&
-            (job.status === "awarded" ||
-              job.status === "in_progress" ||
-              job.status === "completed") && (
+          {isAwardedToMe && (liveWork || job.status === "completed") && (
             <AmcProposalCard
               job={job}
               role="pro"
@@ -481,23 +586,36 @@ export function ProJobDetailPage() {
 
           {showEscrow && <PaymentPanel job={job} canRelease={false} onChanged={load} />}
 
-          {isAwardedToMe &&
-            (job.status === "awarded" ||
-              job.status === "in_progress" ||
-              job.status === "completed" ||
-              job.status === "disputed") && (
-              <CompletionPhotosPanel
-                job={job}
-                canEdit={
-                  job.status === "awarded" ||
-                  job.status === "in_progress" ||
-                  job.status === "completed" ||
-                  job.status === "disputed"
-                }
-                canPublishCaseStudy={isAwardedToMe}
-                onChanged={load}
-              />
-            )}
+          {isAwardedToMe && (liveWork || job.status === "completed" || job.status === "disputed") && (
+            <CompletionPhotosPanel job={job} canEdit canPublishCaseStudy onChanged={load} />
+          )}
+
+          {isAwardedToMe && job.status === "completed" && (
+            <section className="card p-6">
+              <h2 className="mb-3 text-lg font-semibold">Review the client</h2>
+              {clientReview ? (
+                <div>
+                  <StarRating value={clientReview.rating} readonly />
+                  {clientReview.comment && <p className="mt-2 text-sm text-slate-600">{clientReview.comment}</p>}
+                </div>
+              ) : (
+                <form onSubmit={onReviewClient} className="space-y-3">
+                  <StarRating value={reviewRating} onChange={setReviewRating} />
+                  <textarea
+                    className="input"
+                    aria-label="Review comment"
+                    maxLength={2000}
+                    placeholder="Was the brief clear? Did they pay on time?"
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                  />
+                  <button type="submit" className="btn-primary">
+                    Submit review
+                  </button>
+                </form>
+              )}
+            </section>
+          )}
 
           {job.status === "open" && !myBid && (
             <form
@@ -537,8 +655,9 @@ export function ProJobDetailPage() {
               )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="label">Amount (₹)</label>
+                  <label className="label" htmlFor="bid-amount">Amount (₹)</label>
                   <input
+                    id="bid-amount"
                     className="input"
                     type="number"
                     min={1}
@@ -548,8 +667,9 @@ export function ProJobDetailPage() {
                   />
                 </div>
                 <div>
-                  <label className="label">ETA days</label>
+                  <label className="label" htmlFor="bid-eta">ETA days</label>
                   <input
+                    id="bid-eta"
                     className="input"
                     type="number"
                     min={1}
@@ -560,8 +680,9 @@ export function ProJobDetailPage() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="label">Proposed visit start (optional)</label>
+                  <label className="label" htmlFor="bid-visit-start">Proposed visit start (optional)</label>
                   <input
+                    id="bid-visit-start"
                     className="input"
                     type="datetime-local"
                     value={visitStart}
@@ -569,8 +690,9 @@ export function ProJobDetailPage() {
                   />
                 </div>
                 <div>
-                  <label className="label">Proposed visit end</label>
+                  <label className="label" htmlFor="bid-visit-end">Proposed visit end</label>
                   <input
+                    id="bid-visit-end"
                     className="input"
                     type="datetime-local"
                     value={visitEnd}
@@ -579,8 +701,9 @@ export function ProJobDetailPage() {
                 </div>
               </div>
               <div>
-                <label className="label">Message</label>
+                <label className="label" htmlFor="bid-message">Message</label>
                 <textarea
+                  id="bid-message"
                   className="input"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
@@ -591,8 +714,9 @@ export function ProJobDetailPage() {
                 <p className="text-xs font-semibold text-amber-900">Optional structured quote / estimate</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div>
-                    <label className="label">Quote amount (₹)</label>
+                    <label className="label" htmlFor="bid-quote-amount">Quote amount (₹)</label>
                     <input
+                      id="bid-quote-amount"
                       className="input"
                       type="number"
                       min={1}
@@ -602,11 +726,12 @@ export function ProJobDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="label">Quote PDF / image</label>
+                    <label className="label" htmlFor="bid-quote-file">Quote PDF / image</label>
                     <input
+                      id="bid-quote-file"
                       className="input"
                       type="file"
-                      accept="image/*,application/pdf"
+                      accept="application/pdf,image/jpeg,image/png,image/webp"
                       onChange={(e) => setQuoteFile(e.target.files?.[0] || null)}
                     />
                   </div>
@@ -614,6 +739,7 @@ export function ProJobDetailPage() {
                 <textarea
                   className="input"
                   rows={2}
+                  aria-label="Quote notes"
                   value={quoteNotes}
                   onChange={(e) => setQuoteNotes(e.target.value)}
                   placeholder="Materials, labour breakdown, warranty…"
@@ -962,20 +1088,23 @@ export function ProJobDetailPage() {
             </div>
           )}
 
-          {(isAwardedToMe || myBid) && <JobChat jobId={job.id} />}
+          {(isAwardedToMe || (myBid?.status === "active" && job.status === "open")) && (
+            <JobChat jobId={job.id} title="Messages with the client" />
+          )}
         </div>
-        <aside className="card p-5 h-fit">
-          <h3 className="font-semibold">Other bids</h3>
-          <ul className="mt-3 space-y-2 text-sm">
-            {bids.map((b) => (
-              <li key={b.id} className="flex justify-between gap-2 border-b border-slate-100 py-2">
-                <span className="text-slate-600 truncate">
-                  {b.tradespersonId === user?.id ? "You" : "Pro"}
-                </span>
-                <span className="font-medium">{b.amount == null ? "—" : money(b.amount)}</span>
-              </li>
-            ))}
-          </ul>
+        <aside className="h-fit space-y-3">
+          <div className="card p-5">
+            <h3 className="font-semibold">Competition</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              {job.status !== "open"
+                ? "Bidding has closed."
+                : otherBidCount === 0
+                  ? "No other active bids yet."
+                  : `${otherBidCount} other active bid${otherBidCount === 1 ? "" : "s"} (amounts are private).`}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">Up to {job.maxBids} bids are accepted on this job.</p>
+          </div>
+          <ReportButton targetType="job" targetId={job.id} label="Report this job" />
         </aside>
       </div>
     </Shell>

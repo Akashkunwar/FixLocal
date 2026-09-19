@@ -114,7 +114,7 @@ export function downloadVisitIcs(job: Job) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  const safe = (job.title || "visit").replace(/[^\w\-]+/g, "_").slice(0, 40);
+  const safe = (job.title || "visit").replace(/[^\w-]+/g, "_").slice(0, 40);
   a.download = `fixlocal-${safe}.ics`;
   document.body.appendChild(a);
   a.click();
@@ -203,7 +203,7 @@ export function downloadAmcReminderIcs(
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  const safe = (job.title || "amc").replace(/[^\w\-]+/g, "_").slice(0, 40);
+  const safe = (job.title || "amc").replace(/[^\w-]+/g, "_").slice(0, 40);
   a.download = `fixlocal-amc-hint-${safe}.ics`;
   document.body.appendChild(a);
   a.click();
@@ -304,7 +304,7 @@ export function downloadAmcMultiEventIcs(
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  const safe = (job.title || "amc").replace(/[^\w\-]+/g, "_").slice(0, 40);
+  const safe = (job.title || "amc").replace(/[^\w-]+/g, "_").slice(0, 40);
   a.download = `fixlocal-amc-multi-${safe}.ics`;
   document.body.appendChild(a);
   a.click();

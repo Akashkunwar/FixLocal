@@ -30,10 +30,14 @@ export function AdminJobsPage() {
   }, []);
 
   async function cancel(id: string) {
-    if (!confirm("Force-cancel this job?")) return;
+    const reason = window.prompt(
+      "Force-cancel this job? Any unreleased payment is refunded and both sides are notified.\n\nReason (shown to the users):",
+      "Cancelled by FixLocal support"
+    );
+    if (reason === null) return;
     try {
-      await forceCancelJob(id);
-      success("Job cancelled");
+      const r = await forceCancelJob(id, reason.trim() || undefined);
+      success(`Job cancelled (was ${r.previousStatus.replace(/_/g, " ")})`);
       load();
     } catch (e: any) {
       error(e.message);

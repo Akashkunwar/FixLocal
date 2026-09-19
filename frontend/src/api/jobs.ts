@@ -35,6 +35,8 @@ export type Job = {
   pincode?: string | null;
   lat?: number | null;
   lng?: number | null;
+  /** False when the viewer only sees the area (not yet hired). */
+  exactLocation?: boolean;
   distanceKm?: number | null;
   photoUrls: string[];
   beforePhotoUrls?: string[];
@@ -50,9 +52,14 @@ export type Job = {
   scheduleNote?: string | null;
   homeownerId: string;
   acceptedBidId?: string | null;
+  photoConsent?: boolean;
+  pendingConfirmationAt?: string | null;
   completedAt?: string | null;
   createdAt: string;
+  unavailable?: boolean;
 };
+
+export type JobAccess = "private" | "listing";
 
 export type ResponseSla = {
   tier: string;
@@ -78,6 +85,8 @@ export type Bid = {
   quoteAmount?: string | number | null;
   quoteNotes?: string | null;
   quoteAttachmentUrl?: string | null;
+  /** Incremented on every quote change; sent back when accepting. */
+  quoteRevision?: number;
   quoteHistory?: Array<{
     amount?: number | null;
     notes?: string | null;
@@ -140,7 +149,7 @@ export type Bid = {
   } | null;
   status: string;
   createdAt: string;
-  tradesperson?: { id: string; email: string; name?: string | null };
+  tradesperson?: { id: string; email?: string; name?: string | null };
   profile?: {
     averageRating: number;
     reviewCount: number;
@@ -269,8 +278,11 @@ export type Dispute = {
     milestoneIds: string[];
     totalRefunded: number;
     labels?: string[];
+    totalReleased?: number;
+    notRefundable?: string[];
   } | null;
-  raisedBy?: { id: string; email: string; name?: string | null; role: string };
+  previousJobStatus?: string | null;
+  raisedBy?: { id: string; email?: string; name?: string | null; role: string };
   job?: { id: string; title: string; status: string; homeownerId?: string; category?: string };
   createdAt?: string;
   resolvedAt?: string | null;
@@ -352,8 +364,10 @@ export type TradespersonProfile = {
   } | null;
 };
 
-export function mediaUrl(path: string) {
-  if (path.startsWith("http")) return path;
+/** Only files served by FixLocal are rendered; anything else becomes an empty string. */
+export function mediaUrl(path: string | null | undefined) {
+  if (!path) return "";
+  if (!/^\/(api\/files|uploads)\//.test(path)) return "";
   return `${API_URL}${path}`;
 }
 
@@ -369,8 +383,8 @@ export function listJobs(params: Record<string, string | undefined> = {}) {
   }>(`/api/jobs${q ? `?${q}` : ""}`);
 }
 
-export function getJob(id: string) {
-  return api<{ job: Job }>(`/api/jobs/${id}`);
+export function getJob(id: string, signal?: AbortSignal) {
+  return api<{ job: Job; access: JobAccess }>(`/api/jobs/${id}`, { signal });
 }
 
 export function createJob(form: FormData) {
@@ -381,11 +395,28 @@ export function cancelJob(id: string) {
   return api<{ job: Job }>(`/api/jobs/${id}/cancel`, { method: "POST" });
 }
 
+type CompletionResult = {
+  job: Job;
+  autoReleased?: { count: number; paymentStatus?: string } | null;
+};
+
+/** Professional: work is finished; the client is asked to confirm. */
+export function markJobDone(id: string) {
+  return api<CompletionResult>(`/api/jobs/${id}/mark-done`, { method: "POST" });
+}
+
+/** Client: confirm the work is complete and release the remaining payment. */
+export function confirmJobComplete(id: string) {
+  return api<CompletionResult>(`/api/jobs/${id}/confirm`, { method: "POST", headers: { "Idempotency-Key": `confirm-${id}` } });
+}
+
+/** Legacy combined endpoint (marks done for pros, confirms for clients). */
 export function completeJob(id: string) {
-  return api<{
-    job: Job;
-    autoReleased?: { count: number; paymentStatus?: string } | null;
-  }>(`/api/jobs/${id}/complete`, { method: "POST" });
+  return api<CompletionResult>(`/api/jobs/${id}/complete`, { method: "POST" });
+}
+
+export function setPhotoConsent(id: string, consent: boolean) {
+  return api<{ job: Job }>(`/api/jobs/${id}/photo-consent`, { method: "POST", body: JSON.stringify({ consent }) });
 }
 
 export function uploadCompletionPhotos(
@@ -520,11 +551,25 @@ export type BestValueBlendWeights = {
   slaHeatPct?: number;
 };
 
-export function listBids(jobId: string) {
-  return api<{ bids: Bid[]; bestValueBlend?: BestValueBlendWeights }>(`/api/jobs/${jobId}/bids`);
+export function listBids(jobId: string, signal?: AbortSignal) {
+  return api<{ bids: Bid[]; bestValueBlend?: BestValueBlendWeights; otherActiveBidCount?: number }>(
+    `/api/jobs/${jobId}/bids`,
+    { signal }
+  );
 }
 
-export function acceptBid(bidId: string) {
+/** Escrow amount the client is agreeing to: the structured quote if present, else the bid. */
+export function bidEscrowAmount(bid: Pick<Bid, "amount" | "quoteAmount">): number {
+  const q = Number(bid.quoteAmount);
+  if (Number.isFinite(q) && q > 0) return Math.round(q * 100) / 100;
+  return Math.round(Number(bid.amount || 0) * 100) / 100;
+}
+
+/**
+ * Accept a bid at the amount the client saw. If the pro changed the quote since,
+ * the API answers 409 QUOTE_CHANGED with the current amount.
+ */
+export function acceptBid(bid: Pick<Bid, "id" | "amount" | "quoteAmount" | "quoteRevision">) {
   return api<{
     job: Job;
     bids?: Bid[];
@@ -542,7 +587,11 @@ export function acceptBid(bidId: string) {
         note: string;
       } | null;
     };
-  }>(`/api/bids/${bidId}/accept`, { method: "POST" });
+  }>(`/api/bids/${bid.id}/accept`, {
+    method: "POST",
+    headers: { "Idempotency-Key": `accept-${bid.id}-${bid.quoteRevision ?? 0}` },
+    body: JSON.stringify({ expectedAmount: bidEscrowAmount(bid), expectedRevision: bid.quoteRevision ?? 0 }),
+  });
 }
 
 export type SuggestedPro = {
@@ -737,20 +786,20 @@ export type DisputeEvidence = {
 };
 
 export function createDispute(jobId: string, reasonOrOpts: string | DisputeEvidence) {
-  if (typeof reasonOrOpts === "string") {
-    return api<{ dispute: Dispute; job: Job }>("/api/disputes", {
-      method: "POST",
-      body: JSON.stringify({ jobId, reason: reasonOrOpts }),
-    });
-  }
+  const opts = typeof reasonOrOpts === "string" ? { reason: reasonOrOpts } : reasonOrOpts;
   const fd = new FormData();
-  fd.append("jobId", jobId);
-  fd.append("reason", reasonOrOpts.reason);
-  (reasonOrOpts.files || []).slice(0, 5).forEach((f) => fd.append("evidence", f));
-  return api<{ dispute: Dispute; job: Job }>("/api/disputes", {
+  fd.append("reason", opts.reason);
+  (opts.files || []).slice(0, 5).forEach((f) => fd.append("evidence", f));
+  return api<{ dispute: Dispute; job: Job }>(`/api/jobs/${jobId}/disputes`, {
     method: "POST",
     body: fd,
   });
+}
+
+export function uploadLicenseDoc(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  return api<{ profile: TradespersonProfile }>("/api/profile/license", { method: "POST", body: fd });
 }
 
 export function uploadGallery(files: File[]) {
@@ -779,6 +828,7 @@ export type EarningsSummary = {
     jobId: string;
     title: string;
     amount: number;
+    agreedAmount?: number;
     status: string;
     completedAt?: string | null;
   }[];
@@ -820,14 +870,14 @@ export function placeBid(
   });
 }
 
-export function getJobPayments(jobId: string) {
-  return api<JobPayments>(`/api/jobs/${jobId}/payments`);
+export function getJobPayments(jobId: string, signal?: AbortSignal) {
+  return api<JobPayments>(`/api/jobs/${jobId}/payments`, { signal });
 }
 
 export function releaseMilestone(jobId: string, milestoneId: string) {
   return api<{ job: Job; milestone: PaymentMilestone; paymentStatus: string }>(
     `/api/jobs/${jobId}/payments/${milestoneId}/release`,
-    { method: "POST" }
+    { method: "POST", headers: { "Idempotency-Key": `release-${milestoneId}` } }
   );
 }
 
@@ -915,18 +965,11 @@ export function declineCounterOffer(bidId: string, body: { notes?: string } = {}
   });
 }
 
-export function checkViewedNoReply(
-  bidId: string,
-  opts: { forceHours?: number; force?: boolean } = {}
-) {
-  const q = new URLSearchParams();
-  if (opts.forceHours != null) q.set("forceHours", String(opts.forceHours));
-  if (opts.force) q.set("force", "1");
-  const qs = q.toString();
+export function checkViewedNoReply(bidId: string) {
   return api<{
     bidId: string;
     viewedNoReply: Bid["viewedNoReply"];
-  }>(`/api/bids/${bidId}/viewed-no-reply${qs ? `?${qs}` : ""}`, { method: "POST" });
+  }>(`/api/bids/${bidId}/viewed-no-reply`);
 }
 
 
@@ -954,8 +997,17 @@ export function browsePros(params: Record<string, string | undefined> = {}) {
   return api<{ pros: TradespersonProfile[] }>(`/api/profile/browse${q ? `?${q}` : ""}`);
 }
 
+export type PublicReview = {
+  id: string;
+  rating: number;
+  comment?: string | null;
+  createdAt: string;
+  jobTitle?: string;
+  reviewerName: string;
+};
+
 export function getPublicProfile(userId: string) {
-  return api<{ profile: TradespersonProfile; reviews: any[]; responseSla?: ResponseSla }>(
+  return api<{ profile: TradespersonProfile; reviews: PublicReview[]; responseSla?: ResponseSla; contactRevealed?: boolean }>(
     `/api/profile/user/${userId}`
   );
 }

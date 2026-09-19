@@ -202,6 +202,7 @@ export function BrowseJobsPage() {
             <input
               className="input pl-9"
               placeholder="Search…"
+              aria-label="Search jobs"
               value={facets.q}
               onChange={(e) => setFacets({ ...facets, q: e.target.value })}
               onKeyDown={(e) => e.key === "Enter" && load()}
@@ -209,6 +210,7 @@ export function BrowseJobsPage() {
           </div>
           <select
             className="input w-auto"
+            aria-label="Category"
             value={facets.category}
             onChange={(e) => setFacets({ ...facets, category: e.target.value })}
           >
@@ -226,12 +228,14 @@ export function BrowseJobsPage() {
           <input
             className="input w-auto min-w-[110px]"
             placeholder="City"
+            aria-label="City"
             value={facets.city}
             onChange={(e) => setFacets({ ...facets, city: e.target.value })}
           />
           <input
             className="input w-auto min-w-[120px]"
             placeholder="Neighborhood"
+            aria-label="Neighborhood"
             value={facets.neighborhood}
             onChange={(e) => setFacets({ ...facets, neighborhood: e.target.value })}
           />
@@ -240,6 +244,7 @@ export function BrowseJobsPage() {
             type="number"
             min={0}
             placeholder="Min ₹"
+            aria-label="Minimum budget"
             value={facets.budgetMin}
             onChange={(e) => setFacets({ ...facets, budgetMin: e.target.value })}
           />
@@ -248,11 +253,13 @@ export function BrowseJobsPage() {
             type="number"
             min={0}
             placeholder="Max ₹"
+            aria-label="Maximum budget"
             value={facets.budgetMax}
             onChange={(e) => setFacets({ ...facets, budgetMax: e.target.value })}
           />
           <select
             className="input w-auto"
+            aria-label="Sort by"
             value={facets.sort}
             onChange={(e) => setFacets({ ...facets, sort: e.target.value })}
           >

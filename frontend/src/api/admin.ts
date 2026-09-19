@@ -17,6 +17,11 @@ export type AdminStats = {
   activeBids?: number;
   totalReviews?: number;
   simulatedGMV?: number;
+  pendingConfirmationJobs?: number;
+  openReports?: number;
+  escrowReleased?: number;
+  escrowRefunded?: number;
+  escrowOutstanding?: number;
 };
 
 export type AdminTradesperson = {
@@ -32,6 +37,11 @@ export type AdminTradesperson = {
   verificationStatus: string;
   verifiedAt?: string | null;
   isSuspended?: boolean;
+  emailVerified?: boolean;
+  phone?: string | null;
+  yearsExperience?: number | null;
+  /** Signed link to the uploaded licence / ID document, if any. */
+  licenseDocUrl?: string | null;
   createdAt: string;
 };
 
@@ -94,7 +104,8 @@ export function resolveDispute(
   body: {
     resolution: "favor_homeowner" | "favor_tradesperson" | "no_action";
     resolutionNotes?: string;
-    jobStatus?: string;
+    /** Override the default outcome: cancel the job, complete it, or restore its previous status. */
+    jobStatus?: "cancelled" | "completed" | "restore";
     refundMilestoneIds?: string[];
   }
 ) {
@@ -104,9 +115,35 @@ export function resolveDispute(
   });
 }
 
-export function forceCancelJob(jobId: string) {
-  return api<{ job: Job }>(`/api/admin/jobs/${jobId}/force-cancel`, {
-    method: "POST",
+export function forceCancelJob(jobId: string, reason?: string) {
+  return api<{ job: Pick<Job, "id" | "title" | "status" | "paymentStatus">; previousStatus: string }>(
+    `/api/admin/jobs/${jobId}/force-cancel`,
+    { method: "POST", body: JSON.stringify({ reason }) }
+  );
+}
+
+export type AdminReport = {
+  id: string;
+  reporterId: string;
+  reporter: { id: string; name: string | null; email: string } | null;
+  targetType: "job" | "user" | "message";
+  targetId: string;
+  reason: string;
+  status: "open" | "resolved" | "dismissed";
+  resolutionNote?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+};
+
+export function listReports(status?: "open" | "resolved" | "dismissed") {
+  const q = status ? `?status=${status}` : "";
+  return api<{ reports: AdminReport[]; total: number }>(`/api/admin/reports${q}`);
+}
+
+export function resolveReport(id: string, status: "resolved" | "dismissed", resolutionNote?: string) {
+  return api<{ report: AdminReport }>(`/api/admin/reports/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status, resolutionNote }),
   });
 }
 

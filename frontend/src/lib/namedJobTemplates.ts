@@ -1,4 +1,4 @@
-/** Named client job templates library — saved from completed jobs (beyond one-shot repeat). */
+/** Named client job templates library — saved from completed jobs, stored on the account. */
 import { CATEGORIES } from "./format";
 import { normalizeCadence, type JobCadence } from "./jobCadence";
 import type { SiteType } from "./paths";
@@ -27,8 +27,6 @@ export type NamedJobTemplate = {
   pinned?: boolean;
   createdAt: string;
 };
-
-const USER_KEY = "fixlocal_named_job_templates_v1";
 
 function str(v: unknown) {
   return v == null ? "" : String(v);
@@ -74,35 +72,9 @@ export function normalizeNamedJobTemplates(raw: unknown): NamedJobTemplate[] {
   return out;
 }
 
-export function loadNamedJobTemplates(): NamedJobTemplate[] {
-  try {
-    return normalizeNamedJobTemplates(
-      JSON.parse(localStorage.getItem(USER_KEY) || "[]")
-    );
-  } catch {
-    return [];
-  }
-}
-
-export function saveNamedJobTemplates(list: NamedJobTemplate[]) {
-  try {
-    localStorage.setItem(
-      USER_KEY,
-      JSON.stringify(normalizeNamedJobTemplates(list).slice(0, 24))
-    );
-  } catch {
-    /* quota */
-  }
-}
-
-/** Prefer user/API list when present; else localStorage. */
+/** The account's saved library (normalized). */
 export function mergeNamedJobTemplates(fromUser?: unknown): NamedJobTemplate[] {
-  const fromApi = normalizeNamedJobTemplates(fromUser);
-  if (fromApi.length) {
-    saveNamedJobTemplates(fromApi);
-    return fromApi;
-  }
-  return loadNamedJobTemplates();
+  return normalizeNamedJobTemplates(fromUser);
 }
 
 export function namedTemplateFromJob(
@@ -138,20 +110,15 @@ export function namedTemplateFromJob(
   };
 }
 
-export function upsertNamedJobTemplate(entry: NamedJobTemplate): NamedJobTemplate[] {
+/** Pure helpers — persist the result with updateProfile({ namedJobTemplates }). */
+export function upsertNamedJobTemplate(list: NamedJobTemplate[], entry: NamedJobTemplate): NamedJobTemplate[] {
   const normalized = normalizeNamedJobTemplates([entry])[0];
-  if (!normalized) return loadNamedJobTemplates();
-  const list = loadNamedJobTemplates().filter((t) => t.id !== normalized.id);
-  list.unshift(normalized);
-  const next = list.slice(0, 24);
-  saveNamedJobTemplates(next);
-  return next;
+  if (!normalized) return list;
+  return [normalized, ...list.filter((t) => t.id !== normalized.id)].slice(0, 24);
 }
 
-export function deleteNamedJobTemplate(id: string): NamedJobTemplate[] {
-  const next = loadNamedJobTemplates().filter((t) => t.id !== id);
-  saveNamedJobTemplates(next);
-  return next;
+export function deleteNamedJobTemplate(list: NamedJobTemplate[], id: string): NamedJobTemplate[] {
+  return list.filter((t) => t.id !== id);
 }
 
 /** Apply a named template into the post-job draft shape (no "(repeat)" suffix). */
@@ -200,19 +167,15 @@ export function filterNamedJobTemplates(
   });
 }
 
-/** Toggle pin favorite on a named template (local + returns next list). */
-export function toggleNamedJobTemplatePin(id: string): NamedJobTemplate[] {
-  const next = loadNamedJobTemplates().map((t) => {
+/** Toggle the pin favorite on one template. */
+export function toggleNamedJobTemplatePin(list: NamedJobTemplate[], id: string): NamedJobTemplate[] {
+  return list.map((t) => {
     if (t.id !== id) return t;
-    if (t.pinned) {
-      const copy: NamedJobTemplate = { ...t };
-      delete copy.pinned;
-      return copy;
-    }
-    return { ...t, pinned: true };
+    if (!t.pinned) return { ...t, pinned: true };
+    const copy: NamedJobTemplate = { ...t };
+    delete copy.pinned;
+    return copy;
   });
-  saveNamedJobTemplates(next);
-  return loadNamedJobTemplates();
 }
 
 /** Distinct specialty values present in a named-template library (for filter chips). */

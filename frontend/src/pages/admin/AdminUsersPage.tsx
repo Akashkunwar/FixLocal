@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Shell } from "../../components/Shell";
 import { listUsers, setUserSuspended, type AdminUser } from "../../api/admin";
 import { Badge } from "../../components/ui/Badge";
@@ -12,11 +13,14 @@ export function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState("");
-  const [q, setQ] = useState("");
+  const [params, setParams] = useSearchParams();
+  const [q, setQ] = useState(() => params.get("q") || "");
   const [suspendedOnly, setSuspendedOnly] = useState(false);
 
   async function load() {
     setLoading(true);
+    // Keep the search in the URL so it survives reloads and can be linked (e.g. from Reports).
+    setParams(q.trim() ? { q: q.trim() } : {}, { replace: true });
     try {
       const r = await listUsers({
         role: role || undefined,
