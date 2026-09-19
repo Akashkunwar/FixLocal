@@ -28,8 +28,8 @@ export function AdminUsersPage() {
         suspended: suspendedOnly || undefined,
       });
       setUsers(r.users);
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -37,6 +37,7 @@ export function AdminUsersPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once; later loads use the Filter button
   }, []);
 
   async function toggleSuspend(u: AdminUser) {
@@ -47,8 +48,8 @@ export function AdminUsersPage() {
       await setUserSuspended(u.id, next);
       success(`${u.email} ${next ? "suspended" : "unsuspended"}`);
       load();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     }
   }
 

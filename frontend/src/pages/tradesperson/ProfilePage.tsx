@@ -102,6 +102,7 @@ export function ProfilePage() {
       })
       .catch((e) => error(e.message))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when the page opens
   }, []);
 
   async function onSubmit(e: FormEvent) {
@@ -129,8 +130,8 @@ export function ProfilePage() {
       setCustomPackages(normalizeCustomRatePackages(r.profile.customRatePackages));
       setCaseStudies(normalizeCaseStudies(r.profile.caseStudies));
       success("Portfolio updated");
-    } catch (err: any) {
-      error(err.message);
+    } catch (err) {
+      error((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -144,8 +145,8 @@ export function ProfilePage() {
       const r = await uploadGallery(compressed);
       setProfile(r.profile);
       success("Gallery photos added");
-    } catch (err: any) {
-      error(err.message || "Upload failed");
+    } catch (err) {
+      error((err as Error).message || "Upload failed");
     } finally {
       setUploading(false);
     }
@@ -171,8 +172,8 @@ export function ProfilePage() {
       const r = await removeGalleryImage(url);
       setProfile(r.profile);
       success("Photo removed");
-    } catch (err: any) {
-      error(err.message);
+    } catch (err) {
+      error((err as Error).message);
     }
   }
 
@@ -282,8 +283,9 @@ export function ProfilePage() {
 
       <form onSubmit={onSubmit} className="card max-w-2xl space-y-4 p-4 sm:p-6 mb-6">
         <div>
-          <label className="label">Bio</label>
+          <label className="label" htmlFor="profile-bio">Bio</label>
           <textarea
+            id="profile-bio"
             className="input min-h-[100px]"
             value={form.bio}
             onChange={(e) => setForm({ ...form, bio: e.target.value })}
@@ -414,16 +416,18 @@ export function ProfilePage() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="label">City</label>
+            <label className="label" htmlFor="profile-city">City</label>
             <input
+              id="profile-city"
               className="input"
               value={form.city}
               onChange={(e) => setForm({ ...form, city: e.target.value })}
             />
           </div>
           <div>
-            <label className="label">Years experience</label>
+            <label className="label" htmlFor="profile-years">Years experience</label>
             <input
+              id="profile-years"
               className="input"
               type="number"
               min={0}
@@ -434,8 +438,9 @@ export function ProfilePage() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="label">Hourly rate min (₹)</label>
+            <label className="label" htmlFor="profile-rate-min">Hourly rate min (₹)</label>
             <input
+              id="profile-rate-min"
               className="input"
               type="number"
               value={form.hourlyRateMin}
@@ -443,8 +448,9 @@ export function ProfilePage() {
             />
           </div>
           <div>
-            <label className="label">Hourly rate max (₹)</label>
+            <label className="label" htmlFor="profile-rate-max">Hourly rate max (₹)</label>
             <input
+              id="profile-rate-max"
               className="input"
               type="number"
               value={form.hourlyRateMax}
@@ -644,22 +650,29 @@ export function ProfilePage() {
               onChange={(e) => setCaseDraft({ ...caseDraft, title: e.target.value })}
               aria-label="Case study title"
             />
-            <input
-              className="input !py-1.5 text-sm"
-              placeholder="Before photo URL (optional)"
-              maxLength={500}
-              value={caseDraft.beforeUrl}
-              onChange={(e) => setCaseDraft({ ...caseDraft, beforeUrl: e.target.value })}
-              aria-label="Before photo URL"
-            />
-            <input
-              className="input !py-1.5 text-sm"
-              placeholder="After photo URL (optional)"
-              maxLength={500}
-              value={caseDraft.afterUrl}
-              onChange={(e) => setCaseDraft({ ...caseDraft, afterUrl: e.target.value })}
-              aria-label="After photo URL"
-            />
+            {(["beforeUrl", "afterUrl"] as const).map((key) => (
+              <select
+                key={key}
+                className="input !py-1.5 text-sm"
+                value={caseDraft[key]}
+                onChange={(e) => setCaseDraft({ ...caseDraft, [key]: e.target.value })}
+                aria-label={key === "beforeUrl" ? "Before photo" : "After photo"}
+                disabled={gallery.length === 0}
+              >
+                <option value="">
+                  {gallery.length === 0
+                    ? "Add gallery photos first"
+                    : key === "beforeUrl"
+                      ? "Before photo (optional)"
+                      : "After photo (optional)"}
+                </option>
+                {gallery.map((url, i) => (
+                  <option key={url} value={url}>
+                    Gallery photo {i + 1}
+                  </option>
+                ))}
+              </select>
+            ))}
             <input
               className="input !py-1.5 text-sm"
               placeholder="Category (optional)"

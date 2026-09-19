@@ -32,8 +32,8 @@ export function FavoritesPage() {
     try {
       const r = await listFavorites();
       setItems(r.favorites);
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -41,6 +41,7 @@ export function FavoritesPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when the page opens
   }, []);
 
   useEffect(() => {
@@ -64,8 +65,8 @@ export function FavoritesPage() {
       await removeFavorite(type, id);
       success("Removed");
       load();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     }
   }
 
@@ -88,8 +89,8 @@ export function FavoritesPage() {
       success("Shortlist updated");
       setEditingId(null);
       load();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     }
   }
 
@@ -223,7 +224,7 @@ export function FavoritesPage() {
                         <p className="text-sm text-slate-500">{f.pro.skills}</p>
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {f.pro.responseSla ? (
-                            <ResponseSlaBadge sla={f.pro.responseSla as any} compact />
+                            <ResponseSlaBadge sla={f.pro.responseSla} compact />
                           ) : null}
                           {(f.tags || []).map((t) => (
                             <span

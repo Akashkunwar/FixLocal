@@ -48,6 +48,7 @@ export function BrowseJobsPage() {
   const [savedLabel, setSavedLabel] = useState<string | null>(null);
   const [near, setNear] = useState<Near>(null);
   const [portfolioReady, setPortfolioReady] = useState(false);
+  const [verification, setVerification] = useState<string | null>(null);
   const [availabilitySet, setAvailabilitySet] = useState(false);
 
   async function load(f: Facets = facets, origin: Near = near) {
@@ -71,6 +72,9 @@ export function BrowseJobsPage() {
     }
   }
 
+  // Re-run when the URL filters change (e.g. following a category link while already on this page).
+  const urlCategory = (params.get("category") || "").trim();
+  const urlSite = (params.get("siteType") || "").trim();
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -88,6 +92,7 @@ export function BrowseJobsPage() {
         }
         if (!cancelled) {
           const p = pr.profile;
+          setVerification(p.verificationStatus || null);
           setPortfolioReady(
             Boolean(
               ((p.bio && String(p.bio).trim()) ||
@@ -100,7 +105,7 @@ export function BrowseJobsPage() {
             Boolean(
               week &&
                 Object.values(week).some(
-                  (d: any) => d && d.enabled
+                  (d) => Boolean(d && typeof d === "object" && (d as { enabled?: boolean }).enabled)
                 )
             )
           );
@@ -108,19 +113,18 @@ export function BrowseJobsPage() {
       } catch {
         /* ignore */
       }
-      const urlCategory = (params.get("category") || "").trim();
-      const urlSite = (params.get("siteType") || "").trim();
       const siteFromUrl: "" | SiteType =
         urlSite === "residential" || urlSite === "office" ? urlSite : "";
       try {
         const raw = localStorage.getItem(SAVED_KEY);
         if (raw && !urlCategory && !siteFromUrl) {
-          const parsed = JSON.parse(raw) as Facets & { label?: string };
+          // Older saved searches may lack newer fields, or use "area" for neighborhood.
+          const parsed = JSON.parse(raw) as Partial<Facets> & { label?: string; area?: string };
           const next: Facets = {
             ...defaults,
             ...parsed,
-            city: (parsed as any).city || "",
-            neighborhood: (parsed as any).neighborhood || (parsed as any).area || "",
+            city: parsed.city || "",
+            neighborhood: parsed.neighborhood || parsed.area || "",
             siteType:
               parsed.siteType === "residential" || parsed.siteType === "office"
                 ? parsed.siteType
@@ -151,7 +155,9 @@ export function BrowseJobsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // `load` is recreated every render; it reads the facets passed in, not stale state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCategory, urlSite]);
 
   function saveSearch() {
     const label =
@@ -165,6 +171,26 @@ export function BrowseJobsPage() {
 
   return (
     <Shell title="Open jobs" subtitle="Bid on verified-eligible repair requests near you">
+      {verification && verification !== "verified" && (
+        <div
+          className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          role="status"
+        >
+          <p className="font-medium">
+            {verification === "pending"
+              ? "Your account is waiting for admin verification."
+              : verification === "rejected"
+                ? "Your verification was not approved."
+                : "Your professional account is suspended."}
+          </p>
+          <p className="mt-1">
+            You can browse jobs, but you cannot place bids until an admin verifies you.{" "}
+            {verification !== "suspended" && (
+              <Link to={proPath("profile")}>Complete your portfolio and upload a licence or ID</Link>
+            )}
+          </p>
+        </div>
+      )}
       <OnboardingChecklist
         variant="pro"
         title="Professional getting started"

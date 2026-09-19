@@ -13,7 +13,7 @@ export function normalizeCaseStudies(raw: unknown): CaseStudy[] {
   if (!Array.isArray(raw)) return [];
   const out: CaseStudy[] = [];
   for (let i = 0; i < raw.length && out.length < 12; i++) {
-    const t: any = raw[i];
+    const t = (raw[i] ?? {}) as Record<string, unknown>;
     const title = String(t?.title || "").trim().slice(0, 120);
     if (!title) continue;
     const notes = t?.notes != null ? String(t.notes).trim().slice(0, 800) : undefined;

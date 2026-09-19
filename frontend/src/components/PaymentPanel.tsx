@@ -32,8 +32,8 @@ export function PaymentPanel({
     try {
       const r = await getJobPayments(job.id);
       setData(r);
-    } catch (e: any) {
-      error(e.message || "Failed to load payments");
+    } catch (e) {
+      error((e as Error).message || "Failed to load payments");
     } finally {
       setLoading(false);
     }
@@ -41,6 +41,7 @@ export function PaymentPanel({
 
   useEffect(() => {
     if (job.acceptedBidId || job.paymentStatus) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when the job's payment state changes; load() reads the current job
   }, [job.id, job.paymentStatus, job.acceptedBidId]);
 
   async function onRelease(m: PaymentMilestone) {
@@ -51,8 +52,8 @@ export function PaymentPanel({
       success(`${m.label} released`);
       await load();
       onChanged?.();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     } finally {
       setBusyId(null);
     }

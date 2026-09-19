@@ -230,8 +230,8 @@ export function CreateJobPage() {
       setRepeatBanner(null);
       success("Job posted!");
       navigate(clientPath(`jobs/${r.job.id}`));
-    } catch (err: any) {
-      error(err.message || "Could not create job");
+    } catch (err) {
+      error((err as Error).message || "Could not create job");
     } finally {
       setBusy(false);
     }

@@ -82,8 +82,8 @@ export function SchedulePanel({
       success("Visit window proposed");
       setShowForm(false);
       onChanged?.();
-    } catch (err: any) {
-      error(err.message);
+    } catch (err) {
+      error((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -95,8 +95,8 @@ export function SchedulePanel({
       await acceptSchedule(job.id);
       success("Visit time confirmed");
       onChanged?.();
-    } catch (err: any) {
-      error(err.message);
+    } catch (err) {
+      error((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -168,8 +168,8 @@ export function SchedulePanel({
               try {
                 downloadVisitIcs(job);
                 success("Calendar file downloaded (.ics, Asia/Kolkata)");
-              } catch (err: any) {
-                error(err.message || "Could not export calendar");
+              } catch (err) {
+                error((err as Error).message || "Could not export calendar");
               }
             }}
           >

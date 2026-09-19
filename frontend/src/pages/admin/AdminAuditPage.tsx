@@ -25,6 +25,29 @@ const ACTIONS = [
   "best_value_blend_update",
 ];
 
+
+type WeightSnapshot = {
+  skills?: number;
+  rating?: number;
+  response?: number;
+  distance?: number;
+  heatWeight?: number;
+  matchPct?: number;
+  pricePct?: number;
+  slaHeatPct?: number;
+};
+
+/** The metadata stored with match-weight and best-value-blend audit rows. */
+type AuditMeta = {
+  rollback?: unknown;
+  preset?: string;
+  beforeHeatWeight?: number;
+  before?: WeightSnapshot;
+  after?: WeightSnapshot;
+};
+
+const auditMeta = (log: { meta?: unknown }) => (log.meta ?? {}) as AuditMeta;
+
 export function AdminAuditPage() {
   const { error, success } = useToast();
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -39,8 +62,8 @@ export function AdminAuditPage() {
     try {
       const r = await listAuditLogs({ action: a || undefined, limit: 80 });
       setLogs(r.logs);
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -48,6 +71,7 @@ export function AdminAuditPage() {
 
   useEffect(() => {
     load("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when the page opens
   }, []);
 
   return (
@@ -76,8 +100,8 @@ export function AdminAuditPage() {
             success("Audit note saved");
             setNote("");
             await load(action);
-          } catch (err: any) {
-            error(err.message || "Failed to save note");
+          } catch (err) {
+            error((err as Error).message || "Failed to save note");
           } finally {
             setNoteBusy(false);
           }
@@ -123,36 +147,36 @@ export function AdminAuditPage() {
                   </p>
                   {log.action === "match_weights_update" &&
                     Boolean(log.meta?.before) &&
-                    !(log.meta as any)?.rollback && (
+                    !auditMeta(log)?.rollback && (
                     <p className="mt-1 text-[11px] text-slate-500">
-                      before sk{(log.meta as any).before?.skills}/rt{(log.meta as any).before?.rating}/rs
-                      {(log.meta as any).before?.response}/ds{(log.meta as any).before?.distance}
-                      {(log.meta as any).beforeHeatWeight != null ||
-                      (log.meta as any).before?.heatWeight != null
-                        ? ` · heat ${(log.meta as any).beforeHeatWeight ?? (log.meta as any).before?.heatWeight}`
+                      before sk{auditMeta(log).before?.skills}/rt{auditMeta(log).before?.rating}/rs
+                      {auditMeta(log).before?.response}/ds{auditMeta(log).before?.distance}
+                      {auditMeta(log).beforeHeatWeight != null ||
+                      auditMeta(log).before?.heatWeight != null
+                        ? ` · heat ${auditMeta(log).beforeHeatWeight ?? auditMeta(log).before?.heatWeight}`
                         : ""}
-                      {(log.meta as any).preset ? ` · preset ${(log.meta as any).preset}` : ""}
+                      {auditMeta(log).preset ? ` · preset ${auditMeta(log).preset}` : ""}
                     </p>
                   )}
                   {log.action === "best_value_blend_update" &&
                     Boolean(log.meta?.before) &&
-                    !(log.meta as any)?.rollback && (
+                    !auditMeta(log)?.rollback && (
                     <p className="mt-1 text-[11px] text-slate-500">
-                      before mt{(log.meta as any).before?.matchPct}/px{(log.meta as any).before?.pricePct}
-                      {(log.meta as any).before?.slaHeatPct != null
-                        ? `/sh${(log.meta as any).before.slaHeatPct}`
+                      before mt{auditMeta(log).before?.matchPct}/px{auditMeta(log).before?.pricePct}
+                      {auditMeta(log).before?.slaHeatPct != null
+                        ? `/sh${auditMeta(log).before?.slaHeatPct}`
                         : ""}
                       {" → "}
-                      after mt{(log.meta as any).after?.matchPct}/px{(log.meta as any).after?.pricePct}
-                      {(log.meta as any).after?.slaHeatPct != null
-                        ? `/sh${(log.meta as any).after.slaHeatPct}`
+                      after mt{auditMeta(log).after?.matchPct}/px{auditMeta(log).after?.pricePct}
+                      {auditMeta(log).after?.slaHeatPct != null
+                        ? `/sh${auditMeta(log).after?.slaHeatPct}`
                         : ""}
                     </p>
                   )}
                 </div>
                 {log.action === "match_weights_update" &&
                   Boolean(log.meta?.before) &&
-                  !(log.meta as any)?.rollback && (
+                  !auditMeta(log)?.rollback && (
                   <button
                     type="button"
                     className="btn-secondary btn-sm"
@@ -164,8 +188,8 @@ export function AdminAuditPage() {
                         const r = await rollbackMatchWeights(log.id);
                         success(r.message || "Match weights rolled back");
                         await load(action);
-                      } catch (e: any) {
-                        error(e.message || "Rollback failed");
+                      } catch (e) {
+                        error((e as Error).message || "Rollback failed");
                       } finally {
                         setRollbackId(null);
                       }
@@ -176,7 +200,7 @@ export function AdminAuditPage() {
                 )}
                 {log.action === "best_value_blend_update" &&
                   Boolean(log.meta?.before) &&
-                  !(log.meta as any)?.rollback && (
+                  !auditMeta(log)?.rollback && (
                   <button
                     type="button"
                     className="btn-secondary btn-sm"
@@ -188,8 +212,8 @@ export function AdminAuditPage() {
                         const r = await rollbackBestValueBlend(log.id);
                         success(r.message || "Best-value blend rolled back");
                         await load(action);
-                      } catch (e: any) {
-                        error(e.message || "Blend rollback failed");
+                      } catch (e) {
+                        error((e as Error).message || "Blend rollback failed");
                       } finally {
                         setRollbackId(null);
                       }

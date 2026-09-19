@@ -18,8 +18,8 @@ export function AdminJobsPage() {
     try {
       const r = await listJobs({ limit: "50" });
       setJobs(r.jobs);
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -27,6 +27,7 @@ export function AdminJobsPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when the page opens
   }, []);
 
   async function cancel(id: string) {
@@ -39,8 +40,8 @@ export function AdminJobsPage() {
       const r = await forceCancelJob(id, reason.trim() || undefined);
       success(`Job cancelled (was ${r.previousStatus.replace(/_/g, " ")})`);
       load();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     }
   }
 

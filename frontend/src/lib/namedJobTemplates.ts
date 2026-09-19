@@ -40,7 +40,7 @@ export function normalizeNamedJobTemplates(raw: unknown): NamedJobTemplate[] {
   if (!Array.isArray(raw)) return [];
   const out: NamedJobTemplate[] = [];
   for (let i = 0; i < raw.length && out.length < 24; i++) {
-    const t: any = raw[i];
+    const t = (raw[i] ?? {}) as Record<string, unknown>;
     const name = String(t?.name || t?.label || "").trim().slice(0, 80);
     const title = String(t?.title || "").trim().slice(0, 120);
     if (!name || !title) continue;
@@ -54,7 +54,7 @@ export function normalizeNamedJobTemplates(raw: unknown): NamedJobTemplate[] {
       description: String(t?.description || "").trim().slice(0, 4000),
       category,
       siteType: site,
-      cadence: normalizeCadence(t?.cadence),
+      cadence: normalizeCadence(typeof t.cadence === "string" ? t.cadence : null),
       cadenceNote: str(t?.cadenceNote).slice(0, 500),
       budgetMin: t?.budgetMin != null && t.budgetMin !== "" ? str(t.budgetMin) : "",
       budgetMax: t?.budgetMax != null && t.budgetMax !== "" ? str(t.budgetMax) : "",

@@ -66,7 +66,7 @@ export function normalizeCustomRatePackages(raw: unknown): CustomRatePackage[] {
   if (!Array.isArray(raw)) return [];
   const out: CustomRatePackage[] = [];
   for (let i = 0; i < raw.length && out.length < 12; i++) {
-    const t: any = raw[i];
+    const t = (raw[i] ?? {}) as Record<string, unknown>;
     const label = String(t?.label || "").trim().slice(0, 80);
     const amountMin = Number(t?.amountMin);
     if (!label || !Number.isFinite(amountMin) || amountMin < 0) continue;

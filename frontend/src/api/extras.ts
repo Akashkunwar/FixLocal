@@ -1,4 +1,5 @@
 import { api } from "./client";
+import type { ResponseSla } from "./jobs";
 
 export type Notification = {
   id: string;
@@ -142,7 +143,7 @@ export type FavoriteItem = {
     averageRating?: number;
     reviewCount?: number;
     verificationStatus?: string;
-    responseSla?: unknown;
+    responseSla?: ResponseSla | null;
   } | null;
 };
 

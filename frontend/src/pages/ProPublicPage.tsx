@@ -97,8 +97,8 @@ export function ProPublicPage() {
       success(r.message || "Invite sent");
       setShowInvite(false);
       setInviteMessage("");
-    } catch (e: any) {
-      error(e.message || "Invite failed");
+    } catch (e) {
+      error((e as Error).message || "Invite failed");
     } finally {
       setInviteBusy(false);
     }

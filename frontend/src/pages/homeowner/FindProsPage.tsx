@@ -81,39 +81,41 @@ export function FindProsPage() {
         siteType: f.siteType || undefined,
       });
       setPros(r.pros);
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     } finally {
       setLoading(false);
     }
   }
 
+  // Re-run when the URL filters change (e.g. following a category link while already on this page).
+  const urlCategory = (params.get("category") || "").trim();
+  const urlSite = (params.get("siteType") || "").trim();
   useEffect(() => {
     try {
       localStorage.setItem("fixlocal:onboarding:client:visitedPros", "1");
     } catch {
       /* ignore */
     }
-    const urlCategory = (params.get("category") || "").trim();
-    const urlSite = (params.get("siteType") || "").trim();
     const siteFromUrl: "" | SiteType =
       urlSite === "residential" || urlSite === "office" ? urlSite : "";
     try {
       const raw = localStorage.getItem(SAVED_KEY);
       if (raw && !urlCategory && !siteFromUrl) {
-        const parsed = JSON.parse(raw) as Facets & { label?: string };
+        // Older saved searches may lack newer fields, or use "area" for neighborhood.
+        const parsed = JSON.parse(raw) as Partial<Facets> & { label?: string; area?: string };
         const next: Facets = {
           q: parsed.q || "",
           city: parsed.city || "",
-          neighborhood: (parsed as any).neighborhood || (parsed as any).area || "",
+          neighborhood: parsed.neighborhood || parsed.area || "",
           category: parsed.category || "",
           ratingMin: parsed.ratingMin || "",
           rateMax: parsed.rateMax || "",
-          sort: (parsed as any).sort || "rating",
-          slaTier: (parsed as any).slaTier || "",
-          maxResponseHours: (parsed as any).maxResponseHours || "",
-          availableThisWeek: (parsed as any).availableThisWeek || "",
-          minHeat: (parsed as any).minHeat || "",
+          sort: parsed.sort || "rating",
+          slaTier: parsed.slaTier || "",
+          maxResponseHours: parsed.maxResponseHours || "",
+          availableThisWeek: parsed.availableThisWeek || "",
+          minHeat: parsed.minHeat || "",
           siteType:
             parsed.siteType === "residential" || parsed.siteType === "office"
               ? parsed.siteType
@@ -130,7 +132,9 @@ export function FindProsPage() {
     const next = { ...empty, category: urlCategory, siteType: siteFromUrl };
     setFacets(next);
     load(next);
-  }, []);
+    // `load` is recreated every render; it reads the facets passed in, not stale state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCategory, urlSite]);
 
   function saveSearch() {
     const label = [facets.category, facets.city, facets.neighborhood, facets.ratingMin && `${facets.ratingMin}+★`]
@@ -158,8 +162,8 @@ export function FindProsPage() {
         /* ignore */
       }
       success("Pro saved");
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     }
   }
 

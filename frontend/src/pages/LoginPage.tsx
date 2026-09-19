@@ -35,7 +35,7 @@ export function LoginPage() {
       const u = await login(email.trim(), password);
       success("Welcome back!");
       navigate(pendingNext || dashboardPath(u.role), { replace: true });
-    } catch (ex: any) {
+    } catch (ex) {
       const msg = ex instanceof ApiError ? ex.message : "Login failed";
       setErr(msg);
       error(msg);

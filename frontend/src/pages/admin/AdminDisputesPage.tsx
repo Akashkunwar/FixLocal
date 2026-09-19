@@ -37,8 +37,8 @@ export function AdminDisputesPage() {
         })
       );
       setMilestonesByJob(map);
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -46,6 +46,7 @@ export function AdminDisputesPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when the filter changes; load() reads it
   }, [filter]);
 
   function toggleRefund(disputeId: string, milestoneId: string) {
@@ -76,8 +77,8 @@ export function AdminDisputesPage() {
       ].filter(Boolean);
       success(`Dispute resolved · job is now ${r.job.status.replace(/_/g, " ")}${parts.length ? ` · ${parts.join(" · ")} (simulated)` : ""}`);
       load();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     } finally {
       setBusyId(null);
     }
@@ -116,7 +117,7 @@ export function AdminDisputesPage() {
                 </div>
                 <p className="text-slate-800 whitespace-pre-wrap">{d.reason}</p>
                 <p className="text-xs text-slate-500">
-                  Raised by {d.raisedBy?.name || d.raisedBy?.email || "party"} · {fmtDateTime(d.createdAt as any)}
+                  Raised by {d.raisedBy?.name || d.raisedBy?.email || "party"} · {fmtDateTime(d.createdAt)}
                 </p>
 
                 {(d.evidenceUrls?.length ?? 0) > 0 && (

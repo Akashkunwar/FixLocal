@@ -40,10 +40,15 @@ export function CompletionPhotosPanel({
   const multiPair = before.length > 1 || after.length > 1;
   const caseDraftKey = `fixlocal_case_study_draft_${job.id}`;
 
+  // Keep the picked pair valid when the photo lists change (compared by value, not array identity).
+  const beforeKey = before.join("|");
+  const afterKey = after.join("|");
   useEffect(() => {
-    setPickBefore((prev) => (prev && before.includes(prev) ? prev : before[0] || null));
-    setPickAfter((prev) => (prev && after.includes(prev) ? prev : after[0] || null));
-  }, [before.join("|"), after.join("|")]);
+    const b = beforeKey ? beforeKey.split("|") : [];
+    const a = afterKey ? afterKey.split("|") : [];
+    setPickBefore((prev) => (prev && b.includes(prev) ? prev : b[0] || null));
+    setPickAfter((prev) => (prev && a.includes(prev) ? prev : a[0] || null));
+  }, [beforeKey, afterKey]);
 
   // Soft case-study draft (title/notes) — local only until publish
   useEffect(() => {
@@ -57,7 +62,6 @@ export function CompletionPhotosPanel({
     } catch {
       /* ignore */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseDraftKey]);
 
   useEffect(() => {
@@ -90,8 +94,8 @@ export function CompletionPhotosPanel({
       setBeforeFiles([]);
       setAfterFiles([]);
       onChanged();
-    } catch (e: any) {
-      error(e.message || "Upload failed");
+    } catch (e) {
+      error((e as Error).message || "Upload failed");
     } finally {
       setBusy(false);
     }
@@ -102,8 +106,8 @@ export function CompletionPhotosPanel({
       await removeCompletionPhoto(job.id, { url, kind });
       success("Photo removed");
       onChanged();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     }
   }
 
@@ -127,8 +131,8 @@ export function CompletionPhotosPanel({
       } catch {
         /* ignore */
       }
-    } catch (e: any) {
-      error(e.message || "Publish failed");
+    } catch (e) {
+      error((e as Error).message || "Publish failed");
     } finally {
       setPublishBusy(false);
     }

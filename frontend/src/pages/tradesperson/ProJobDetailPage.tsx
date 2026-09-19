@@ -160,6 +160,7 @@ export function ProJobDetailPage() {
         setProAvailability(null);
         setAmcCustomPackages([]);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when the job id changes
   }, [id]);
 
   useEffect(() => {
@@ -235,6 +236,8 @@ export function ProJobDetailPage() {
     setQuoteEditAmount(String(myBid.counterOffer.suggestedAmount));
     setQuoteEditNotes(myBid.counterOffer.notes || "");
     setShowQuoteEdit(true);
+    // Prefill once per counter-offer (keyed by its request time), not on every bid refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromCounter, myBid?.id, myBid?.counterOffer?.requestedAt, myBid?.counterOffer?.status]);
 
   async function onBid(e: FormEvent) {
@@ -257,8 +260,8 @@ export function ProJobDetailPage() {
         /* ignore */
       }
       load();
-    } catch (err: any) {
-      error(err.message);
+    } catch (err) {
+      error((err as Error).message);
     }
   }
 
@@ -268,8 +271,8 @@ export function ProJobDetailPage() {
       await withdrawBid(myBid.id);
       success("Bid withdrawn");
       load();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     }
   }
 
@@ -278,8 +281,8 @@ export function ProJobDetailPage() {
       await startJob(id!);
       success("Work started");
       load();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     }
   }
 
@@ -336,8 +339,8 @@ export function ProJobDetailPage() {
       setShowDeclineSheet(false);
       setDeclineReason("");
       setDeclineNote("");
-    } catch (e: any) {
-      error(e.message || "Could not decline invite");
+    } catch (e) {
+      error((e as Error).message || "Could not decline invite");
     } finally {
       setDeclineBusy(false);
     }
@@ -881,8 +884,8 @@ export function ProJobDetailPage() {
                           success("Counter-offer declined");
                           setShowCounterDecline(false);
                           load();
-                        } catch (e: any) {
-                          error(e.message || "Could not decline counter");
+                        } catch (e) {
+                          error((e as Error).message || "Could not decline counter");
                         } finally {
                           setCounterDeclineBusy(false);
                         }
@@ -1053,8 +1056,8 @@ export function ProJobDetailPage() {
                               success("Quote revised");
                               setShowQuoteEdit(false);
                               await load();
-                            } catch (e: any) {
-                              error(e.message || "Quote revise failed");
+                            } catch (e) {
+                              error((e as Error).message || "Quote revise failed");
                             } finally {
                               setQuoteEditBusy(false);
                             }

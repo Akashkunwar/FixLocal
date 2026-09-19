@@ -21,8 +21,8 @@ export function AdminTradespeoplePage() {
     try {
       const r = await listTradespeople(st || undefined);
       setList(r.tradespeople);
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -30,6 +30,7 @@ export function AdminTradespeoplePage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once; later loads use the filter button
   }, []);
 
   async function setVerify(userId: string, next: "verified" | "rejected" | "suspended" | "pending") {
@@ -37,8 +38,8 @@ export function AdminTradespeoplePage() {
       await verifyTradesperson(userId, next);
       success(`Marked ${next}`);
       load();
-    } catch (e: any) {
-      error(e.message);
+    } catch (e) {
+      error((e as Error).message);
     }
   }
 

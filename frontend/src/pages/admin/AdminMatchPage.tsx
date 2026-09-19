@@ -156,8 +156,8 @@ export function AdminMatchPage() {
           /* ignore soft preview errors on load */
         }
       })();
-    } catch (e: any) {
-      error(e.message || "Failed to load match data");
+    } catch (e) {
+      error((e as Error).message || "Failed to load match data");
     } finally {
       setLoading(false);
     }
@@ -165,6 +165,7 @@ export function AdminMatchPage() {
 
   useEffect(() => {
     loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when the page opens
   }, []);
 
   async function runBlendPreview(blend?: BestValueBlend) {
@@ -182,9 +183,9 @@ export function AdminMatchPage() {
       if (r.bestValueBlendPreset !== undefined) {
         // draft detection only — don't override saved active unless same as saved
       }
-    } catch (e: any) {
+    } catch (e) {
       setBlendPreviewJobs([]);
-      setBlendPreviewMsg(e.message || "Preview failed");
+      setBlendPreviewMsg((e as Error).message || "Preview failed");
     } finally {
       setBlendPreviewBusy(false);
     }
@@ -206,8 +207,8 @@ export function AdminMatchPage() {
       setSummary(mq.summary);
       setJobs(mq.jobs);
       await runBlendPreview(r.bestValueBlend || bestValueBlend);
-    } catch (e: any) {
-      error(e.message || "Save failed");
+    } catch (e) {
+      error((e as Error).message || "Save failed");
     } finally {
       setSavingWeights(false);
     }
@@ -316,8 +317,8 @@ export function AdminMatchPage() {
                         const mq = await getMatchQuality();
                         setSummary(mq.summary);
                         setJobs(mq.jobs);
-                      } catch (e: any) {
-                        error(e.message || "Preset failed");
+                      } catch (e) {
+                        error((e as Error).message || "Preset failed");
                       } finally {
                         setSavingWeights(false);
                       }
@@ -453,8 +454,8 @@ export function AdminMatchPage() {
                           setActiveBlendPreset(r.bestValueBlendPreset || pr.id);
                           success(r.message || `${pr.label} applied`);
                           await runBlendPreview(r.bestValueBlend);
-                        } catch (e: any) {
-                          error(e.message || "Blend preset failed");
+                        } catch (e) {
+                          error((e as Error).message || "Blend preset failed");
                         } finally {
                           setSavingWeights(false);
                         }

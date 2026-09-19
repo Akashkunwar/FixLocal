@@ -70,7 +70,7 @@ export function RegisterPage() {
       } else {
         navigate(dashboardPath(u.role), { replace: true });
       }
-    } catch (ex: any) {
+    } catch (ex) {
       const msg = ex instanceof ApiError ? ex.message : "Registration failed";
       setErr(msg);
       error(msg);

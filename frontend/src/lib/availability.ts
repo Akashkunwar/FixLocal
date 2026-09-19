@@ -203,7 +203,10 @@ export function buildAvailabilityHeat(
   const clean =
     weekly != null &&
     typeof weekly === "object" &&
-    DAY_KEYS.some((d) => (weekly as any)[d] && typeof (weekly as any)[d] === "object");
+    DAY_KEYS.some((d) => {
+    const day = (weekly as Record<string, unknown>)[d];
+    return Boolean(day) && typeof day === "object";
+  });
   const norm = clean ? normalizeWeeklyAvailability(weekly) : null;
   const now = new Date();
   const days: DayHeat[] = [];

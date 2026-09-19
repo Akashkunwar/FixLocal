@@ -48,8 +48,8 @@ export function HomeownerDashboard() {
         budgetMax: budgetMax || undefined,
       });
       setJobs(r.jobs);
-    } catch (e: any) {
-      setError(e.message || "Failed to load jobs");
+    } catch (e) {
+      setError((e as Error).message || "Failed to load jobs");
     } finally {
       setLoading(false);
     }
@@ -57,6 +57,7 @@ export function HomeownerDashboard() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when the page opens
   }, []);
 
   useEffect(() => {

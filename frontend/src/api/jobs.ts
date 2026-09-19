@@ -1,4 +1,5 @@
 import { api, API_URL } from "./client";
+import type { DayHeat } from "../lib/availability";
 
 export type AmcProposal = {
   status: "proposed" | "requested" | "accepted" | "declined" | "countered";
@@ -617,7 +618,7 @@ export type SuggestedPro = {
   };
   responseSla?: ResponseSla | null;
   availabilityHeat?: {
-    days: any[];
+    days: DayHeat[];
     score: number;
     totalHours: number;
     clean: boolean;
@@ -642,10 +643,10 @@ export function getShortlistRanked(jobId: string) {
       tagBoost: number;
       score: number;
       smartScore: number;
-      breakdown: any;
+      breakdown: SuggestedPro["breakdown"];
       responseSla?: ResponseSla | null;
       availabilityHeat?: {
-        days: any[];
+        days: DayHeat[];
         score: number;
         totalHours: number;
         clean: boolean;
@@ -654,7 +655,7 @@ export function getShortlistRanked(jobId: string) {
       inviteBlockedByHeat?: boolean;
       inviteHeatReason?: string | null;
     }>;
-    weights?: any;
+    weights?: { skills: number; rating: number; response: number; distance: number };
     shortlistInviteMinHeat?: number;
   }>(`/api/jobs/${jobId}/shortlist-ranked`);
 }

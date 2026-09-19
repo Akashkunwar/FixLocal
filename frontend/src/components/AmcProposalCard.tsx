@@ -114,6 +114,8 @@ export function AmcProposalCard({
     if (proposal?.amountMax != null) setAmountMax(String(proposal.amountMax));
     if (proposal?.unit) setUnit(proposal.unit);
     if (proposal?.note) setNote(proposal.note);
+    // Re-sync the form only when a new proposal arrives, so in-progress edits aren't overwritten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposal?.proposedAt]);
 
   function applyPackage(p: AmcFillPackage) {
@@ -150,8 +152,8 @@ export function AmcProposalCard({
       });
       success("Recurring / AMC proposal sent to client");
       onChanged?.();
-    } catch (err: any) {
-      error(err.message || "Could not send proposal");
+    } catch (err) {
+      error((err as Error).message || "Could not send proposal");
     } finally {
       setBusy(false);
     }
@@ -176,8 +178,8 @@ export function AmcProposalCard({
       });
       success("AMC / recurring request sent to professional");
       onChanged?.();
-    } catch (err: any) {
-      error(err.message || "Could not send request");
+    } catch (err) {
+      error((err as Error).message || "Could not send request");
     } finally {
       setBusy(false);
     }
@@ -200,8 +202,8 @@ export function AmcProposalCard({
       );
       setShowCounter(false);
       onChanged?.();
-    } catch (err: any) {
-      error(err.message || "Reply failed");
+    } catch (err) {
+      error((err as Error).message || "Reply failed");
     } finally {
       setBusy(false);
     }
@@ -233,8 +235,8 @@ export function AmcProposalCard({
       );
       setShowCounter(false);
       onChanged?.();
-    } catch (err: any) {
-      error(err.message || "Reply failed");
+    } catch (err) {
+      error((err as Error).message || "Reply failed");
     } finally {
       setBusy(false);
     }
@@ -250,11 +252,15 @@ export function AmcProposalCard({
   const showAcceptedHint = status === "accepted";
   const multiStub = showAcceptedHint && hasAmcMultiEventStub(job);
 
+  const repliedAt = proposal?.repliedAt;
+  const proposedAt = proposal?.proposedAt;
+  const proposalCadence = proposal?.cadence;
+  const hasProposal = Boolean(proposal);
   const nextVisitIso = useMemo(() => {
-    if (!showAcceptedHint || !proposal) return null;
-    const base = proposal.repliedAt || proposal.proposedAt || new Date().toISOString();
-    return suggestNextVisitIso(proposal.cadence, base);
-  }, [showAcceptedHint, proposal?.repliedAt, proposal?.proposedAt, proposal?.cadence]);
+    if (!showAcceptedHint || !hasProposal) return null;
+    const base = repliedAt || proposedAt || new Date().toISOString();
+    return suggestNextVisitIso(proposalCadence, base);
+  }, [showAcceptedHint, hasProposal, repliedAt, proposedAt, proposalCadence]);
 
   const nextVisitLabel = nextVisitIso
     ? new Date(nextVisitIso).toLocaleString(undefined, {
