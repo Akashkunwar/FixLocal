@@ -255,12 +255,18 @@ describe("profile settings", () => {
     await api()
       .put("/api/auth/me/templates/namedJob")
       .set(c.auth)
-      .send({ items: [{ name: "Monthly clean", title: "Deep clean", category: "cleaning", siteType: "office", junk: 1 }] })
+      .send({
+        items: [
+          { name: "Monthly clean", title: "Deep clean", category: "cleaning", siteType: "office", pinned: true, junk: 1 },
+          { name: "Other", title: "Gutter", pinned: "yes" },
+        ],
+      })
       .expect(200);
     const list = await api().get("/api/auth/me/templates").set(c.auth);
     expect(list.body.templates.invite[0]).toMatchObject({ id: "a", label: "Hello", body: "Please bid" });
-    expect(list.body.templates.namedJob[0]).toMatchObject({ name: "Monthly clean", siteType: "office" });
+    expect(list.body.templates.namedJob[0]).toMatchObject({ name: "Monthly clean", siteType: "office", pinned: true });
     expect(list.body.templates.namedJob[0]).not.toHaveProperty("junk");
+    expect(list.body.templates.namedJob[1]).not.toHaveProperty("pinned");
     expect((await api().put("/api/auth/me/templates/bogus").set(c.auth).send({ items: [] })).status).toBe(400);
     const me = await api().get("/api/auth/me").set(c.auth);
     expect(me.body.user).not.toHaveProperty("inviteTemplates");
@@ -283,6 +289,25 @@ describe("profile settings", () => {
     expect(job.status).toBe("cancelled");
     expect((await api().get("/api/auth/me").set(c.auth)).status).toBe(401);
     expect((await api().post("/api/auth/login").send({ email: c.user.email, password: PASSWORD })).status).toBe(401);
+  });
+
+  it("removes a deleted professional's profile files", async () => {
+    const { png, pdf, pro, uploadedFileCount } = await import("./helpers");
+    const p = await pro();
+    const before = await uploadedFileCount();
+    const gallery = await api().post("/api/profile/gallery").set(p.auth).attach("photos", await png(), { filename: "g.png", contentType: "image/png" });
+    expect(gallery.status).toBe(200);
+    const lic = await api().post("/api/profile/license").set(p.auth).attach("file", pdf(), { filename: "id.pdf", contentType: "application/pdf" });
+    expect(lic.status).toBe(200);
+    expect(await uploadedFileCount()).toBe(before + 2);
+    expect((await api().delete("/api/auth/me").set(p.auth).send({ password: PASSWORD })).status).toBe(200);
+    expect(await uploadedFileCount()).toBe(before);
+    expect(await rows(`SELECT 1 FROM "uploads" WHERE "ownerUserId" = $1`, [p.user.id])).toHaveLength(0);
+    const [profile] = await rows<{ galleryUrls: string[]; licenseDocUrl: string | null }>(
+      `SELECT "galleryUrls", "licenseDocUrl" FROM "tradesperson_profiles" WHERE "userId" = $1`,
+      [p.user.id]
+    );
+    expect(profile).toEqual({ galleryUrls: [], licenseDocUrl: null });
   });
 
   it("refuses deletion while a job is in progress", async () => {

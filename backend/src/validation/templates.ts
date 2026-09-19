@@ -30,6 +30,7 @@ function namedJobTemplates(items: Raw[]) {
       createdAt: str(t.createdAt, 40) || new Date().toISOString(),
     };
     if (t.siteType === "office" || t.siteType === "residential") entry.siteType = t.siteType;
+    if (t.pinned === true) entry.pinned = true;
     const optional: [string, number][] = [
       ["cadence", 20],
       ["cadenceNote", 500],

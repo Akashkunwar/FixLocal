@@ -20,7 +20,9 @@
     "db:revert": "tsx ./node_modules/typeorm/cli.js migration:revert -d src/data-source.ts",
     "db:baseline": "tsx src/scripts/baseline.ts",
     "seed": "tsx src/scripts/seed.ts",
-    "db:setup": "npm run db:migrate && npm run seed"
+    "db:setup": "npm run db:migrate && npm run seed",
+    "db:reset-e2e": "tsx src/scripts/resetDb.ts",
+    "e2e:server": "tsx src/scripts/resetDb.ts && tsx src/scripts/seed.ts && tsx src/server.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -22,7 +22,7 @@ async function start() {
       await AppDataSource.runMigrations({ transaction: "each" });
       logger.info("Database migrations applied");
     } else {
-      throw new Error("Database has pending migrations. Run `npm run migration:run` (or set MIGRATIONS_RUN=true).");
+      throw new Error("Database has pending migrations. Run `npm run db:migrate` (or set MIGRATIONS_RUN=true).");
     }
   }
   logger.info("Database connected");

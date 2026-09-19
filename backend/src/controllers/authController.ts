@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { IsNull, MoreThan } from "typeorm";
+import { In, IsNull, MoreThan } from "typeorm";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
 import { config } from "../config";
@@ -28,7 +28,7 @@ import { toSelfUser } from "../serializers";
 import { appLink, mailer } from "../services/mailer";
 import { writeAudit } from "../utils/audit";
 import { isNotificationType } from "../domain/notificationTypes";
-import { deleteUploadByRef, fileRef, storeUploads } from "../services/files";
+import { deleteUploadByRef, discardFiles, fileRef, storeUploads } from "../services/files";
 import { filesOf } from "../middleware/upload";
 import { normalizeTemplates } from "../validation/templates";
 
@@ -309,7 +309,9 @@ export async function deleteAccount(req: Request, res: Response) {
   if (openWork.length) {
     throw conflict("Finish or cancel your active jobs before deleting your account", "ACTIVE_JOBS");
   }
-  await AppDataSource.transaction(async (m) => {
+  // Profile files (avatar, portfolio, licence) go with the account; job files stay with the job record.
+  const profileKinds = [UploadKind.AVATAR, UploadKind.GALLERY, UploadKind.CASE_STUDY, UploadKind.LICENSE];
+  const removed = await AppDataSource.transaction(async (m) => {
     await m.update(User, { id: user.id }, {
       email: `deleted-${user.id}@deleted.fixlocal.invalid`,
       name: "Deleted user",
@@ -329,8 +331,11 @@ export async function deleteAccount(req: Request, res: Response) {
         [user.id]
       );
     }
-    await m.delete(Upload, { ownerUserId: user.id, kind: UploadKind.AVATAR });
+    const files = await m.find(Upload, { where: { ownerUserId: user.id, kind: In(profileKinds) }, select: { name: true } });
+    await m.delete(Upload, { ownerUserId: user.id, kind: In(profileKinds) });
+    return files.map((f) => fileRef(f.name));
   });
+  await discardFiles(removed);
   await revokeAllRefreshTokens(user.id);
   await invalidateAuthState(user.id);
   await writeAudit({

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { api, client, PASSWORD, uniqueEmail } from "./helpers";
 import { overrideConfig } from "../src/config";
 import { flushTestCache } from "../src/utils/cache";
@@ -31,6 +31,7 @@ describe("rate limiting (H-7)", () => {
   it("throttles repeated logins per email", async () => {
     overrideConfig({ rateLimitEnabled: true });
     await flushTestCache();
+    const consoleError = vi.spyOn(console, "error");
     try {
       const c = await client();
       const statuses: number[] = [];
@@ -47,7 +48,10 @@ describe("rate limiting (H-7)", () => {
       // Another account from the same IP isn't locked out by that.
       const other = await client();
       expect((await api().post("/api/auth/login").send({ email: other.user.email, password: PASSWORD })).status).toBe(200);
+      // The limiter must not flood production logs with library validation warnings.
+      expect(consoleError.mock.calls.map((c) => String(c[0]))).not.toContainEqual(expect.stringContaining("ValidationError"));
     } finally {
+      consoleError.mockRestore();
       overrideConfig({ rateLimitEnabled: false });
       await flushTestCache();
     }

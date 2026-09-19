@@ -54,6 +54,9 @@ export function limiter(name: LimitName, override?: Partial<{ windowMs: number; 
         legacyHeaders: false,
         store: store(name),
         keyGenerator: KEYS[name] || ip,
+        // Built on first use on purpose (Redis connects after routes are defined, and tests
+        // toggle limits at runtime), so skip the library's "created in a request handler" warning.
+        validate: { creationStack: false },
         handler: (_req, res, _next, options) => {
           const retryAfter = Math.ceil(options.windowMs / 1000);
           res.status(429).json({

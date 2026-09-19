@@ -130,9 +130,13 @@ export async function listUsers(req: Request, res: Response) {
   if (role) qb.andWhere("u.role = :role", { role });
   if (suspended) qb.andWhere("u.isSuspended = true");
   if (q) {
-    qb.andWhere("(u.email ILIKE :q OR u.name ILIKE :q OR u.phone ILIKE :q)", {
-      q: `%${String(q).replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
-    });
+    const text = String(q).trim();
+    // Links from reports/audit pass a user id; everything else is a text search.
+    const byId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);
+    qb.andWhere(
+      byId ? "u.id = :id" : "(u.email ILIKE :q OR u.name ILIKE :q OR u.phone ILIKE :q)",
+      byId ? { id: text } : { q: `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%` }
+    );
   }
   const [users, total] = await qb.getManyAndCount();
   return res.json({

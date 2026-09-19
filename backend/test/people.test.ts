@@ -297,6 +297,18 @@ describe("matching (M-13)", () => {
 });
 
 describe("admin", () => {
+  it("finds users by id or by text, and treats wildcards literally", async () => {
+    const a = await admin();
+    const c = await client();
+    const byId = await api().get(`/api/admin/users?q=${c.user.id}`).set(a.auth);
+    expect(byId.status).toBe(200);
+    expect(byId.body.users.map((u: { id: string }) => u.id)).toEqual([c.user.id]);
+    const byEmail = await api().get(`/api/admin/users?q=${encodeURIComponent(c.user.email.slice(0, 12))}`).set(a.auth);
+    expect(byEmail.body.users.some((u: { id: string }) => u.id === c.user.id)).toBe(true);
+    const wildcard = await api().get(`/api/admin/users?q=${encodeURIComponent("%")}`).set(a.auth);
+    expect(wildcard.body.users).toEqual([]);
+  });
+
   it("suspending withdraws bids and hides the pro; unsuspending returns them to pending", async () => {
     const a = await admin();
     const owner = await client();
