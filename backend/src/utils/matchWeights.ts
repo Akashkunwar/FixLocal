@@ -1,5 +1,47 @@
 import { AppDataSource } from "../data-source";
 import { AppConfig } from "../entities/AppConfig";
+import { redisPublish, redisSubscribe } from "./cache";
+import { DEFAULT_SHORTLIST_INVITE_MIN_HEAT } from "./availabilityHeat";
+
+// ---- cached app config (M-4) ----
+// Scoring reads these on every list request; keep them in memory, refresh on write, and tell
+// other API instances to drop their copy over Redis. The TTL is a safety net for missed messages.
+const CONFIG_TTL_MS = 60_000;
+const CONFIG_CHANNEL = "fixlocal:config";
+const configCache = new Map<string, { value: Record<string, unknown> | null; at: number }>();
+
+async function readConfig(key: string): Promise<Record<string, unknown> | null> {
+  const hit = configCache.get(key);
+  if (hit && Date.now() - hit.at < CONFIG_TTL_MS) return hit.value;
+  const row = await AppDataSource.getRepository(AppConfig).findOne({ where: { key } });
+  const value = (row?.value as Record<string, unknown> | undefined) ?? null;
+  configCache.set(key, { value, at: Date.now() });
+  return value;
+}
+
+async function writeConfig(key: string, value: Record<string, unknown>): Promise<void> {
+  const repo = AppDataSource.getRepository(AppConfig);
+  let row = await repo.findOne({ where: { key } });
+  if (!row) row = repo.create({ key, value });
+  else row.value = value;
+  await repo.save(row);
+  configCache.set(key, { value, at: Date.now() });
+  await redisPublish(CONFIG_CHANNEL, key);
+}
+
+/** Another instance changed a config value. */
+export function onConfigChanged(key: string) {
+  configCache.delete(key);
+}
+
+export function clearConfigCache() {
+  configCache.clear();
+}
+
+export async function initConfigInvalidation() {
+  await redisSubscribe(CONFIG_CHANNEL, onConfigChanged);
+}
+
 
 export type MatchWeights = {
   skills: number;
@@ -82,11 +124,9 @@ export function weightsSum(w: MatchWeights): number {
 
 export async function getMatchWeights(): Promise<MatchWeights> {
   try {
-    const row = await AppDataSource.getRepository(AppConfig).findOne({
-      where: { key: MATCH_WEIGHTS_KEY },
-    });
-    if (!row?.value) return { ...DEFAULT_MATCH_WEIGHTS };
-    return normalizeMatchWeights(row.value as Partial<MatchWeights>);
+    const value = await readConfig(MATCH_WEIGHTS_KEY);
+    if (!value) return { ...DEFAULT_MATCH_WEIGHTS };
+    return normalizeMatchWeights(value as Partial<MatchWeights>);
   } catch {
     return { ...DEFAULT_MATCH_WEIGHTS };
   }
@@ -96,14 +136,7 @@ export async function setMatchWeights(
   raw: Partial<MatchWeights>
 ): Promise<MatchWeights> {
   const value = normalizeMatchWeights(raw);
-  const repo = AppDataSource.getRepository(AppConfig);
-  let row = await repo.findOne({ where: { key: MATCH_WEIGHTS_KEY } });
-  if (!row) {
-    row = repo.create({ key: MATCH_WEIGHTS_KEY, value });
-  } else {
-    row.value = value;
-  }
-  await repo.save(row);
+  await writeConfig(MATCH_WEIGHTS_KEY, value as unknown as Record<string, unknown>);
   return value;
 }
 
@@ -143,12 +176,9 @@ export function detectMatchPreset(
 
 export async function getHeatWeight(): Promise<number> {
   try {
-    const row = await AppDataSource.getRepository(AppConfig).findOne({
-      where: { key: MATCH_HEAT_WEIGHT_KEY },
-    });
-    if (!row?.value) return DEFAULT_HEAT_WEIGHT;
-    const v = (row.value as Record<string, unknown>).heatWeight;
-    return normalizeHeatWeight(v);
+    const value = await readConfig(MATCH_HEAT_WEIGHT_KEY);
+    if (!value) return DEFAULT_HEAT_WEIGHT;
+    return normalizeHeatWeight(value.heatWeight);
   } catch {
     return DEFAULT_HEAT_WEIGHT;
   }
@@ -156,14 +186,7 @@ export async function getHeatWeight(): Promise<number> {
 
 export async function setHeatWeight(raw: unknown): Promise<number> {
   const heatWeight = normalizeHeatWeight(raw);
-  const repo = AppDataSource.getRepository(AppConfig);
-  let row = await repo.findOne({ where: { key: MATCH_HEAT_WEIGHT_KEY } });
-  if (!row) {
-    row = repo.create({ key: MATCH_HEAT_WEIGHT_KEY, value: { heatWeight } });
-  } else {
-    row.value = { heatWeight };
-  }
-  await repo.save(row);
+  await writeConfig(MATCH_HEAT_WEIGHT_KEY, { heatWeight });
   return heatWeight;
 }
 
@@ -271,11 +294,9 @@ export function normalizeBestValueBlend(
 
 export async function getBestValueBlend(): Promise<BestValueBlend> {
   try {
-    const row = await AppDataSource.getRepository(AppConfig).findOne({
-      where: { key: BEST_VALUE_BLEND_KEY },
-    });
-    if (!row?.value) return { ...DEFAULT_BEST_VALUE_BLEND };
-    return normalizeBestValueBlend(row.value as Partial<BestValueBlend>);
+    const value = await readConfig(BEST_VALUE_BLEND_KEY);
+    if (!value) return { ...DEFAULT_BEST_VALUE_BLEND };
+    return normalizeBestValueBlend(value as Partial<BestValueBlend>);
   } catch {
     return { ...DEFAULT_BEST_VALUE_BLEND };
   }
@@ -285,13 +306,30 @@ export async function setBestValueBlend(
   raw: Partial<BestValueBlend> | Record<string, unknown> | null | undefined
 ): Promise<BestValueBlend> {
   const value = normalizeBestValueBlend(raw);
-  const repo = AppDataSource.getRepository(AppConfig);
-  let row = await repo.findOne({ where: { key: BEST_VALUE_BLEND_KEY } });
-  if (!row) {
-    row = repo.create({ key: BEST_VALUE_BLEND_KEY, value: value as unknown as Record<string, unknown> });
-  } else {
-    row.value = value as unknown as Record<string, unknown>;
-  }
-  await repo.save(row);
+  await writeConfig(BEST_VALUE_BLEND_KEY, value as unknown as Record<string, unknown>);
   return value;
+}
+
+// ---- shortlist invite availability gate (M-1: decided server-side, admin-configurable) ----
+export const SHORTLIST_MIN_HEAT_KEY = "shortlist_invite_min_heat";
+
+export function normalizeShortlistMinHeat(raw: unknown): number {
+  const n = Math.round(Number(raw));
+  if (raw === null || raw === undefined || raw === "" || !Number.isFinite(n)) return DEFAULT_SHORTLIST_INVITE_MIN_HEAT;
+  return Math.min(100, Math.max(0, n));
+}
+
+export async function getShortlistInviteMinHeat(): Promise<number> {
+  try {
+    const value = await readConfig(SHORTLIST_MIN_HEAT_KEY);
+    return value ? normalizeShortlistMinHeat(value.minHeat) : DEFAULT_SHORTLIST_INVITE_MIN_HEAT;
+  } catch {
+    return DEFAULT_SHORTLIST_INVITE_MIN_HEAT;
+  }
+}
+
+export async function setShortlistInviteMinHeat(raw: unknown): Promise<number> {
+  const minHeat = normalizeShortlistMinHeat(raw);
+  await writeConfig(SHORTLIST_MIN_HEAT_KEY, { minHeat });
+  return minHeat;
 }

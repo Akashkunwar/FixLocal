@@ -42,6 +42,7 @@ Main ideas:
 - **Money** is recorded in a ledger (`ledger_entries`); earnings and admin totals come from the ledger, not from bid amounts. Accepting a bid, releasing milestones and confirming completion use row locks and optional `Idempotency-Key` headers, so double clicks and races can't double-pay.
 - **Chat** is one private thread per (job, professional). Live updates use server-sent events with one-time tickets (no tokens in URLs), with polling as a fallback.
 - **Schema changes** go through migrations only (`synchronize` is off).
+- **Admin-tunable settings** (match weights, availability heat weight, best-value blend, the shortlist invite gate) live in `app_configs`, are cached in memory, and are re-read by every instance when an admin changes them. Changes are audited and can be rolled back.
 
 ## Quick start with Docker
 
@@ -143,10 +144,11 @@ Frontend settings ([`frontend/.env.example`](frontend/.env.example)):
 
 | Command | What it covers |
 | --- | --- |
-| `cd backend && npm test` | 168 API tests on a throwaway database (`fixlocal_test`, Redis DB 15): every audit finding's repro, an 840-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request) |
+| `cd backend && npm test` | 174 API tests on a throwaway database (`fixlocal_test`, Redis DB 15): every audit finding's repro, an 840-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), and a sweep proving no GET request changes any table |
 | `cd backend && npm run test:coverage` | The same with a coverage report |
+| `cd backend && npm run test:tz` | Date logic under three server time zones (UTC, IST, US Pacific) |
 | `cd frontend && npm test` | UI unit tests: token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary |
-| `cd frontend && npm run test:e2e` | 26 Playwright tests in a real browser against a real API |
+| `cd frontend && npm run test:e2e` | 28 Playwright tests in a real browser against a real API |
 | `npm run lint` / `npm run typecheck` | In both packages; lint fails on any warning |
 
 The end-to-end suite starts its own API on port **3101** with a fresh `fixlocal_e2e` database (Redis DB 14), and a Vite server on port **5174**. It never touches the development database or the servers on 3001/5173. The first run needs `npx playwright install chromium`.
@@ -170,7 +172,7 @@ The E2E journeys cover:
 15. Mobile layout.
 16. Public pages and legacy URLs.
 
-Plus: each role is redirected away from other roles' pages, pending pros see why they can't bid, portfolio and case-study editing, bid withdrawal, and server errors when posting a job.
+Plus: each role is redirected away from other roles' pages, pending pros see why they can't bid, portfolio and case-study editing, bid withdrawal, server errors when posting a job, the admin availability gate, and the "schedule not published" label.
 
 `.github/workflows/ci.yml` runs lint, type checks, both unit suites with coverage, the E2E suite, `npm audit --audit-level=high`, and the Docker builds on every push and pull request. Dependabot keeps dependencies current.
 
@@ -192,6 +194,7 @@ npm run legacy:smoke
 - Every request body, query and parameter is validated with zod; errors come back as `{ message, code }` and never leak stack traces.
 - Uploads: file type is checked from the file's content (JPG, PNG, WebP, PDF only). Images are re-encoded (removing EXIF/GPS) and stored under random names. Private files (job photos, chat attachments, dispute evidence, licences) are served only to people allowed to see them, through signed URLs that expire; portfolio images and avatars are public.
 - Contact details (email, phone, exact address, licence document) are only shown to people who need them: the hired pro, the client who hired them, and admins.
+- A professional awaiting verification can see the open-jobs list (title, category, area, budget, approximate location) so they know what the platform offers, but not job details, exact addresses or client contacts, and they can't bid until an admin verifies them.
 - helmet security headers, a CORS allowlist, request IDs in logs, and graceful shutdown.
 - Admin actions (verification, suspension, disputes, force-cancel, weight changes) are written to an audit log.
 

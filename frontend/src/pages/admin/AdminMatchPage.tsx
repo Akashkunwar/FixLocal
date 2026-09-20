@@ -90,6 +90,8 @@ export function AdminMatchPage() {
   const [presets, setPresets] = useState<MatchWeightPreset[]>([]);
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [heatWeight, setHeatWeight] = useState(10);
+  const [shortlistMinHeat, setShortlistMinHeat] = useState(25);
+  const [defaultShortlistMinHeat, setDefaultShortlistMinHeat] = useState(25);
   const [defaultHeatWeight, setDefaultHeatWeight] = useState(10);
   const [bestValueBlend, setBestValueBlend] = useState<BestValueBlend>({
     matchPct: 55,
@@ -120,6 +122,8 @@ export function AdminMatchPage() {
       setActivePreset(mw.preset || null);
       if (mw.heatWeight != null) setHeatWeight(Number(mw.heatWeight));
       if (mw.defaultHeatWeight != null) setDefaultHeatWeight(Number(mw.defaultHeatWeight));
+      if (mw.shortlistInviteMinHeat != null) setShortlistMinHeat(Number(mw.shortlistInviteMinHeat));
+      if (mw.defaultShortlistInviteMinHeat != null) setDefaultShortlistMinHeat(Number(mw.defaultShortlistInviteMinHeat));
       if (mw.bestValueBlend) {
         setBestValueBlend({
           matchPct: Number(mw.bestValueBlend.matchPct),
@@ -194,7 +198,12 @@ export function AdminMatchPage() {
   async function saveWeights() {
     setSavingWeights(true);
     try {
-      const r = await updateMatchWeights(weights, { heatWeight, bestValueBlend });
+      const r = await updateMatchWeights(weights, {
+        heatWeight,
+        shortlistInviteMinHeat: shortlistMinHeat,
+        bestValueBlend,
+      });
+      if (r.shortlistInviteMinHeat != null) setShortlistMinHeat(Number(r.shortlistInviteMinHeat));
       setWeights(r.weights);
       setActivePreset(r.preset || null);
       if (r.presets) setPresets(r.presets);
@@ -396,6 +405,33 @@ export function AdminMatchPage() {
                 Clean weekly schedules get up to +{heatWeight} on suggested-pros / match-quality{" "}
                 <span className="font-mono">rankedScore</span> (proportional to heat 0–100).
                 Unclean schedules get 0. Presets include heat (balanced 10 · speed 15 · quality 8 · availability 20).
+              </p>
+              <div className="mt-3 flex flex-wrap items-end justify-between gap-3 border-t border-amber-100 pt-3">
+                <label className="block min-w-[12rem] flex-1" htmlFor="shortlist-min-heat">
+                  <span className="label">Shortlist invite availability gate (0–100)</span>
+                  <input
+                    id="shortlist-min-heat"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="input"
+                    value={shortlistMinHeat}
+                    onChange={(e) => setShortlistMinHeat(Number(e.target.value))}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm"
+                  disabled={savingWeights}
+                  onClick={() => setShortlistMinHeat(defaultShortlistMinHeat)}
+                >
+                  Reset gate ({defaultShortlistMinHeat})
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-amber-900/80">
+                Clients can't invite a shortlisted pro whose published schedule has less availability heat than this.
+                Pros without a schedule are never blocked. Saved with the weights; changes are audited and can be rolled back.
               </p>
             </div>
 

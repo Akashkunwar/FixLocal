@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:tz": "TZ=UTC vitest run test/unit && TZ=Asia/Kolkata vitest run test/unit && TZ=America/Los_Angeles vitest run test/unit",
     "typeorm": "tsx ./node_modules/typeorm/cli.js -d src/data-source.ts",
     "migration:generate": "tsx ./node_modules/typeorm/cli.js migration:generate -d src/data-source.ts",
     "migration:create": "tsx ./node_modules/typeorm/cli.js migration:create",

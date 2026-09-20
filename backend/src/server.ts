@@ -5,6 +5,7 @@ import { logger } from "./logger";
 import { AppDataSource } from "./data-source";
 import { closeCache, initCache } from "./utils/cache";
 import { closeAllStreams, initSseFanout } from "./utils/sse";
+import { initConfigInvalidation } from "./utils/matchWeights";
 import { ensureUploadDirs } from "./services/files";
 import { startWorkers, stopWorkers } from "./workers";
 import { createApp } from "./app";
@@ -29,6 +30,7 @@ async function start() {
   ensureUploadDirs();
   await initCache();
   await initSseFanout();
+  await initConfigInvalidation();
   startWorkers();
 
   const app = createApp();

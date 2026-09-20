@@ -10,9 +10,9 @@ import { Notification } from "../entities/Notification";
 import { Favorite, FavoriteTargetType } from "../entities/Favorite";
 import { TradespersonProfile, VerificationStatus } from "../entities/TradespersonProfile";
 import { createNotification } from "../utils/notifications";
+import { getShortlistInviteMinHeat } from "../utils/matchWeights";
 import {
   buildAvailabilityHeat,
-  DEFAULT_SHORTLIST_INVITE_MIN_HEAT,
   shortlistInviteBlockedByHeat,
 } from "../utils/availabilityHeat";
 import { assertOwnerOrAdmin, loadJobContext, type JobContext } from "../policies/jobPolicy";
@@ -86,7 +86,7 @@ async function invitePro(ctx: JobContext, opts: InviteOptions): Promise<InviteRe
   });
   if (onShortlist) {
     const heat = buildAvailabilityHeat(profile.weeklyAvailability, profile.blockedDates, profile.user.timezone);
-    const gate = shortlistInviteBlockedByHeat(heat, Math.max(DEFAULT_SHORTLIST_INVITE_MIN_HEAT, opts.minHeat ?? 0));
+    const gate = shortlistInviteBlockedByHeat(heat, Math.max(await getShortlistInviteMinHeat(), opts.minHeat ?? 0));
     if (gate.blocked) {
       throw badRequest(gate.reason || "Availability too low for a shortlist invite", "SHORTLIST_HEAT_TOO_LOW", {
         minHeat: gate.minHeat,

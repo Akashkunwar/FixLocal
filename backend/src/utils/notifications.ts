@@ -56,7 +56,8 @@ export async function createNotifications(
       })
     );
   if (!rows.length) return out;
-  const saved = await manager.save(rows);
+  // One multi-row INSERT is atomic on its own; skip TypeORM's extra BEGIN/COMMIT round trips.
+  const saved = await manager.save(rows, { transaction: false });
   for (const n of saved) {
     out.set(n.userId, n);
     try {

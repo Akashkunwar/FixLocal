@@ -146,6 +146,14 @@ export function ShortlistInvitePanel({
                             {pro.inviteBlockedByHeat ? " · blocked" : ""}
                           </span>
                         )}
+                        {pro.availabilityHeat && !pro.availabilityHeat.clean && (
+                          <span
+                            className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200"
+                            title="This professional hasn't published a weekly schedule, so their availability is unknown."
+                          >
+                            Schedule unknown
+                          </span>
+                        )}
                         {(pro.tags || []).map((t) => (
                           <span
                             key={t}

@@ -98,18 +98,20 @@ export async function openJobsCacheKey(parts: Record<string, unknown>): Promise<
   return `${OPEN_JOBS_PREFIX}v${ver}:${stable}`;
 }
 
-/** Pub/sub for fan-out across API instances (SSE). */
+/** Pub/sub across API instances (SSE fan-out, config invalidation). One connection serves every channel. */
 export async function redisSubscribe(channel: string, handler: (message: string) => void): Promise<boolean> {
   if (!cacheReady() || !client) return false;
   try {
-    subscriber = client.duplicate();
-    subscriber.on("error", (err) => logger.warn({ err: (err as Error).message }, "Redis subscriber error"));
-    await subscriber.connect();
+    if (!subscriber) {
+      const sub = client.duplicate();
+      sub.on("error", (err) => logger.warn({ err: (err as Error).message }, "Redis subscriber error"));
+      await sub.connect();
+      subscriber = sub;
+    }
     await subscriber.subscribe(channel, handler);
     return true;
   } catch (err) {
     logger.warn({ err: (err as Error).message }, "Redis subscribe failed");
-    subscriber = null;
     return false;
   }
 }

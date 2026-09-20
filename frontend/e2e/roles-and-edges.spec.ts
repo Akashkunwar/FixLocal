@@ -114,3 +114,31 @@ test("posting a job shows the server's error and keeps the draft", async ({ page
   await page.reload();
   await expect(page.getByLabel("Title")).toHaveValue("Leaky geyser valve");
 });
+
+test("admins set the shortlist availability gate on the Match page (M-1)", async ({ page, request }) => {
+  const admin = await apiLogin(request, SEEDED.admin);
+  await login(page, SEEDED.admin);
+  await page.goto("/admin/match");
+  const gate = page.getByLabel("Shortlist invite availability gate (0–100)");
+  await expect(gate).toHaveValue("25");
+  await gate.fill("40");
+  await page.getByRole("button", { name: "Save weights" }).click();
+  await expect.poll(async () => (await apiCall<{ shortlistInviteMinHeat: number }>(request, admin, "get", "/api/admin/match-weights")).shortlistInviteMinHeat).toBe(40);
+  await page.reload();
+  await expect(gate).toHaveValue("40");
+  await gate.fill("25");
+  await page.getByRole("button", { name: "Save weights" }).click();
+  await expect.poll(async () => (await apiCall<{ shortlistInviteMinHeat: number }>(request, admin, "get", "/api/admin/match-weights")).shortlistInviteMinHeat).toBe(25);
+});
+
+test("pros without a published schedule are labelled, not hidden (M-13)", async ({ page, request }) => {
+  const admin = await apiLogin(request, SEEDED.admin);
+  const fresh = await registerViaApi(request, "TRADESPERSON", `No Schedule Pro ${Date.now().toString(36)}`);
+  await apiCall(request, admin, "patch", `/api/admin/tradespeople/${fresh.id}/verify`, { status: "verified" });
+  await login(page, SEEDED.client2);
+  await page.goto("/client/pros");
+  await page.getByLabel("Search professionals").fill("No Schedule Pro");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const card = page.locator("li", { hasText: "No Schedule Pro" }).first();
+  await expect(card.getByText("Weekly schedule not published — availability unknown.")).toBeVisible();
+});

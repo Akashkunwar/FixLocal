@@ -295,6 +295,8 @@ export function getMatchWeights() {
     presets?: MatchWeightPreset[];
     heatWeight?: number;
     defaultHeatWeight?: number;
+    shortlistInviteMinHeat?: number;
+    defaultShortlistInviteMinHeat?: number;
     bestValueBlend?: BestValueBlend;
     defaultBestValueBlend?: BestValueBlend;
     bestValueBlendPreset?: string | null;
@@ -307,6 +309,7 @@ export function updateMatchWeights(
   opts?: {
     preset?: string;
     heatWeight?: number;
+    shortlistInviteMinHeat?: number;
     bestValueBlend?: BestValueBlend;
     bestValueBlendPreset?: string;
   }
@@ -320,6 +323,7 @@ export function updateMatchWeights(
     presets?: MatchWeightPreset[];
     heatWeight?: number;
     defaultHeatWeight?: number;
+    shortlistInviteMinHeat?: number;
     bestValueBlend?: BestValueBlend;
     defaultBestValueBlend?: BestValueBlend;
     bestValueBlendPreset?: string | null;
@@ -343,6 +347,7 @@ export function updateMatchWeights(
           : {
               weights,
               ...(opts?.heatWeight != null ? { heatWeight: opts.heatWeight } : {}),
+              ...(opts?.shortlistInviteMinHeat != null ? { shortlistInviteMinHeat: opts.shortlistInviteMinHeat } : {}),
               ...(opts?.bestValueBlend ? { bestValueBlend: opts.bestValueBlend } : {}),
             }
     ),

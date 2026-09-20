@@ -175,7 +175,11 @@ export function SuggestedProsPanel({
                                   ? ` · ${p.availabilityHeat.score}`
                                   : ""}
                               </p>
-                            ) : null}
+                            ) : (
+                              <p className="text-[10px] text-slate-500" title="No weekly schedule published">
+                                schedule unknown
+                              </p>
+                            )}
                           </button>
                           {!bulkMode && (
                             <button

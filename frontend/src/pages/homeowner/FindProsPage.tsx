@@ -430,6 +430,11 @@ export function FindProsPage() {
                       </span>
                     )}
                   </p>
+                  {!p.availabilityHeat?.clean && (
+                    <p className="mt-3 text-[11px] text-slate-500">
+                      Weekly schedule not published — availability unknown.
+                    </p>
+                  )}
                   {p.availabilityHeat?.clean && (
                     <div className="mt-3">
                       <div className="flex items-center justify-between gap-2">

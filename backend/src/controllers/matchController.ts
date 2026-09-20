@@ -5,12 +5,11 @@ import { Job } from "../entities/Job";
 import { Favorite, FavoriteTargetType } from "../entities/Favorite";
 import { TradespersonProfile, VerificationStatus } from "../entities/TradespersonProfile";
 import { scoreProForJob, type ScoreablePro } from "../utils/matchScore";
-import { getMatchWeights, getHeatWeight, computeHeatBoost } from "../utils/matchWeights";
+import { getMatchWeights, getHeatWeight, computeHeatBoost, getShortlistInviteMinHeat } from "../utils/matchWeights";
 import { buildResponseSla } from "../utils/responseSla";
 import { loadJobToBidSamples } from "../utils/proSlaBatch";
 import {
   buildAvailabilityHeat,
-  DEFAULT_SHORTLIST_INVITE_MIN_HEAT,
   shortlistInviteBlockedByHeat,
 } from "../utils/availabilityHeat";
 import { categoryKeywords, tagMatchesCategory } from "../domain/categories";
@@ -123,12 +122,13 @@ export async function shortlistRankedForJob(req: Request, res: Response) {
   assertOwnerOrAdmin(ctx, viewer(req));
   const job = ctx.job;
   const weights = await getMatchWeights();
+  const minHeat = await getShortlistInviteMinHeat();
   const favs = await AppDataSource.getRepository(Favorite).find({
     where: { userId: job.homeownerId, targetType: FavoriteTargetType.PRO },
     order: { createdAt: "DESC" },
   });
   if (!favs.length) {
-    return res.json({ jobId: job.id, category: job.category, shortlist: [], weights, shortlistInviteMinHeat: DEFAULT_SHORTLIST_INVITE_MIN_HEAT });
+    return res.json({ jobId: job.id, category: job.category, shortlist: [], weights, shortlistInviteMinHeat: minHeat });
   }
   const proIds = favs.map((f) => f.targetId);
   const profiles = await AppDataSource.getRepository(TradespersonProfile).find({
@@ -150,7 +150,7 @@ export async function shortlistRankedForJob(req: Request, res: Response) {
     const heat = p
       ? buildAvailabilityHeat(p.weeklyAvailability, p.blockedDates, p.user?.timezone)
       : { days: [], score: 0, totalHours: 0, clean: false };
-    const gate = shortlistInviteBlockedByHeat(heat, DEFAULT_SHORTLIST_INVITE_MIN_HEAT);
+    const gate = shortlistInviteBlockedByHeat(heat, minHeat);
     return {
       userId: f.targetId,
       name: p?.user?.name || null,
@@ -168,7 +168,7 @@ export async function shortlistRankedForJob(req: Request, res: Response) {
       breakdown,
       responseSla: buildResponseSla({ jobHours: h }),
       availabilityHeat: heat,
-      shortlistInviteMinHeat: DEFAULT_SHORTLIST_INVITE_MIN_HEAT,
+      shortlistInviteMinHeat: minHeat,
       inviteBlockedByHeat: gate.blocked,
       inviteHeatReason: gate.blocked ? gate.reason ?? null : null,
     };
@@ -179,6 +179,6 @@ export async function shortlistRankedForJob(req: Request, res: Response) {
     category: job.category,
     shortlist: ranked,
     weights,
-    shortlistInviteMinHeat: DEFAULT_SHORTLIST_INVITE_MIN_HEAT,
+    shortlistInviteMinHeat: minHeat,
   });
 }

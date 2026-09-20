@@ -16,11 +16,11 @@ import { createNotifications } from "../utils/notifications";
 import { revokeThreadStreams } from "../utils/sse";
 import { haversineKm } from "../utils/geo";
 import { scoreProForJob, type ScoreablePro } from "../utils/matchScore";
-import { getMatchWeights, setMatchWeights, weightsSum, DEFAULT_MATCH_WEIGHTS, MATCH_WEIGHT_PRESETS, detectMatchPreset, normalizeMatchWeights, getHeatWeight, setHeatWeight, DEFAULT_HEAT_WEIGHT, normalizeHeatWeight, computeHeatBoost, getBestValueBlend, setBestValueBlend, DEFAULT_BEST_VALUE_BLEND, blendsEqual, normalizeBestValueBlend, BEST_VALUE_BLEND_PRESETS, detectBestValueBlendPreset } from "../utils/matchWeights";
+import { getMatchWeights, setMatchWeights, weightsSum, DEFAULT_MATCH_WEIGHTS, MATCH_WEIGHT_PRESETS, detectMatchPreset, normalizeMatchWeights, getHeatWeight, setHeatWeight, DEFAULT_HEAT_WEIGHT, normalizeHeatWeight, computeHeatBoost, getBestValueBlend, setBestValueBlend, DEFAULT_BEST_VALUE_BLEND, blendsEqual, normalizeBestValueBlend, BEST_VALUE_BLEND_PRESETS, detectBestValueBlendPreset, getShortlistInviteMinHeat, setShortlistInviteMinHeat } from "../utils/matchWeights";
 import { scoreBestValueBids, escrowHoldFromAmounts } from "../utils/bestValueScore";
 import { hoursBetween, buildEventSla } from "../utils/responseSla";
 import { loadJobToBidSamples } from "../utils/proSlaBatch";
-import { buildAvailabilityHeat } from "../utils/availabilityHeat";
+import { buildAvailabilityHeat, DEFAULT_SHORTLIST_INVITE_MIN_HEAT } from "../utils/availabilityHeat";
 import { invalidateAuthState } from "../auth/authState";
 import { revokeAllRefreshTokens } from "../auth/tokens";
 import { transitionJob } from "../domain/jobStateMachine";
@@ -354,7 +354,10 @@ export async function getMatchWeightsConfig(_req: Request, res: Response) {
   const weights = await getMatchWeights();
   const heatWeight = await getHeatWeight();
   const bestValueBlend = await getBestValueBlend();
+  const shortlistInviteMinHeat = await getShortlistInviteMinHeat();
   return res.json({
+    shortlistInviteMinHeat,
+    defaultShortlistInviteMinHeat: DEFAULT_SHORTLIST_INVITE_MIN_HEAT,
     weights,
     defaults: DEFAULT_MATCH_WEIGHTS,
     sum: weightsSum(weights),
@@ -390,6 +393,18 @@ export async function updateMatchWeightsConfig(req: Request, res: Response) {
   }
   const before = await getMatchWeights();
   const beforeHeat = await getHeatWeight();
+  const beforeMinHeat = await getShortlistInviteMinHeat();
+  const rawMinHeat = req.body?.shortlistInviteMinHeat;
+  if (rawMinHeat !== undefined && rawMinHeat !== null && rawMinHeat !== "") {
+    const n = Number(rawMinHeat);
+    if (!Number.isFinite(n) || n < 0 || n > 100) {
+      throw badRequest("The shortlist availability gate must be between 0 and 100", "VALIDATION");
+    }
+  }
+  const minHeat =
+    rawMinHeat !== undefined && rawMinHeat !== null && rawMinHeat !== ""
+      ? await setShortlistInviteMinHeat(rawMinHeat)
+      : beforeMinHeat;
   // Wave 24: blend-only updates must not clobber match weights with defaults
   const weights = nextWeightsRaw != null ? await setMatchWeights(nextWeightsRaw) : before;
   let heatWeight = beforeHeat;
@@ -436,7 +451,8 @@ export async function updateMatchWeightsConfig(req: Request, res: Response) {
     before.rating !== weights.rating ||
     before.response !== weights.response ||
     before.distance !== weights.distance ||
-    beforeHeat !== heatWeight;
+    beforeHeat !== heatWeight ||
+    beforeMinHeat !== minHeat;
   if (weightsChanged) {
     try {
       await writeAudit({
@@ -445,13 +461,15 @@ export async function updateMatchWeightsConfig(req: Request, res: Response) {
         action: AuditAction.MATCH_WEIGHTS_UPDATE,
         targetType: "app_config",
         targetId: undefined,
-        summary: preset
-          ? `Match weights preset "${preset}" applied (heat ${heatWeight})`
-          : `Match weights updated (sk${weights.skills}/rt${weights.rating}/rs${weights.response}/ds${weights.distance}, heat ${heatWeight})`,
+        summary:
+          (preset
+            ? `Match weights preset "${preset}" applied (heat ${heatWeight})`
+            : `Match weights updated (sk${weights.skills}/rt${weights.rating}/rs${weights.response}/ds${weights.distance}, heat ${heatWeight})`) +
+          (beforeMinHeat !== minHeat ? ` · shortlist gate ${beforeMinHeat} → ${minHeat}` : ""),
         meta: {
-          // Include heat in before/after snapshots for clean rollback
-          before: { ...before, heatWeight: beforeHeat },
-          after: { ...weights, heatWeight },
+          // Include heat and the shortlist gate in before/after snapshots for clean rollback
+          before: { ...before, heatWeight: beforeHeat, shortlistInviteMinHeat: beforeMinHeat },
+          after: { ...weights, heatWeight, shortlistInviteMinHeat: minHeat },
           preset: preset || null,
           beforeHeatWeight: beforeHeat,
           afterHeatWeight: heatWeight,
@@ -485,6 +503,8 @@ export async function updateMatchWeightsConfig(req: Request, res: Response) {
   const bestValueBlendPreset = detectBestValueBlendPreset(bestValueBlend);
   return res.json({
     ok: true,
+    shortlistInviteMinHeat: minHeat,
+    defaultShortlistInviteMinHeat: DEFAULT_SHORTLIST_INVITE_MIN_HEAT,
     weights,
     defaults: DEFAULT_MATCH_WEIGHTS,
     sum: weightsSum(weights),
@@ -571,7 +591,19 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
 
   const current = await getMatchWeights();
   const currentHeat = await getHeatWeight();
+  const currentMinHeat = await getShortlistInviteMinHeat();
+  const rawBeforeMinHeat = raw.shortlistInviteMinHeat;
+  if (rawBeforeMinHeat !== undefined && rawBeforeMinHeat !== null) {
+    const n = Number(rawBeforeMinHeat);
+    if (!Number.isFinite(n) || n < 0 || n > 100) {
+      return res.status(400).json({ message: "Before shortlist gate snapshot is not clean", code: "NOT_CLEAN" });
+    }
+  }
   const weights = await setMatchWeights(target);
+  const minHeat =
+    rawBeforeMinHeat !== undefined && rawBeforeMinHeat !== null
+      ? await setShortlistInviteMinHeat(rawBeforeMinHeat)
+      : currentMinHeat;
   const heatWeight =
     targetHeat != null ? await setHeatWeight(targetHeat) : await getHeatWeight();
   const preset = detectMatchPreset(weights, heatWeight);
@@ -586,8 +618,8 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
         ? `Match weights rolled back to preset "${preset}" (heat ${heatWeight})`
         : `Match weights rolled back from audit ${auditLogId.slice(0, 8)} (heat ${heatWeight})`,
       meta: {
-        before: { ...current, heatWeight: currentHeat },
-        after: { ...weights, heatWeight },
+        before: { ...current, heatWeight: currentHeat, shortlistInviteMinHeat: currentMinHeat },
+        after: { ...weights, heatWeight, shortlistInviteMinHeat: minHeat },
         preset: preset || null,
         beforeHeatWeight: currentHeat,
         afterHeatWeight: heatWeight,
@@ -614,6 +646,7 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
     bestValueBlendPreset: detectBestValueBlendPreset(bestValueBlend),
     bestValueBlendPresets: Object.values(BEST_VALUE_BLEND_PRESETS),
     rolledBackFrom: auditLogId,
+    shortlistInviteMinHeat: minHeat,
     message: preset
       ? `Rolled back to preset "${preset}" (heat ${heatWeight})`
       : `Match weights rolled back from audit (heat ${heatWeight})`,
