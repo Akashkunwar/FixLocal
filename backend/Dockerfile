@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ---- build ----
-FROM node:22-bookworm-slim AS build
+FROM node:25-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -9,7 +9,7 @@ COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
 # ---- runtime ----
-FROM node:22-bookworm-slim
+FROM node:25-bookworm-slim
 ENV NODE_ENV=production \
     PORT=3001 \
     UPLOADS_DIR=/app/uploads
