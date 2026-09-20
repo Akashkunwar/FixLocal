@@ -1,31 +1,34 @@
 import { createClient, type RedisClientType } from "redis";
+import { config } from "../config";
+import { logger } from "../logger";
 
 let client: RedisClientType | null = null;
+let subscriber: RedisClientType | null = null;
 let ready = false;
 
 const OPEN_JOBS_PREFIX = "fixlocal:jobs:open:";
+const OPEN_JOBS_VERSION_KEY = "fixlocal:jobs:open:ver";
 
 export async function initCache(): Promise<void> {
-  if (process.env.REDIS_ENABLED === "false") {
-    console.log("Redis cache disabled (REDIS_ENABLED=false)");
+  const cfg = config();
+  if (!cfg.redisEnabled) {
+    logger.info("Redis disabled (REDIS_ENABLED=false)");
     return;
   }
-
-  const url = process.env.REDIS_URL || "redis://127.0.0.1:6379";
   try {
-    client = createClient({ url });
+    client = createClient({ url: cfg.redisUrl });
     client.on("error", (err) => {
-      console.warn("Redis error:", (err as Error).message);
+      logger.warn({ err: (err as Error).message }, "Redis error");
       ready = false;
+    });
+    client.on("ready", () => {
+      ready = true;
     });
     await client.connect();
     ready = true;
-    console.log("Redis connected");
+    logger.info("Redis connected");
   } catch (err) {
-    console.warn(
-      "Redis unavailable — open-job list will hit Postgres only:",
-      (err as Error).message
-    );
+    logger.warn({ err: (err as Error).message }, "Redis unavailable; continuing without cache");
     client = null;
     ready = false;
   }
@@ -33,6 +36,10 @@ export async function initCache(): Promise<void> {
 
 export function cacheReady(): boolean {
   return ready && !!client;
+}
+
+export function redisClient(): RedisClientType | null {
+  return cacheReady() ? client : null;
 }
 
 export async function cacheGetJson<T>(key: string): Promise<T | null> {
@@ -45,46 +52,95 @@ export async function cacheGetJson<T>(key: string): Promise<T | null> {
   }
 }
 
-export async function cacheSetJson(
-  key: string,
-  value: unknown,
-  ttlSec = 60
-): Promise<void> {
+export async function cacheSetJson(key: string, value: unknown, ttlSec = 60): Promise<void> {
   if (!cacheReady() || !client) return;
   try {
     await client.set(key, JSON.stringify(value), { EX: ttlSec });
   } catch {
-    /* ignore */
+    /* cache is best-effort */
   }
 }
 
-/** Drop all cached open-job list responses. */
+export async function cacheDel(key: string): Promise<void> {
+  if (!cacheReady() || !client) return;
+  try {
+    await client.del(key);
+  } catch {
+    /* cache is best-effort */
+  }
+}
+
+async function openJobsVersion(): Promise<string> {
+  if (!cacheReady() || !client) return "0";
+  try {
+    return (await client.get(OPEN_JOBS_VERSION_KEY)) || "0";
+  } catch {
+    return "0";
+  }
+}
+
+/** Bumps the namespace version; old keys simply expire (no KEYS scan). */
 export async function invalidateOpenJobsCache(): Promise<void> {
   if (!cacheReady() || !client) return;
   try {
-    const keys = await client.keys(`${OPEN_JOBS_PREFIX}*`);
-    if (keys.length) await client.del(keys);
+    await client.incr(OPEN_JOBS_VERSION_KEY);
   } catch {
-    /* ignore */
+    /* cache is best-effort */
   }
 }
 
-export function openJobsCacheKey(parts: Record<string, string>): string {
+export async function openJobsCacheKey(parts: Record<string, unknown>): Promise<string> {
   const stable = Object.keys(parts)
     .sort()
-    .map((k) => `${k}=${parts[k]}`)
+    .map((k) => `${k}=${parts[k] ?? ""}`)
     .join("&");
-  return `${OPEN_JOBS_PREFIX}${stable || "default"}`;
+  const ver = await openJobsVersion();
+  return `${OPEN_JOBS_PREFIX}v${ver}:${stable}`;
+}
+
+/** Pub/sub across API instances (SSE fan-out, config invalidation). One connection serves every channel. */
+export async function redisSubscribe(channel: string, handler: (message: string) => void): Promise<boolean> {
+  if (!cacheReady() || !client) return false;
+  try {
+    if (!subscriber) {
+      const sub = client.duplicate();
+      sub.on("error", (err) => logger.warn({ err: (err as Error).message }, "Redis subscriber error"));
+      await sub.connect();
+      subscriber = sub;
+    }
+    await subscriber.subscribe(channel, handler);
+    return true;
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "Redis subscribe failed");
+    return false;
+  }
+}
+
+export async function redisPublish(channel: string, message: string): Promise<boolean> {
+  if (!cacheReady() || !client || !subscriber) return false;
+  try {
+    await client.publish(channel, message);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function flushTestCache(): Promise<void> {
+  if (!cacheReady() || !client) return;
+  await client.flushDb();
 }
 
 export async function closeCache(): Promise<void> {
-  if (client) {
+  for (const c of [subscriber, client]) {
+    if (!c) continue;
     try {
-      await client.quit();
+      await c.quit();
     } catch {
       /* ignore */
     }
   }
+  subscriber = null;
   client = null;
   ready = false;
 }

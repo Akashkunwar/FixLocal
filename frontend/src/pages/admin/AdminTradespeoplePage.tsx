@@ -1,28 +1,28 @@
 import { useEffect, useState } from "react";
-import { ApiError } from "../../api/client";
+import { Shell } from "../../components/Shell";
 import {
   listTradespeople,
   verifyTradesperson,
   type AdminTradesperson,
 } from "../../api/admin";
-import { Shell } from "../../components/Shell";
-import { AdminNav } from "../../components/AdminNav";
+import { Badge } from "../../components/ui/Badge";
+import { mediaUrl } from "../../api/jobs";
+import { Spinner } from "../../components/ui/Spinner";
+import { useToast } from "../../components/Toast";
 
 export function AdminTradespeoplePage() {
-  const [filter, setFilter] = useState("pending");
-  const [rows, setRows] = useState<AdminTradesperson[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const { success, error } = useToast();
+  const [list, setList] = useState<AdminTradesperson[]>([]);
+  const [status, setStatus] = useState("pending");
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
 
-  async function load(status = filter) {
+  async function load(st = status) {
     setLoading(true);
-    setError(null);
     try {
-      const res = await listTradespeople(status || undefined);
-      setRows(res.tradespeople);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load");
+      const r = await listTradespeople(st || undefined);
+      setList(r.tradespeople);
+    } catch (e) {
+      error((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -30,92 +30,70 @@ export function AdminTradespeoplePage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once; later loads use the filter button
   }, []);
 
-  async function setStatus(
-    userId: string,
-    status: "verified" | "rejected" | "suspended" | "pending"
-  ) {
-    setBusyId(userId);
-    setError(null);
+  async function setVerify(userId: string, next: "verified" | "rejected" | "suspended" | "pending") {
     try {
-      await verifyTradesperson(userId, status);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Update failed");
-    } finally {
-      setBusyId(null);
+      await verifyTradesperson(userId, next);
+      success(`Marked ${next}`);
+      load();
+    } catch (e) {
+      error((e as Error).message);
     }
   }
 
   return (
-    <Shell title="Verify tradespeople">
-      <AdminNav />
-      <form
-        className="filters"
-        onSubmit={(e) => {
-          e.preventDefault();
-          load();
-        }}
-      >
-        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="pending">pending</option>
-          <option value="verified">verified</option>
-          <option value="rejected">rejected</option>
-          <option value="suspended">suspended</option>
-          <option value="">all</option>
+    <Shell title="Verify professionals" subtitle="Approve, reject, or suspend pro accounts">
+      <div className="mb-4 flex gap-2">
+        <select className="input w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">All</option>
+          <option value="pending">Pending</option>
+          <option value="verified">Verified</option>
+          <option value="rejected">Rejected</option>
+          <option value="suspended">Suspended</option>
         </select>
-        <button type="submit" className="btn ghost">
-          Filter
-        </button>
-      </form>
-
-      {error && <div className="alert">{error}</div>}
-      {loading && <p className="muted">Loading…</p>}
-      {!loading && rows.length === 0 && (
-        <p className="muted">No tradespeople for this filter.</p>
+        <button type="button" className="btn-secondary" onClick={() => load()}>Filter</button>
+      </div>
+      {loading ? (
+        <Spinner />
+      ) : (
+        <ul className="grid gap-3">
+          {list.map((p) => (
+            <li key={p.id} className="card flex flex-wrap items-center justify-between gap-3 p-5">
+              <div className="min-w-0">
+                <p className="font-semibold">{p.name || p.email || p.userId}</p>
+                <p className="text-sm text-slate-500">
+                  {p.email}
+                  {p.phone ? ` · ${p.phone}` : ""}
+                  {p.emailVerified === false ? " · email not verified" : ""}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {p.skills || "No skills listed"}
+                  {p.yearsExperience != null ? ` · ${p.yearsExperience} yrs` : ""}
+                </p>
+                <p className="text-sm text-slate-400">{p.serviceAreas}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Badge status={p.verificationStatus} />
+                  {p.licenseDocUrl ? (
+                    <a className="text-sm text-brand-700 underline" href={mediaUrl(p.licenseDocUrl)} target="_blank" rel="noreferrer">
+                      View licence / ID document
+                    </a>
+                  ) : (
+                    <span className="text-xs text-amber-700">No licence or ID uploaded yet</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="btn-primary btn-sm" onClick={() => setVerify(p.userId, "verified")}>Verify</button>
+                <button type="button" className="btn-secondary btn-sm" onClick={() => setVerify(p.userId, "rejected")}>Reject</button>
+                <button type="button" className="btn-danger btn-sm" onClick={() => setVerify(p.userId, "suspended")}>Suspend</button>
+              </div>
+            </li>
+          ))}
+          {list.length === 0 && <p className="text-sm text-slate-500">No professionals in this filter.</p>}
+        </ul>
       )}
-
-      <ul className="list">
-        {rows.map((t) => (
-          <li key={t.id} className="list-item static">
-            <div>
-              <strong>{t.email || t.userId}</strong>
-              <div className="muted">
-                {t.verificationStatus}
-                {t.skills ? ` · ${t.skills}` : ""}
-              </div>
-              <div className="btn-row">
-                <button
-                  className="btn primary"
-                  disabled={busyId === t.userId}
-                  onClick={() => setStatus(t.userId, "verified")}
-                >
-                  Verify
-                </button>
-                <button
-                  className="btn ghost"
-                  disabled={busyId === t.userId}
-                  onClick={() => setStatus(t.userId, "rejected")}
-                >
-                  Reject
-                </button>
-                <button
-                  className="btn ghost"
-                  disabled={busyId === t.userId}
-                  onClick={() => setStatus(t.userId, "suspended")}
-                >
-                  Suspend
-                </button>
-              </div>
-            </div>
-            <span className={`badge status-${t.verificationStatus}`}>
-              {t.verificationStatus}
-            </span>
-          </li>
-        ))}
-      </ul>
     </Shell>
   );
 }

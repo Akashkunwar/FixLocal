@@ -1,4 +1,6 @@
+import { numeric } from "../db/numeric";
 import {
+  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -13,6 +15,7 @@ import {
 import { User } from "./User";
 import { Bid } from "./Bid";
 import { Dispute } from "./Dispute";
+import { PaymentMilestone } from "./PaymentMilestone";
 
 export enum JobCategory {
   PLUMBING = "plumbing",
@@ -20,6 +23,11 @@ export enum JobCategory {
   CARPENTRY = "carpentry",
   PAINTING = "painting",
   APPLIANCE = "appliance",
+  CLEANING = "cleaning",
+  CONSTRUCTION = "construction",
+  OFFICE_FACILITIES = "office_facilities",
+  TECH_SERVICES = "tech_services",
+  MOVING = "moving",
   OTHER = "other",
 }
 
@@ -28,15 +36,28 @@ export enum JobStatus {
   BIDDING_CLOSED = "bidding_closed",
   AWARDED = "awarded",
   IN_PROGRESS = "in_progress",
+  /** Pro marked the work done; waiting for the client to confirm (auto-confirms after N days). */
+  PENDING_CONFIRMATION = "pending_confirmation",
   COMPLETED = "completed",
   CANCELLED = "cancelled",
   DISPUTED = "disputed",
 }
 
-/** Simulated payment only — no real gateway. */
+/** Simulated payment / escrow only — no real gateway. */
 export enum PaymentStatus {
   PENDING = "pending",
+  HELD = "held",
+  PARTIALLY_RELEASED = "partially_released",
+  RELEASED = "released",
+  REFUNDED = "refunded",
+  /** @deprecated kept for older rows; treat like held */
   SIMULATED_PAID = "simulated_paid",
+}
+
+export enum ScheduleStatus {
+  NONE = "none",
+  PROPOSED = "proposed",
+  CONFIRMED = "confirmed",
 }
 
 @Entity("jobs")
@@ -44,6 +65,16 @@ export enum PaymentStatus {
 @Index(["status"])
 @Index(["createdAt"])
 @Index(["area"])
+@Index(["city"])
+@Index(["homeownerId", "createdAt"])
+@Index(["status", "createdAt"])
+@Check("CHK_job_max_bids", `"maxBids" >= 1 AND "maxBids" <= 50`)
+@Check("CHK_job_budget_min", `"budgetMin" IS NULL OR "budgetMin" >= 0`)
+@Check("CHK_job_budget_max", `"budgetMax" IS NULL OR "budgetMax" >= 0`)
+@Check("CHK_job_budget_order", `"budgetMin" IS NULL OR "budgetMax" IS NULL OR "budgetMin" <= "budgetMax"`)
+@Check("CHK_job_lat", `"lat" IS NULL OR ("lat" >= -90 AND "lat" <= 90)`)
+@Check("CHK_job_lng", `"lng" IS NULL OR ("lng" >= -180 AND "lng" <= 180)`)
+@Check("CHK_job_escrow", `"escrowAmount" IS NULL OR "escrowAmount" >= 0`)
 export class Job {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -57,6 +88,44 @@ export class Job {
   @Column({ type: "enum", enum: JobCategory })
   category!: JobCategory;
 
+  /** Soft site tag: residential home vs office/facilities. */
+  @Column({ type: "varchar", length: 32, nullable: true })
+  siteType?: string | null;
+
+  /**
+   * Soft recurring / AMC cadence preference (store only — no full recurring engine).
+   * one_time | weekly | monthly | amc
+   */
+  @Column({ type: "varchar", length: 24, nullable: true, default: "one_time" })
+  cadence?: string | null;
+
+  /** Optional note for AMC / recurring preference. */
+  @Column({ type: "text", nullable: true })
+  cadenceNote?: string | null;
+
+  /**
+   * Soft AMC / recurring package proposal (store only — no billing engine).
+   * Shape: { status (proposed|requested|accepted|declined|countered), cadence, packageLabel,
+   *          amountMin, amountMax?, unit?, note?, proposedByUserId, proposedAt,
+   *          replyNote?, repliedAt?, replyCadence? }
+   * Client-initiated requests use status "requested"; pro proposals use "proposed".
+   */
+  @Column({ type: "jsonb", nullable: true })
+  amcProposal?: {
+    status: "proposed" | "requested" | "accepted" | "declined" | "countered";
+    cadence: string;
+    packageLabel: string;
+    amountMin: number;
+    amountMax?: number | null;
+    unit?: string | null;
+    note?: string | null;
+    proposedByUserId: string;
+    proposedAt: string;
+    replyNote?: string | null;
+    repliedAt?: string | null;
+    replyCadence?: string | null;
+  } | null;
+
   @Column({ type: "timestamptz", nullable: true })
   preferredStart?: Date;
 
@@ -66,10 +135,10 @@ export class Job {
   @Column({ type: "int", default: 5 })
   maxBids!: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric, nullable: true })
   budgetMin?: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric, nullable: true })
   budgetMax?: number;
 
   @Column({ type: "varchar", nullable: true })
@@ -78,11 +147,30 @@ export class Job {
   @Column({ type: "varchar", nullable: true })
   area?: string;
 
+  /** City for facets / soft distance ranking (e.g. Bengaluru). */
+  @Column({ type: "varchar", nullable: true })
+  city?: string;
+
   @Column({ type: "varchar", nullable: true })
   pincode?: string;
 
+  /** Optional approximate coords for soft ranking (no geo libs). */
+  @Column({ type: "float", nullable: true })
+  lat?: number;
+
+  @Column({ type: "float", nullable: true })
+  lng?: number;
+
   @Column({ type: "jsonb", default: [] })
   photoUrls!: string[];
+
+  /** Problem / site photos taken before or during work (completion gallery). */
+  @Column({ type: "jsonb", default: [] })
+  beforePhotoUrls!: string[];
+
+  /** Result photos after work is done. */
+  @Column({ type: "jsonb", default: [] })
+  afterPhotoUrls!: string[];
 
   @Column({ type: "enum", enum: JobStatus, default: JobStatus.OPEN })
   status!: JobStatus;
@@ -93,6 +181,32 @@ export class Job {
     default: PaymentStatus.PENDING,
   })
   paymentStatus!: PaymentStatus;
+
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric, nullable: true })
+  escrowAmount?: number;
+
+  /** How escrow was funded on accept: structured quote vs bid amount. */
+  @Column({ type: "varchar", length: 16, nullable: true })
+  escrowSource?: "quote" | "bid" | null;
+
+  @Column({
+    type: "enum",
+    enum: ScheduleStatus,
+    default: ScheduleStatus.NONE,
+  })
+  scheduleStatus!: ScheduleStatus;
+
+  @Column({ type: "timestamptz", nullable: true })
+  scheduledStart?: Date | null;
+
+  @Column({ type: "timestamptz", nullable: true })
+  scheduledEnd?: Date | null;
+
+  @Column({ type: "uuid", nullable: true })
+  scheduleProposedByUserId?: string;
+
+  @Column({ type: "text", nullable: true })
+  scheduleNote?: string;
 
   @Column({ type: "uuid" })
   homeownerId!: string;
@@ -114,9 +228,23 @@ export class Job {
   @OneToMany(() => Dispute, (dispute) => dispute.job)
   disputes!: Dispute[];
 
-  @CreateDateColumn()
+  @OneToMany(() => PaymentMilestone, (m) => m.job)
+  milestones!: PaymentMilestone[];
+
+  /** When the pro marked work done (drives auto-confirm). */
+  @Column({ type: "timestamptz", nullable: true })
+  pendingConfirmationAt?: Date | null;
+
+  /** Client allowed completion photos to be published on the pro's portfolio. */
+  @Column({ type: "boolean", default: false })
+  photoConsent!: boolean;
+
+  @Column({ type: "timestamptz", nullable: true })
+  completedAt?: Date;
+
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

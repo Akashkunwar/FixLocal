@@ -1,305 +1,325 @@
-import { Request, Response } from "express";
+import type { Request, Response } from "express";
+import { In } from "typeorm";
 import { AppDataSource } from "../data-source";
-import { Job, JobCategory, JobStatus } from "../entities/Job";
+import { Job, JobStatus } from "../entities/Job";
+import { Bid, BidStatus } from "../entities/Bid";
 import { UserRole } from "../entities/User";
+import { NotificationType } from "../entities/Notification";
+import { UploadKind } from "../entities/Upload";
 import {
   cacheGetJson,
   cacheSetJson,
   invalidateOpenJobsCache,
   openJobsCacheKey,
 } from "../utils/cache";
+import { notifyHomeownerMatchHints } from "../utils/matchAlerts";
+import { createNotifications } from "../utils/notifications";
+import { revokeThreadStreams } from "../utils/sse";
+import { toJob } from "../serializers";
+import {
+  assertJobAccess,
+  assertOwner,
+  loadJobContext,
+  type Viewer,
+} from "../policies/jobPolicy";
+import { transitionJob } from "../domain/jobStateMachine";
+import { deleteUploadByRef, discardFiles, fileRef, storeUploads } from "../services/files";
+import { filesOf } from "../middleware/upload";
+import { badRequest, conflict } from "../http/errors";
+import { logger } from "../logger";
 
 const jobRepo = () => AppDataSource.getRepository(Job);
 
-const CATEGORIES = Object.values(JobCategory);
+export const viewer = (req: Request): Viewer => ({
+  id: req.user!.id,
+  role: req.user!.role,
+  proVerified: req.user!.proVerified,
+});
 
-function parseOptionalNumber(value: unknown): number | undefined {
-  if (value === undefined || value === null || value === "") return undefined;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-function photoPaths(files: Express.Multer.File[] | undefined): string[] {
-  if (!files?.length) return [];
-  return files.map((f) => `/uploads/${f.filename}`);
-}
-
-async function findOwnedJob(jobId: string, userId: string) {
-  return jobRepo().findOne({ where: { id: jobId, homeownerId: userId } });
-}
-
-const STATUSES = Object.values(JobStatus);
+const EARTH_KM = 6371;
+const distanceSql = `(${EARTH_KM} * 2 * asin(sqrt(power(sin(radians(job.lat - :nearLat) / 2), 2) + cos(radians(:nearLat)) * cos(radians(job.lat)) * power(sin(radians(job.lng - :nearLng) / 2), 2))))`;
 
 export async function listJobs(req: Request, res: Response) {
-  const {
-    q,
-    keyword,
-    category,
-    status,
-    from,
-    to,
-    dateField = "created",
-    page = "1",
-    limit = "10",
-    sort = "newest",
-    scope,
-  } = req.query;
+  const query = req.valid.query;
+  const { role, id: userId } = req.user!;
+  const pageNum = query.page ?? 1;
+  const limitNum = query.limit ?? 10;
+  const mine = query.scope === "mine";
+  const proBrowse = role === UserRole.TRADESPERSON && !mine;
 
-  const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
-  const limitNum = Math.min(50, Math.max(1, parseInt(String(limit), 10) || 10));
-  const skip = (pageNum - 1) * limitNum;
+  const cacheKey = proBrowse
+    ? await openJobsCacheKey({ ...query, page: pageNum, limit: limitNum, from: query.from?.toISOString(), to: query.to?.toISOString() })
+    : null;
+  if (cacheKey) {
+    const cached = await cacheGetJson<Record<string, unknown>>(cacheKey);
+    if (cached) return res.json({ ...cached, cached: true });
+  }
 
   const qb = jobRepo().createQueryBuilder("job");
-
-  // Role visibility
-  const { role, id: userId } = req.user!;
-  const mine = String(scope) === "mine";
-
   if (role === UserRole.HOMEOWNER) {
     qb.andWhere("job.homeownerId = :userId", { userId });
   } else if (role === UserRole.TRADESPERSON) {
     if (mine) {
-      qb.innerJoin("job.acceptedBid", "acceptedBid").andWhere(
-        "acceptedBid.tradespersonId = :userId",
-        { userId }
-      );
+      qb.innerJoin(Bid, "accepted", "accepted.id = job.acceptedBidId").andWhere("accepted.tradespersonId = :userId", {
+        userId,
+      });
     } else {
       qb.andWhere("job.status = :openOnly", { openOnly: JobStatus.OPEN });
     }
   }
-  // ADMIN: no ownership restriction
 
-  const search = String(q ?? keyword ?? "").trim();
+  const search = String(query.q ?? query.keyword ?? "").trim();
   if (search) {
-    qb.andWhere("(job.title ILIKE :search OR job.description ILIKE :search)", {
-      search: `%${search}%`,
-    });
+    qb.andWhere("(job.title ILIKE :search OR job.description ILIKE :search)", { search: `%${escapeLike(search)}%` });
+  }
+  if (query.category) qb.andWhere("job.category = :category", { category: query.category });
+  if (query.siteType) qb.andWhere("job.siteType = :siteType", { siteType: query.siteType });
+
+  const cityQ = String(query.city || "").trim();
+  const nbhQ = String(query.neighborhood || query.area || "").trim();
+  if (cityQ) {
+    qb.andWhere("(job.city ILIKE :cityQ OR job.area ILIKE :cityQ)", { cityQ: `%${escapeLike(cityQ)}%` });
+  }
+  if (nbhQ) {
+    qb.andWhere("(job.area ILIKE :nbh OR job.pincode ILIKE :nbh)", { nbh: `%${escapeLike(nbhQ)}%` });
+  }
+  if (query.budgetMin !== undefined) qb.andWhere("(job.budgetMax IS NULL OR job.budgetMax >= :bMin)", { bMin: query.budgetMin });
+  if (query.budgetMax !== undefined) qb.andWhere("(job.budgetMin IS NULL OR job.budgetMin <= :bMax)", { bMax: query.budgetMax });
+
+  if (query.status && (role !== UserRole.TRADESPERSON || mine)) {
+    qb.andWhere("job.status = :status", { status: query.status });
   }
 
-  if (category) {
-    const cat = String(category);
-    if (!CATEGORIES.includes(cat as JobCategory)) {
-      return res.status(400).json({ message: "Invalid category", code: "INVALID_CATEGORY" });
+  const field = query.dateField === "preferred" ? "job.preferredStart" : "job.createdAt";
+  if (query.from) qb.andWhere(`${field} >= :from`, { from: query.from });
+  if (query.to) qb.andWhere(`${field} <= :to`, { to: query.to });
+
+  const hasOrigin = query.nearLat !== undefined && query.nearLng !== undefined;
+  if (hasOrigin) {
+    qb.setParameters({ nearLat: query.nearLat, nearLng: query.nearLng });
+    qb.addSelect(`CASE WHEN job.lat IS NULL OR job.lng IS NULL THEN NULL ELSE ${distanceSql} END`, "distance_km");
+    if (query.maxKm && query.maxKm > 0) {
+      const dLat = query.maxKm / 111;
+      const dLng = query.maxKm / (111 * Math.max(0.1, Math.cos((query.nearLat! * Math.PI) / 180)));
+      qb.andWhere("job.lat BETWEEN :minLat AND :maxLat AND job.lng BETWEEN :minLng AND :maxLng", {
+        minLat: query.nearLat! - dLat,
+        maxLat: query.nearLat! + dLat,
+        minLng: query.nearLng! - dLng,
+        maxLng: query.nearLng! + dLng,
+      });
+      qb.andWhere(`${distanceSql} <= :maxKm`, { maxKm: query.maxKm });
     }
-    qb.andWhere("job.category = :category", { category: cat });
   }
 
-  // Status filter: homeowners/admin always; tradespeople only on scope=mine
-  if (status && (role !== UserRole.TRADESPERSON || mine)) {
-    const st = String(status);
-    if (!STATUSES.includes(st as JobStatus)) {
-      return res.status(400).json({ message: "Invalid status", code: "INVALID_STATUS" });
-    }
-    qb.andWhere("job.status = :status", { status: st });
+  if (cityQ) {
+    qb.addSelect(
+      `CASE WHEN LOWER(COALESCE(job.city, '')) = LOWER(:cityExact) THEN 0 WHEN job.city ILIKE :cityLike OR job.area ILIKE :cityLike THEN 1 ELSE 2 END`,
+      "city_rank"
+    );
+    qb.setParameter("cityExact", cityQ);
+    qb.setParameter("cityLike", `%${escapeLike(cityQ)}%`);
+    qb.orderBy("city_rank", "ASC");
   }
-
-  const field = String(dateField) === "preferred" ? "job.preferredStart" : "job.createdAt";
-  if (from) {
-    qb.andWhere(`${field} >= :from`, { from: new Date(String(from)) });
-  }
-  if (to) {
-    qb.andWhere(`${field} <= :to`, { to: new Date(String(to)) });
-  }
-
-  switch (String(sort)) {
+  const order = (col: string, dir: "ASC" | "DESC", nulls?: "NULLS LAST") => {
+    if (cityQ) qb.addOrderBy(col, dir, nulls);
+    else qb.orderBy(col, dir, nulls);
+  };
+  switch (query.sort) {
     case "budget_desc":
-      qb.orderBy("job.budgetMax", "DESC", "NULLS LAST");
+      order("job.budgetMax", "DESC", "NULLS LAST");
       break;
     case "budget_asc":
-      qb.orderBy("job.budgetMax", "ASC", "NULLS LAST");
+      order("job.budgetMax", "ASC", "NULLS LAST");
       break;
     case "preferred_date":
-      qb.orderBy("job.preferredStart", "ASC", "NULLS LAST");
+      order("job.preferredStart", "ASC", "NULLS LAST");
       break;
-    case "newest":
+    case "distance":
+      if (hasOrigin) {
+        order("distance_km", "ASC", "NULLS LAST");
+        break;
+      }
+      order("job.createdAt", "DESC");
+      break;
     default:
-      qb.orderBy("job.createdAt", "DESC");
-      break;
+      order("job.createdAt", "DESC");
   }
+  qb.addOrderBy("job.id", "ASC");
 
-  // Cache open-job lists (tradesperson browse or status=open)
-  const listingOpen =
-    (role === UserRole.TRADESPERSON && !mine) ||
-    String(status) === JobStatus.OPEN;
-  const cacheKey = listingOpen
-    ? openJobsCacheKey({
-        role,
-        q: search,
-        category: String(category || ""),
-        from: String(from || ""),
-        to: String(to || ""),
-        dateField: String(dateField),
-        page: String(pageNum),
-        limit: String(limitNum),
-        sort: String(sort),
-      })
-    : null;
+  const total = await qb.clone().orderBy().getCount();
+  const { entities, raw } = await qb
+    .offset((pageNum - 1) * limitNum)
+    .limit(limitNum)
+    .getRawAndEntities();
 
-  if (cacheKey) {
-    const cached = await cacheGetJson<{
-      jobs: Job[];
-      pagination: {
-        page: number;
-        limit: number;
-        total: number;
-        totalPages: number;
-      };
-      cached: boolean;
-    }>(cacheKey);
-    if (cached) {
-      return res.json({ ...cached, cached: true });
+  const access = role === UserRole.TRADESPERSON && !mine ? "listing" : "private";
+  const jobs = entities.map((j, i) => {
+    let distanceKm: number | null = null;
+    if (hasOrigin) {
+      const rawDist = raw[i]?.distance_km;
+      distanceKm = rawDist == null ? null : Math.round(Number(rawDist) * 10) / 10;
     }
-  }
-
-  const [jobs, total] = await qb.skip(skip).take(limitNum).getManyAndCount();
+    return { ...toJob(j, access), distanceKm };
+  });
 
   const payload = {
     jobs,
-    pagination: {
-      page: pageNum,
-      limit: limitNum,
-      total,
-      totalPages: Math.ceil(total / limitNum) || 1,
-    },
+    pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.max(1, Math.ceil(total / limitNum)) },
     cached: false,
   };
-
-  if (cacheKey) {
-    await cacheSetJson(cacheKey, payload, 60);
-  }
-
+  if (cacheKey) await cacheSetJson(cacheKey, payload, 60);
   return res.json(payload);
 }
 
+function escapeLike(s: string) {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 export async function createJob(req: Request, res: Response) {
-  const {
-    title,
-    description,
-    category,
-    preferredStart,
-    preferredEnd,
-    maxBids,
-    budgetMin,
-    budgetMax,
-    address,
-    area,
-    pincode,
-  } = req.body ?? {};
-
-  if (!title || !description || !category) {
-    return res.status(400).json({ message: "title, description, and category are required" });
-  }
-
-  if (!CATEGORIES.includes(category)) {
-    return res.status(400).json({
-      message: `category must be one of: ${CATEGORIES.join(", ")}`,
-      code: "INVALID_CATEGORY",
-    });
-  }
-
-  const job = jobRepo().create({
-    title: String(title).trim(),
-    description: String(description).trim(),
-    category,
-    preferredStart: preferredStart ? new Date(preferredStart) : undefined,
-    preferredEnd: preferredEnd ? new Date(preferredEnd) : undefined,
-    maxBids: parseOptionalNumber(maxBids) ?? 5,
-    budgetMin: parseOptionalNumber(budgetMin),
-    budgetMax: parseOptionalNumber(budgetMax),
-    address: address ? String(address) : undefined,
-    area: area ? String(area) : undefined,
-    pincode: pincode ? String(pincode) : undefined,
-    photoUrls: photoPaths(req.files as Express.Multer.File[] | undefined),
-    status: JobStatus.OPEN,
-    homeownerId: req.user!.id,
+  const b = req.valid.body;
+  let stored: string[] = [];
+  const job = await AppDataSource.transaction(async (m) => {
+    const created = await m.save(
+      m.create(Job, {
+        title: b.title,
+        description: b.description,
+        category: b.category,
+        siteType: b.siteType ?? null,
+        cadence: b.cadence,
+        cadenceNote: b.cadenceNote ?? null,
+        preferredStart: b.preferredStart,
+        preferredEnd: b.preferredEnd,
+        maxBids: b.maxBids,
+        budgetMin: b.budgetMin,
+        budgetMax: b.budgetMax,
+        address: b.address || undefined,
+        area: b.area || undefined,
+        city: b.city || undefined,
+        pincode: b.pincode || undefined,
+        lat: b.lat,
+        lng: b.lng,
+        photoUrls: [],
+        status: JobStatus.OPEN,
+        homeownerId: req.user!.id,
+      })
+    );
+    const uploads = await storeUploads(
+      filesOf(req, "photos"),
+      { kind: UploadKind.JOB_PHOTO, ownerUserId: req.user!.id, jobId: created.id, allowPdf: true },
+      m
+    );
+    stored = uploads.map((u) => fileRef(u.name));
+    if (uploads.length) {
+      created.photoUrls = stored;
+      await m.update(Job, { id: created.id }, { photoUrls: created.photoUrls });
+    }
+    return created;
+  }).catch(async (err) => {
+    await discardFiles(stored);
+    throw err;
   });
 
-  await jobRepo().save(job);
   await invalidateOpenJobsCache();
-  return res.status(201).json({ job });
+  try {
+    await notifyHomeownerMatchHints(job);
+  } catch (err) {
+    logger.warn({ err }, "match hints failed");
+  }
+  return res.status(201).json({ job: toJob(job, "private") });
 }
 
 export async function getJob(req: Request, res: Response) {
-  const job = await jobRepo().findOne({ where: { id: req.params.id } });
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-
-  const { role, id: userId } = req.user!;
-  const isOwner = job.homeownerId === userId;
-  const isAdmin = role === UserRole.ADMIN;
-
-  // Owners and admin always; others only while open (browse later)
-  if (!isOwner && !isAdmin && job.status !== JobStatus.OPEN) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-  if (!isOwner && !isAdmin && role === UserRole.HOMEOWNER) {
-    return res.status(403).json({ message: "Forbidden", code: "FORBIDDEN" });
-  }
-
-  return res.json({ job });
+  const ctx = await loadJobContext(req.valid.params.id);
+  const access = await assertJobAccess(ctx, viewer(req));
+  return res.json({ job: toJob(ctx.job, access === "private" ? "private" : "listing"), access });
 }
 
 export async function updateJob(req: Request, res: Response) {
-  const job = await findOwnedJob(req.params.id, req.user!.id);
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertOwner(ctx, viewer(req));
+  const job = ctx.job;
+  if (job.status !== JobStatus.OPEN) throw conflict("Only open jobs can be edited", "JOB_NOT_OPEN");
+
+  const b = req.valid.body;
+  const patch: Partial<Job> = {};
+  const editable = [
+    "title", "description", "category", "siteType", "cadence", "cadenceNote", "preferredStart",
+    "preferredEnd", "maxBids", "budgetMin", "budgetMax", "address", "area", "city", "pincode", "lat", "lng",
+  ] as const;
+  for (const key of editable) {
+    if (b[key] !== undefined) (patch as Record<string, unknown>)[key] = b[key];
   }
-  if (job.status !== JobStatus.OPEN) {
-    return res.status(400).json({
-      message: "Only open jobs can be updated",
-      code: "JOB_NOT_OPEN",
+  const nextMin = patch.budgetMin !== undefined ? patch.budgetMin : job.budgetMin;
+  const nextMax = patch.budgetMax !== undefined ? patch.budgetMax : job.budgetMax;
+  if (nextMin != null && nextMax != null && Number(nextMin) > Number(nextMax)) {
+    throw badRequest("Minimum budget can't be above the maximum", "VALIDATION");
+  }
+
+  const removed: string[] = (b.removePhotoUrls || []).filter((r: string) => job.photoUrls.includes(r));
+  const remaining = job.photoUrls.filter((u) => !removed.includes(u));
+  const incoming = filesOf(req, "photos");
+  if (remaining.length + incoming.length > 10) throw badRequest("A job can have at most 10 photos", "TOO_MANY_FILES");
+
+  let stored: string[] = [];
+  try {
+    await AppDataSource.transaction(async (m) => {
+      const uploads = await storeUploads(
+        incoming,
+        { kind: UploadKind.JOB_PHOTO, ownerUserId: req.user!.id, jobId: job.id, allowPdf: true },
+        m
+      );
+      stored = uploads.map((u) => fileRef(u.name));
+      patch.photoUrls = [...remaining, ...stored];
+      const rows = await m
+        .createQueryBuilder()
+        .update(Job)
+        .set(patch)
+        .where(`"id" = :id AND "status" = :open`, { id: job.id, open: JobStatus.OPEN })
+        .execute();
+      if (!rows.affected) throw conflict("Only open jobs can be edited", "JOB_NOT_OPEN");
     });
+  } catch (err) {
+    await discardFiles(stored);
+    throw err;
   }
-
-  const body = req.body ?? {};
-  if (body.title !== undefined) job.title = String(body.title).trim();
-  if (body.description !== undefined) job.description = String(body.description).trim();
-  if (body.category !== undefined) {
-    if (!CATEGORIES.includes(body.category)) {
-      return res.status(400).json({ message: "Invalid category", code: "INVALID_CATEGORY" });
-    }
-    job.category = body.category;
-  }
-  if (body.preferredStart !== undefined) {
-    job.preferredStart = body.preferredStart ? new Date(body.preferredStart) : undefined;
-  }
-  if (body.preferredEnd !== undefined) {
-    job.preferredEnd = body.preferredEnd ? new Date(body.preferredEnd) : undefined;
-  }
-  if (body.maxBids !== undefined) {
-    const n = parseOptionalNumber(body.maxBids);
-    if (n !== undefined) job.maxBids = n;
-  }
-  if (body.budgetMin !== undefined) job.budgetMin = parseOptionalNumber(body.budgetMin);
-  if (body.budgetMax !== undefined) job.budgetMax = parseOptionalNumber(body.budgetMax);
-  if (body.address !== undefined) job.address = body.address ? String(body.address) : undefined;
-  if (body.area !== undefined) job.area = body.area ? String(body.area) : undefined;
-  if (body.pincode !== undefined) job.pincode = body.pincode ? String(body.pincode) : undefined;
-
-  const newPhotos = photoPaths(req.files as Express.Multer.File[] | undefined);
-  if (newPhotos.length) {
-    job.photoUrls = [...(job.photoUrls || []), ...newPhotos];
-  }
-
-  await jobRepo().save(job);
-  return res.json({ job });
+  for (const ref of removed) await deleteUploadByRef(ref);
+  await invalidateOpenJobsCache();
+  const fresh = await jobRepo().findOneOrFail({ where: { id: job.id } });
+  return res.json({ job: toJob(fresh, "private") });
 }
 
+/** Client cancels an open job; active bids are closed and bidders told. */
 export async function cancelJob(req: Request, res: Response) {
-  const job = await findOwnedJob(req.params.id, req.user!.id);
-  if (!job) {
-    return res.status(404).json({ message: "Job not found", code: "NOT_FOUND" });
-  }
-  if (job.status !== JobStatus.OPEN) {
-    return res.status(400).json({
-      message: "Only open jobs can be cancelled",
-      code: "JOB_NOT_OPEN",
-    });
-  }
-
-  job.status = JobStatus.CANCELLED;
-  await jobRepo().save(job);
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertOwner(ctx, viewer(req));
+  const bidders = await AppDataSource.transaction(async (m) => {
+    await transitionJob(m, ctx.job.id, "cancel");
+    const active = await m.find(Bid, { where: { jobId: ctx.job.id, status: BidStatus.ACTIVE } });
+    if (active.length) {
+      await m.update(Bid, { id: In(active.map((b) => b.id)) }, { status: BidStatus.REJECTED });
+    }
+    return active.map((b) => b.tradespersonId);
+  });
+  await createNotifications(
+    bidders.map((userId) => ({
+      userId,
+      type: NotificationType.BID_REJECTED,
+      title: "Job cancelled",
+      body: `The client cancelled "${ctx.job.title}". Your bid was closed.`,
+      link: "/professional",
+      meta: { jobId: ctx.job.id, jobCancelled: true },
+    }))
+  );
   await invalidateOpenJobsCache();
-  return res.json({ job });
+  await revokeThreadStreams(ctx.job.id, null);
+  const fresh = await jobRepo().findOneOrFail({ where: { id: ctx.job.id } });
+  return res.json({ job: toJob(fresh, "private") });
+}
+
+export async function setPhotoConsent(req: Request, res: Response) {
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertOwner(ctx, viewer(req));
+  await jobRepo().update({ id: ctx.job.id }, { photoConsent: req.valid.body.consent });
+  const fresh = await jobRepo().findOneOrFail({ where: { id: ctx.job.id } });
+  return res.json({ job: toJob(fresh, "private") });
 }

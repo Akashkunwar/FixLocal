@@ -1,208 +1,435 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ApiError } from "../../api/client";
-import {
-  acceptBid,
-  cancelJob,
-  completeJob,
-  createDispute,
-  getJob,
-  listBids,
-  mediaUrl,
-  type Bid,
-  type Job,
-} from "../../api/jobs";
 import { Shell } from "../../components/Shell";
+import { mediaUrl } from "../../api/jobs";
+import { Badge } from "../../components/ui/Badge";
+import { Spinner } from "../../components/ui/Spinner";
+import { StatusTimeline } from "../../components/ui/StatusTimeline";
+import { ReviewPanel } from "./job/ReviewPanel";
+import { DisputeForm } from "./job/DisputeForm";
+import { JobConversations } from "../../components/JobConversations";
+import { ReportButton } from "../../components/ReportButton";
+import { PaymentPanel } from "../../components/PaymentPanel";
+import { CompletionPhotosPanel } from "../../components/CompletionPhotosPanel";
+import { SchedulePanel } from "../../components/SchedulePanel";
+import { VisitPrepCard } from "../../components/VisitPrepCard";
+import { AmcProposalCard } from "../../components/AmcProposalCard";
+import { clientPath } from "../../lib/paths";
+import { cadenceLabel, normalizeCadence } from "../../lib/jobCadence";
+import { saveRepeatDraft } from "../../lib/repeatJob";
+import {
+  mergeNamedJobTemplates,
+  namedTemplateFromJob,
+  upsertNamedJobTemplate,
+} from "../../lib/namedJobTemplates";
+import {
+  categoryEmoji,
+  categoryLabel,
+  fmtDate,
+  fmtDateTime,
+  money,
+} from "../../lib/format";
+import { Heart, MapPin } from "lucide-react";
+import { MatchScorePanel } from "../../components/MatchScorePanel";
+import { BestValueExplainPanel } from "../../components/BestValueExplainPanel";
+import { useJobDetail } from "./job/useJobDetail";
+import { ShortlistInvitePanel } from "./job/ShortlistInvitePanel";
+import { SuggestedProsPanel } from "./job/SuggestedProsPanel";
+import { BidComparePanel } from "./job/BidComparePanel";
 
 export function JobDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const [job, setJob] = useState<Job | null>(null);
-  const [bids, setBids] = useState<Bid[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [disputeReason, setDisputeReason] = useState("");
+  const s = useJobDetail();
+  const {
+    bestValueExplain,
+    bids,
+    error,
+    job,
+    load,
+    loading,
+    navigate,
+    onCancel,
+    onComplete,
+    onPhotoConsent,
+    proAvailability,
+    proBlockedDates,
+    proReview,
+    review,
+    saved,
+    scorePro,
+    searchParams,
+    setBestValueExplain,
+    setScorePro,
+    setShowDispute,
+    showDispute,
+    success,
+    toggleSave,
+    updateProfile,
+    user,
+  } = s;
 
-  const load = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [j, b] = await Promise.all([getJob(id), listBids(id)]);
-      setJob(j.job);
-      setBids(b.bids);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load job");
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  async function run(action: () => Promise<void>) {
-    setActionError(null);
-    setBusy(true);
-    try {
-      await action();
-      await load();
-    } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Action failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onAccept(bidId: string) {
-    await run(async () => {
-      await acceptBid(bidId);
-    });
-  }
-
-  async function onComplete() {
-    await run(async () => {
-      await completeJob(id!);
-    });
-  }
-
-  async function onCancel() {
-    await run(async () => {
-      await cancelJob(id!);
-    });
-  }
-
-  async function onDispute(e: FormEvent) {
-    e.preventDefault();
-    await run(async () => {
-      await createDispute(id!, disputeReason.trim());
-      setDisputeReason("");
-    });
-  }
-
-  if (loading) {
+  if (loading || !job) {
     return (
       <Shell title="Job">
-        <p className="muted">Loading…</p>
+        <Spinner />
       </Shell>
     );
   }
 
-  if (error || !job) {
-    return (
-      <Shell title="Job">
-        <div className="alert">{error || "Not found"}</div>
-        <Link to="/homeowner">← Back</Link>
-      </Shell>
-    );
-  }
-
-  const canAccept = job.status === "open";
-  const canComplete =
-    job.status === "awarded" || job.status === "in_progress";
-  const canCancel = job.status === "open";
-  const canDispute = ["awarded", "in_progress", "completed", "disputed"].includes(
-    job.status
+  const sortedBids = [...bids].sort(
+    (a, b) => Number(a.amount || 0) - Number(b.amount || 0),
   );
-  const activeBids = bids.filter((b) => b.status === "active");
+  const liveWork = ["awarded", "in_progress", "pending_confirmation"].includes(
+    job.status,
+  );
+  const hired =
+    liveWork || job.status === "completed" || job.status === "disputed";
+  const canMessage =
+    job.status === "open" ||
+    hired ||
+    (job.status === "cancelled" && !!job.acceptedBidId);
+  const showEscrow =
+    !!job.acceptedBidId ||
+    [
+      "held",
+      "partially_released",
+      "released",
+      "refunded",
+      "simulated_paid",
+    ].includes(job.paymentStatus || "");
 
   return (
-    <Shell title={job.title}>
-      <p>
-        <Link to="/homeowner">← My jobs</Link>
-      </p>
-      {actionError && <div className="alert">{actionError}</div>}
-
-      <section className="panel">
-        <div className="row-between">
-          <span className={`badge status-${job.status}`}>{job.status}</span>
-          <span className="muted">{job.category}</span>
-        </div>
-        <p>{job.description}</p>
-        <p className="muted">
-          Area: {job.area || "—"} · Budget: {job.budgetMin ?? "—"}–
-          {job.budgetMax ?? "—"} · Max bids: {job.maxBids}
-          {job.paymentStatus
-            ? ` · Payment: ${job.paymentStatus}`
-            : ""}
-        </p>
-        {job.photoUrls?.length > 0 && (
-          <div className="thumbs">
-            {job.photoUrls.map((url) => (
-              <a key={url} href={mediaUrl(url)} target="_blank" rel="noreferrer">
-                <img src={mediaUrl(url)} alt="Job attachment" />
-              </a>
-            ))}
-          </div>
+    <Shell
+      title={job.title}
+      subtitle={`${categoryEmoji(job.category)} ${categoryLabel(job.category)}${
+        job.cadence && normalizeCadence(job.cadence) !== "one_time"
+          ? ` · ${cadenceLabel(job.cadence)}`
+          : ""
+      } · Posted ${fmtDate(job.createdAt)}`}
+      actions={
+        <button
+          type="button"
+          className="btn-secondary btn-sm"
+          onClick={toggleSave}
+          aria-label="Save job"
+        >
+          <Heart
+            className={`h-4 w-4 ${saved ? "fill-rose-500 text-rose-500" : ""}`}
+          />
+          {saved ? "Saved" : "Save"}
+        </button>
+      }
+    >
+      <div className="mb-6 card p-5">
+        <StatusTimeline status={job.status} />
+        {job.scheduledStart && (
+          <p className="mt-3 text-sm text-slate-600">
+            Visit{" "}
+            {job.scheduleStatus === "confirmed" ? "confirmed" : "proposed"}:{" "}
+            <strong>{fmtDateTime(job.scheduledStart)}</strong>
+            {job.scheduledEnd ? ` – ${fmtDateTime(job.scheduledEnd)}` : ""}
+          </p>
         )}
-        <div className="btn-row">
-          {canCancel && (
-            <button className="btn ghost" disabled={busy} onClick={onCancel}>
-              Cancel job
-            </button>
-          )}
-          {canComplete && (
-            <button className="btn primary" disabled={busy} onClick={onComplete}>
-              Mark completed
-            </button>
-          )}
-        </div>
-      </section>
+      </div>
 
-      <section className="panel">
-        <h2>Bids</h2>
-        {bids.length === 0 && <p className="muted">No bids yet.</p>}
-        <ul className="list">
-          {bids.map((bid) => (
-            <li key={bid.id} className="list-item static">
-              <div>
-                <strong>₹{bid.amount ?? "—"}</strong>
-                <div className="muted">
-                  {bid.message || "No message"} · ETA {bid.etaDays ?? "—"} days ·{" "}
-                  {bid.status}
-                </div>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-6">
+          <section className="card p-6 space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge status={job.status} />
+              {job.paymentStatus && <Badge status={job.paymentStatus} />}
+              {job.scheduleStatus && job.scheduleStatus !== "none" && (
+                <Badge status={job.scheduleStatus} />
+              )}
+            </div>
+            <p className="text-slate-700 whitespace-pre-wrap">
+              {job.description}
+            </p>
+            <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+              {(job.area || job.address) && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-4 w-4" />
+                  {[job.address, job.area, job.pincode]
+                    .filter(Boolean)
+                    .join(", ")}
+                </span>
+              )}
+              <span>
+                Budget {money(job.budgetMin)} – {money(job.budgetMax)}
+              </span>
+              <span>Max bids {job.maxBids}</span>
+            </div>
+            {job.photoUrls?.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {job.photoUrls.map((u) => (
+                  <a
+                    key={u}
+                    href={mediaUrl(u)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <img
+                      src={mediaUrl(u)}
+                      alt=""
+                      className="h-24 w-24 rounded-xl object-cover ring-1 ring-slate-200"
+                    />
+                  </a>
+                ))}
               </div>
-              {canAccept && bid.status === "active" && (
+            )}
+            <div className="flex flex-wrap gap-2 pt-2">
+              {liveWork && (
                 <button
-                  className="btn primary"
-                  disabled={busy}
-                  onClick={() => onAccept(bid.id)}
+                  type="button"
+                  className={
+                    job.status === "pending_confirmation"
+                      ? "btn-primary"
+                      : "btn-secondary"
+                  }
+                  onClick={onComplete}
                 >
-                  Accept
+                  {job.status === "pending_confirmation"
+                    ? "Confirm work is complete"
+                    : "Mark completed"}
                 </button>
               )}
-            </li>
-          ))}
-        </ul>
-        {canAccept && activeBids.length === 0 && (
-          <p className="muted">Waiting for tradespeople to bid.</p>
-        )}
-      </section>
-
-      {canDispute && job.status !== "disputed" && (
-        <section className="panel">
-          <h2>Open dispute</h2>
-          <form className="form-grid" onSubmit={onDispute}>
-            <label>
-              Reason
-              <textarea
-                value={disputeReason}
-                onChange={(e) => setDisputeReason(e.target.value)}
-                rows={3}
-                required
+              {job.status === "completed" && (
+                <>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      saveRepeatDraft(job);
+                      success("Prefilling post-job wizard from this job");
+                      navigate(clientPath("jobs/new"));
+                    }}
+                  >
+                    Repeat this job
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={async () => {
+                      const suggested =
+                        (job.title || "Job")
+                          .replace(/\s*\(repeat\)\s*$/i, "")
+                          .trim() || "My job template";
+                      const name =
+                        window
+                          .prompt("Name this job template", suggested)
+                          ?.trim() || suggested;
+                      const entry = namedTemplateFromJob(job, name);
+                      try {
+                        await updateProfile({
+                          namedJobTemplates: upsertNamedJobTemplate(
+                            mergeNamedJobTemplates(user?.namedJobTemplates),
+                            entry,
+                          ),
+                        });
+                        success(`Saved “${entry.name}” to your job templates`);
+                      } catch (e) {
+                        error(
+                          (e as Error).message || "Couldn't save the template",
+                        );
+                      }
+                    }}
+                  >
+                    Save as template
+                  </button>
+                </>
+              )}
+              {job.status === "open" && (
+                <button type="button" className="btn-danger" onClick={onCancel}>
+                  Cancel job
+                </button>
+              )}
+              {(liveWork || job.status === "completed") && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowDispute(true)}
+                >
+                  Open dispute
+                </button>
+              )}
+            </div>
+            {job.status === "pending_confirmation" && (
+              <p
+                className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200"
+                role="status"
+              >
+                The professional marked this job as done. Confirm to release the
+                remaining payment, or open a dispute if something isn't right.
+                It will be confirmed automatically in a few days if you don't
+                respond.
+              </p>
+            )}
+            {showDispute && (
+              <DisputeForm
+                jobId={job.id}
+                onCancel={() => setShowDispute(false)}
+                onOpened={() => {
+                  setShowDispute(false);
+                  load();
+                }}
               />
-            </label>
-            <button className="btn ghost" type="submit" disabled={busy || !disputeReason.trim()}>
-              Submit dispute
-            </button>
-          </form>
-        </section>
+            )}
+          </section>
+
+          {liveWork && (
+            <SchedulePanel
+              job={job}
+              userId={user?.id}
+              canManage
+              onChanged={load}
+              proAvailability={proAvailability}
+              blockedDates={proBlockedDates}
+            />
+          )}
+
+          {(job.status === "awarded" || job.status === "in_progress") && (
+            <VisitPrepCard job={job} />
+          )}
+          {job.cadence && normalizeCadence(job.cadence) !== "one_time" && (
+            <p className="rounded-xl bg-violet-50 px-3 py-2 text-xs text-violet-900 ring-1 ring-violet-100">
+              <span className="font-semibold">Cadence preference:</span>{" "}
+              {cadenceLabel(job.cadence)}
+              {job.cadenceNote ? ` — ${job.cadenceNote}` : ""}. Soft only —
+              negotiate schedule in chat.
+            </p>
+          )}
+
+          {(liveWork || job.status === "completed") && (
+            <AmcProposalCard job={job} role="client" onChanged={load} />
+          )}
+
+          {showEscrow && (
+            <PaymentPanel
+              job={job}
+              canRelease={liveWork || job.status === "completed"}
+              onChanged={load}
+            />
+          )}
+
+          {hired && (
+            <CompletionPhotosPanel job={job} canEdit={hired} onChanged={load} />
+          )}
+
+          {job.status === "completed" &&
+          (job.beforePhotoUrls?.length || job.afterPhotoUrls?.length) ? (
+            <section className="card p-5">
+              <label
+                className="flex items-start gap-3 text-sm"
+                htmlFor="photo-consent"
+              >
+                <input
+                  id="photo-consent"
+                  type="checkbox"
+                  className="mt-1"
+                  checked={!!job.photoConsent}
+                  onChange={(e) => onPhotoConsent(e.target.checked)}
+                />
+                <span>
+                  <span className="font-medium text-slate-900">
+                    Allow the professional to show these photos in their
+                    portfolio
+                  </span>
+                  <span className="block text-slate-500">
+                    Only the completion photos are shared, never your address.
+                    You can turn this off at any time.
+                  </span>
+                </span>
+              </label>
+            </section>
+          ) : null}
+
+          <ShortlistInvitePanel s={s} job={job} />
+
+          <SuggestedProsPanel s={s} job={job} />
+
+          <BidComparePanel s={s} job={job} sortedBids={sortedBids} />
+
+          {job.status === "completed" && (
+            <ReviewPanel
+              jobId={job.id}
+              review={review}
+              proReview={proReview}
+              onSaved={load}
+            />
+          )}
+
+          {canMessage && (
+            <JobConversations
+              jobId={job.id}
+              initialProId={searchParams.get("chat") || undefined}
+              hiredProId={
+                bids.find((b) => b.id === job.acceptedBidId)?.tradespersonId
+              }
+            />
+          )}
+        </div>
+
+        <aside className="space-y-4">
+          <div className="card p-5">
+            <h3 className="font-semibold text-slate-900">Job summary</h3>
+            <dl className="mt-3 space-y-2 text-sm">
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-500">Status</dt>
+                <dd>
+                  <Badge status={job.status} />
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-500">Payment</dt>
+                <dd>
+                  <Badge status={job.paymentStatus || "pending"} />
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-500">Category</dt>
+                <dd className="font-medium">{categoryLabel(job.category)}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-500">Bids</dt>
+                <dd className="font-medium">
+                  {
+                    bids.filter(
+                      (b) => b.status === "active" || b.status === "accepted",
+                    ).length
+                  }
+                </dd>
+              </div>
+              {job.completedAt && (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-slate-500">Completed</dt>
+                  <dd className="font-medium">{fmtDate(job.completedAt)}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+          {job.acceptedBidId && (
+            <ReportButton
+              targetType="user"
+              targetId={
+                bids.find((b) => b.id === job.acceptedBidId)?.tradespersonId
+              }
+              label="Report this professional"
+            />
+          )}
+        </aside>
+      </div>
+
+      {scorePro && (
+        <MatchScorePanel
+          open={!!scorePro}
+          onClose={() => setScorePro(null)}
+          name={scorePro.name}
+          score={scorePro.score}
+          breakdown={scorePro.breakdown}
+        />
       )}
-      {job.status === "disputed" && (
-        <p className="muted">A dispute is open on this job.</p>
-      )}
+      <BestValueExplainPanel
+        open={!!bestValueExplain}
+        onClose={() => setBestValueExplain(null)}
+        row={bestValueExplain}
+      />
     </Shell>
   );
 }

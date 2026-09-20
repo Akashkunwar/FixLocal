@@ -1,3 +1,8 @@
+/**
+ * SUPERSEDED — kept for reference only. This browser script targets the UI from before the
+ * Client/Professional redesign (e.g. /homeowner URLs, a one-page job form) and no longer runs.
+ * Its checks live on in the Playwright suite: `npm run test:e2e` (frontend/e2e/*.spec.ts).
+ */
 import { chromium } from "playwright";
 
 const FRONT = process.env.FRONT_URL || "http://localhost:5173";

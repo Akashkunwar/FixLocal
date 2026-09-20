@@ -1,4 +1,9 @@
 /**
+ * SUPERSEDED — kept for reference only. This browser script targets the UI from before the
+ * Client/Professional redesign (e.g. /homeowner URLs, a one-page job form) and no longer runs.
+ * Its checks live on in the Playwright suite: `npm run test:e2e` (frontend/e2e/*.spec.ts).
+ */
+/**
  * Full visual E2E — headed browser, slowMo + pauses so you can watch every screen.
  *
  *   cd frontend && npm run e2e:visual

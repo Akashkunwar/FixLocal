@@ -1,5 +1,6 @@
 import {
   Column,
+  Index,
   CreateDateColumn,
   Entity,
   JoinColumn,
@@ -22,6 +23,8 @@ export enum DisputeResolution {
 }
 
 @Entity("disputes")
+@Index(["jobId"])
+@Index("UQ_dispute_one_open_per_job", ["jobId"], { unique: true, where: `"status" = 'open'` })
 export class Dispute {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -43,6 +46,10 @@ export class Dispute {
   @Column({ type: "text" })
   reason!: string;
 
+  /** Job status when the dispute was opened; restored on a "no action" resolution. */
+  @Column({ type: "varchar", length: 32, nullable: true })
+  previousJobStatus?: string | null;
+
   @Column({ type: "jsonb", default: [] })
   evidenceUrls!: string[];
 
@@ -55,12 +62,23 @@ export class Dispute {
   @Column({ type: "text", nullable: true })
   resolutionNotes?: string;
 
+  /** Simulated escrow refunds applied at resolve time. */
+  @Column({ type: "jsonb", nullable: true })
+  refundMeta?: {
+    milestoneIds: string[];
+    totalRefunded: number;
+    labels?: string[];
+    releasedMilestoneIds?: string[];
+    totalReleased?: number;
+    notRefundable?: string[];
+  } | null;
+
   @Column({ type: "timestamptz", nullable: true })
   resolvedAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }
