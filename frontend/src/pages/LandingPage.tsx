@@ -83,10 +83,13 @@ export function LandingPage() {
                 </li>
               ))}
             </ol>
-            <div className="mt-6 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
-              <p className="text-xs text-slate-500">Demo logins · Password123!</p>
-              <p className="mt-1 text-sm font-medium text-slate-800">Client home@ · Professional pro@ · Admin admin@fixlocal.local</p>
-            </div>
+            {/* Demo accounts are only advertised in demo builds (M-9), never on a real deployment. */}
+            {import.meta.env.VITE_DEMO_MODE === "true" && (
+              <div className="mt-6 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
+                <p className="text-xs text-slate-500">Demo logins · Password123!</p>
+                <p className="mt-1 text-sm font-medium text-slate-800">Client home@ · Professional pro@ · Admin admin@fixlocal.local</p>
+              </div>
+            )}
           </div>
         </div>
       </section>

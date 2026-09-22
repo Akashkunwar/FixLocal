@@ -11,6 +11,16 @@ test.describe("public pages and legacy routes (journey 16)", () => {
     await expect(page.locator("h1, h2").first()).toBeVisible();
   });
 
+  test("demo credentials are not shown outside demo builds (M-9)", async ({ page }) => {
+    for (const path of ["/", "/login"]) {
+      await page.goto(path);
+      await expect(page.locator("body")).not.toContainText("Password123");
+      await expect(page.getByText(/Demo logins|Demo accounts/)).toHaveCount(0);
+    }
+    await expect(page.getByLabel("Email")).toHaveValue("");
+    await expect(page.getByLabel("Password", { exact: true })).toHaveValue("");
+  });
+
   test("old /homeowner and /tradesperson links land on the new URLs", async ({ page }) => {
     await login(page, SEEDED.client);
     await page.goto("/homeowner/jobs/new?from=old");
