@@ -360,7 +360,7 @@ export function ProPublicPage() {
                     </div>
                     {(cs.beforeUrl || cs.afterUrl) && (
                       <div className="grid grid-cols-2 gap-2">
-                        <figure className="overflow-hidden rounded-lg bg-slate-100 aspect-[4/3]">
+                        <figure className="overflow-hidden rounded-lg bg-slate-100 aspect-4/3">
                           {cs.beforeUrl ? (
                             <a href={mediaUrl(cs.beforeUrl)} target="_blank" rel="noreferrer">
                               <img
@@ -378,7 +378,7 @@ export function ProPublicPage() {
                             <figcaption className="sr-only">Before</figcaption>
                           )}
                         </figure>
-                        <figure className="overflow-hidden rounded-lg bg-slate-100 aspect-[4/3]">
+                        <figure className="overflow-hidden rounded-lg bg-slate-100 aspect-4/3">
                           {cs.afterUrl ? (
                             <a href={mediaUrl(cs.afterUrl)} target="_blank" rel="noreferrer">
                               <img
@@ -414,7 +414,7 @@ export function ProPublicPage() {
               <h2 className="font-semibold text-lg mb-4">Work gallery</h2>
               <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {profile.galleryUrls!.map((url) => (
-                  <li key={url} className="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100">
+                  <li key={url} className="aspect-4/3 overflow-hidden rounded-xl bg-slate-100">
                     <a href={mediaUrl(url)} target="_blank" rel="noreferrer">
                       <img src={mediaUrl(url)} alt="Past work" className="h-full w-full object-cover hover:opacity-95" />
                     </a>

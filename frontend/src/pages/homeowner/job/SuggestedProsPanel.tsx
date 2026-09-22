@@ -157,7 +157,7 @@ export function SuggestedProsPanel({
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            className="text-right rounded-lg px-1.5 py-0.5 hover:bg-white/80 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                            className="text-right rounded-lg px-1.5 py-0.5 hover:bg-white/80 focus:outline-hidden focus:ring-2 focus:ring-brand-300"
                             onClick={() => setScorePro(p)}
                             title="Explain match score (sk/rt/rs/ds)"
                           >
@@ -312,7 +312,7 @@ export function SuggestedProsPanel({
                       />
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <input
-                          className="input !py-1.5 text-xs max-w-[140px]"
+                          className="input py-1.5! text-xs max-w-[140px]"
                           placeholder="Template label"
                           value={tplLabel}
                           onChange={(e) => setTplLabel(e.target.value)}

@@ -65,7 +65,7 @@ export function TemplateEditor({ title, description, noun, idPrefix, value, defa
         <p className="text-xs font-medium text-slate-700">{editId ? `Edit ${noun} template` : `New ${noun} template`}</p>
         <div className="grid gap-2 sm:grid-cols-[140px_1fr]">
           <input
-            className="input !py-1.5 text-sm"
+            className="input py-1.5! text-sm"
             placeholder="Label"
             maxLength={80}
             value={label}

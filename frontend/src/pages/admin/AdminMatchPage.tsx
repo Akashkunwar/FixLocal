@@ -61,7 +61,7 @@ function TopProsList({ pros }: { pros: MatchTopPro[] }) {
             {(p.rankedScore ?? p.score).toFixed(0)}
           </span>
           {p.heatBoost != null && p.heatBoost > 0 ? (
-            <span className="ml-1 rounded bg-amber-50 px-1 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-200">
+            <span className="ml-1 rounded-sm bg-amber-50 px-1 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-200">
               +{p.heatBoost} heat
             </span>
           ) : null}
@@ -380,7 +380,7 @@ export function AdminMatchPage() {
             </p>
             <div className="rounded-xl bg-amber-50/80 p-3 ring-1 ring-amber-100">
               <div className="flex flex-wrap items-end justify-between gap-3">
-                <label className="block min-w-[12rem] flex-1">
+                <label className="block min-w-48 flex-1">
                   <span className="label">Availability heat weight (boost)</span>
                   <input
                     type="number"
@@ -407,7 +407,7 @@ export function AdminMatchPage() {
                 Unclean schedules get 0. Presets include heat (balanced 10 · speed 15 · quality 8 · availability 20).
               </p>
               <div className="mt-3 flex flex-wrap items-end justify-between gap-3 border-t border-amber-100 pt-3">
-                <label className="block min-w-[12rem] flex-1" htmlFor="shortlist-min-heat">
+                <label className="block min-w-48 flex-1" htmlFor="shortlist-min-heat">
                   <span className="label">Shortlist invite availability gate (0–100)</span>
                   <input
                     id="shortlist-min-heat"

@@ -452,7 +452,7 @@ export function BidComparePanel({
                                           </span>
                                         )}
                                         {cur.kind === "current" ? (
-                                          <span className="rounded bg-amber-100 px-1 text-[9px] uppercase text-amber-900">
+                                          <span className="rounded-sm bg-amber-100 px-1 text-[9px] uppercase text-amber-900">
                                             latest
                                           </span>
                                         ) : null}
@@ -516,7 +516,7 @@ export function BidComparePanel({
                       b.status === "active" &&
                       b.quoteAmount != null &&
                       Number(b.quoteAmount) > 0 && (
-                        <p className="mt-1 max-w-[10rem] text-[11px] text-slate-500">
+                        <p className="mt-1 max-w-40 text-[11px] text-slate-500">
                           Escrow will use quote {money(b.quoteAmount)}
                         </p>
                       )}
@@ -542,7 +542,7 @@ export function BidComparePanel({
                       </button>
                     )}
                     {b.counterOffer && (
-                      <p className="mt-2 max-w-[12rem] text-[11px] text-slate-600">
+                      <p className="mt-2 max-w-48 text-[11px] text-slate-600">
                         Counter {money(b.counterOffer.suggestedAmount)}
                         <span className="text-slate-400">
                           {" "}
@@ -552,7 +552,7 @@ export function BidComparePanel({
                     )}
                     {Array.isArray(b.counterHistory) &&
                       b.counterHistory.length > 0 && (
-                        <details className="mt-1 max-w-[14rem] text-left">
+                        <details className="mt-1 max-w-56 text-left">
                           <summary className="cursor-pointer text-[10px] text-slate-500">
                             Counter history ({b.counterHistory.length})
                           </summary>
@@ -578,7 +578,7 @@ export function BidComparePanel({
                         Number(b.quoteAmount) -
                           Number(b.counterOffer.suggestedAmount),
                       ) >= 1 && (
-                        <p className="mt-1 max-w-[12rem] text-[10px] text-amber-800">
+                        <p className="mt-1 max-w-48 text-[10px] text-amber-800">
                           Soft escrow preview: hold {money(b.quoteAmount)}{" "}
                           (counter was {money(b.counterOffer.suggestedAmount)})
                         </p>

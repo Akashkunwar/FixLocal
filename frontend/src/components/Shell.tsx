@@ -69,7 +69,7 @@ export function Shell({
             to={user ? dashboardPath(user.role) : "/"}
             className="flex items-center gap-2 text-slate-900 no-underline min-h-[44px]"
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-700 text-white shadow-sm">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-700 text-white shadow-xs">
               <Wrench className="h-4 w-4" />
             </span>
             <span className="font-display text-xl font-semibold tracking-tight">FixLocal</span>
@@ -106,7 +106,7 @@ export function Shell({
                     {initials(user.name, user.email)}
                   </div>
                   <div className="leading-tight">
-                    <p className="text-xs font-semibold text-slate-800 max-w-[10rem] truncate">
+                    <p className="text-xs font-semibold text-slate-800 max-w-40 truncate">
                       {user.name || user.email}
                     </p>
                     <p className="text-[10px] uppercase tracking-wide text-slate-400">{roleLabel(user.role)}</p>
@@ -158,7 +158,7 @@ export function Shell({
                 end={"end" in l ? l.end : false}
                 className={({ isActive }) =>
                   clsx(
-                    "flex min-w-[4.5rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2 text-[11px] font-semibold no-underline touch-target",
+                    "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2 text-[11px] font-semibold no-underline touch-target",
                     isActive ? "bg-brand-50 text-brand-800" : "text-slate-500"
                   )
                 }

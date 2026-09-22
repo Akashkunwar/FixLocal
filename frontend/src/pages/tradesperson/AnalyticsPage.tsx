@@ -314,7 +314,7 @@ function SlaSparkline({
       </svg>
       <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
         {bars.map((b) => (
-          <span key={b.label} className="rounded bg-slate-50 px-1.5 py-0.5 ring-1 ring-slate-200">
+          <span key={b.label} className="rounded-sm bg-slate-50 px-1.5 py-0.5 ring-1 ring-slate-200">
             {b.label}: {b.hours != null ? `~${b.hours}h` : "—"}
             {b.n ? ` (n=${b.n})` : ""}
           </span>

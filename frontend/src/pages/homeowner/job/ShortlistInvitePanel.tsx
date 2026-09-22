@@ -185,7 +185,7 @@ export function ShortlistInvitePanel({
                       </span>
                     ) : pro.inviteBlockedByHeat ? (
                       <span
-                        className="max-w-[9rem] text-right text-[10px] text-rose-700"
+                        className="max-w-36 text-right text-[10px] text-rose-700"
                         title={pro.inviteHeatReason || undefined}
                       >
                         Heat below{" "}
