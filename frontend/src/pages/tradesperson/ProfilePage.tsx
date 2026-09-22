@@ -265,11 +265,11 @@ export function ProfilePage() {
         ) : (
           <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {gallery.map((url) => (
-              <li key={url} className="relative group aspect-[4/3] overflow-hidden rounded-xl bg-slate-100">
+              <li key={url} className="relative group aspect-4/3 overflow-hidden rounded-xl bg-slate-100">
                 <img src={mediaUrl(url)} alt="Portfolio" className="h-full w-full object-cover" />
                 <button
                   type="button"
-                  className="absolute right-2 top-2 rounded-lg bg-white/90 p-2 text-rose-600 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition shadow touch-target"
+                  className="absolute right-2 top-2 rounded-lg bg-white/90 p-2 text-rose-600 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition shadow-sm touch-target"
                   onClick={() => onRemove(url)}
                   aria-label="Remove photo"
                 >
@@ -493,7 +493,7 @@ export function ProfilePage() {
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <input
-              className="input !py-1.5 text-sm"
+              className="input py-1.5! text-sm"
               placeholder="Label (e.g. Leak fix visit)"
               maxLength={80}
               value={pkgDraft.label}
@@ -501,7 +501,7 @@ export function ProfilePage() {
               aria-label="Package label"
             />
             <input
-              className="input !py-1.5 text-sm"
+              className="input py-1.5! text-sm"
               placeholder="Unit (optional, e.g. job / room)"
               maxLength={40}
               value={pkgDraft.unit}
@@ -509,7 +509,7 @@ export function ProfilePage() {
               aria-label="Package unit"
             />
             <input
-              className="input !py-1.5 text-sm"
+              className="input py-1.5! text-sm"
               type="number"
               min={0}
               placeholder="Min ₹"
@@ -518,7 +518,7 @@ export function ProfilePage() {
               aria-label="Package amount min"
             />
             <input
-              className="input !py-1.5 text-sm"
+              className="input py-1.5! text-sm"
               type="number"
               min={0}
               placeholder="Max ₹ (optional)"
@@ -527,7 +527,7 @@ export function ProfilePage() {
               aria-label="Package amount max"
             />
             <input
-              className="input !py-1.5 text-sm sm:col-span-2"
+              className="input py-1.5! text-sm sm:col-span-2"
               placeholder="Hint (optional)"
               maxLength={160}
               value={pkgDraft.hint}
@@ -643,7 +643,7 @@ export function ProfilePage() {
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <input
-              className="input !py-1.5 text-sm sm:col-span-2"
+              className="input py-1.5! text-sm sm:col-span-2"
               placeholder="Title (e.g. Kitchen leak repair)"
               maxLength={120}
               value={caseDraft.title}
@@ -653,7 +653,7 @@ export function ProfilePage() {
             {(["beforeUrl", "afterUrl"] as const).map((key) => (
               <select
                 key={key}
-                className="input !py-1.5 text-sm"
+                className="input py-1.5! text-sm"
                 value={caseDraft[key]}
                 onChange={(e) => setCaseDraft({ ...caseDraft, [key]: e.target.value })}
                 aria-label={key === "beforeUrl" ? "Before photo" : "After photo"}
@@ -674,7 +674,7 @@ export function ProfilePage() {
               </select>
             ))}
             <input
-              className="input !py-1.5 text-sm"
+              className="input py-1.5! text-sm"
               placeholder="Category (optional)"
               maxLength={40}
               value={caseDraft.category}
@@ -682,7 +682,7 @@ export function ProfilePage() {
               aria-label="Case study category"
             />
             <textarea
-              className="input !py-1.5 text-sm sm:col-span-2 min-h-[72px]"
+              className="input py-1.5! text-sm sm:col-span-2 min-h-[72px]"
               placeholder="Notes — what changed, materials, outcome"
               maxLength={800}
               value={caseDraft.notes}
@@ -820,7 +820,7 @@ export function ProfilePage() {
                   </div>
                   {(cs.beforeUrl || cs.afterUrl) && (
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="overflow-hidden rounded-lg bg-slate-100 aspect-[4/3]">
+                      <div className="overflow-hidden rounded-lg bg-slate-100 aspect-4/3">
                         {cs.beforeUrl ? (
                           <img
                             src={mediaUrl(cs.beforeUrl)}
@@ -833,7 +833,7 @@ export function ProfilePage() {
                           </p>
                         )}
                       </div>
-                      <div className="overflow-hidden rounded-lg bg-slate-100 aspect-[4/3]">
+                      <div className="overflow-hidden rounded-lg bg-slate-100 aspect-4/3">
                         {cs.afterUrl ? (
                           <img
                             src={mediaUrl(cs.afterUrl)}
@@ -878,7 +878,7 @@ export function ProfilePage() {
                     <label className="inline-flex items-center gap-2 text-sm font-medium">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300"
+                        className="h-4 w-4 rounded-sm border-slate-300"
                         checked={week[day].enabled}
                         onChange={(e) =>
                           setWeek({

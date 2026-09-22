@@ -80,7 +80,7 @@ export function ProVisitDayCard({ job }: { job: Job }) {
               >
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-700"
+                  className="mt-0.5 h-4 w-4 rounded-sm border-slate-300 text-brand-700"
                   checked={done}
                   onChange={() => toggle(item.id)}
                   aria-describedby={`pro-prep-hint-${item.id}`}

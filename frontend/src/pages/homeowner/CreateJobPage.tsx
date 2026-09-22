@@ -491,7 +491,7 @@ export function CreateJobPage() {
               <label className="label" htmlFor="maxBids">Max bids</label>
               <input
                 id="maxBids"
-                className="input max-w-[8rem]"
+                className="input max-w-32"
                 type="number"
                 min={1}
                 max={20}
@@ -683,7 +683,7 @@ export function CreateJobPage() {
               {previews.length > 0 && (
                 <ul className="mt-3 grid grid-cols-3 gap-2">
                   {previews.map((p) => (
-                    <li key={p.url} className="aspect-[4/3] overflow-hidden rounded-lg bg-slate-100">
+                    <li key={p.url} className="aspect-4/3 overflow-hidden rounded-lg bg-slate-100">
                       <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
                     </li>
                   ))}

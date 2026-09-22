@@ -88,7 +88,7 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
             <div className="mb-2 flex items-center justify-between gap-2">
               <div>
                 <p className="text-sm font-semibold text-slate-900">
-                  <span className="mr-1.5 rounded bg-brand-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-brand-800">
+                  <span className="mr-1.5 rounded-sm bg-brand-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-brand-800">
                     mt
                   </span>
                   Match / ranked score
@@ -106,7 +106,7 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
             <div className="mb-2 flex items-center justify-between gap-2">
               <div>
                 <p className="text-sm font-semibold text-slate-900">
-                  <span className="mr-1.5 rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-emerald-800">
+                  <span className="mr-1.5 rounded-sm bg-emerald-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-emerald-800">
                     px
                   </span>
                   Lower escrow hold
@@ -125,7 +125,7 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
-                    <span className="mr-1.5 rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-amber-900">
+                    <span className="mr-1.5 rounded-sm bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-amber-900">
                       sh
                     </span>
                     SLA + availability heat

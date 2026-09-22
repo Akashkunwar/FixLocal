@@ -106,7 +106,7 @@ export function RegisterPage() {
               className={clsx(
                 "rounded-xl border p-3 text-left transition",
                 role === c.role
-                  ? "border-brand-400 bg-brand-50 shadow-sm ring-1 ring-brand-200"
+                  ? "border-brand-400 bg-brand-50 shadow-xs ring-1 ring-brand-200"
                   : "border-slate-200 bg-white hover:border-slate-300"
               )}
               onClick={() => setRole(c.role)}

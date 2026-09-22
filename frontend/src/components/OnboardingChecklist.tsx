@@ -57,7 +57,7 @@ export function OnboardingChecklist({
 
   return (
     <section className="mb-5 card overflow-hidden ring-1 ring-brand-100">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-brand-50 to-white px-4 py-3 sm:px-5">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-linear-to-r from-brand-50 to-white px-4 py-3 sm:px-5">
         <div>
           <h2 className="font-semibold text-slate-900">{title}</h2>
           {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
