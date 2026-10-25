@@ -257,8 +257,9 @@ export function JobDetailPage() {
               >
                 The professional marked this job as done. Confirm to release the
                 remaining payment, or open a dispute if something isn't right.
-                It will be confirmed automatically in a few days if you don't
-                respond.
+                {job.autoConfirmAt
+                  ? `If you don't respond, it will be confirmed automatically on ${fmtDateTime(job.autoConfirmAt)}.`
+                  : "It will be confirmed automatically in a few days if you don't respond."}
               </p>
             )}
             {showDispute && (
@@ -340,11 +341,18 @@ export function JobDetailPage() {
             </section>
           ) : null}
 
+          {/* Once bids arrive they are the decision in front of the client, so they come first. */}
+          {bids.length > 0 && (
+            <BidComparePanel s={s} job={job} sortedBids={sortedBids} />
+          )}
+
           <ShortlistInvitePanel s={s} job={job} />
 
           <SuggestedProsPanel s={s} job={job} />
 
-          <BidComparePanel s={s} job={job} sortedBids={sortedBids} />
+          {bids.length === 0 && (
+            <BidComparePanel s={s} job={job} sortedBids={sortedBids} />
+          )}
 
           {job.status === "completed" && (
             <ReviewPanel

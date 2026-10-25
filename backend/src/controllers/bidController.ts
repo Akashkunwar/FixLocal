@@ -31,7 +31,7 @@ import {
 import { viewer } from "./jobController";
 import { firstInviteTimes } from "./inviteController";
 import { filesOf } from "../middleware/upload";
-import { discardFiles, fileRef, storeUploads } from "../services/files";
+import { discardFiles, fileRef, publicUrl, publicUrls, storeUploads } from "../services/files";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { logger } from "../logger";
 
@@ -181,6 +181,35 @@ async function notifyShortlistersOfFasterReplies(proId: string, bidId: string, s
   );
 }
 
+/**
+ * Track record shown next to each bid so a client can judge a pro without leaving the page:
+ * completed jobs on FixLocal and their latest written review. Two batched queries for all bidders.
+ */
+async function proTrackRecords(proIds: string[]) {
+  const out = new Map<string, { completedJobs: number; latestReview: { rating: number; comment: string; createdAt: Date } | null }>();
+  if (!proIds.length) return out;
+  const done: { proId: string; n: string }[] = await AppDataSource.query(
+    `SELECT b."tradespersonId" AS "proId", COUNT(*) AS n
+     FROM "jobs" j JOIN "bids" b ON b."id" = j."acceptedBidId"
+     WHERE j."status" = 'completed' AND b."tradespersonId" = ANY($1)
+     GROUP BY b."tradespersonId"`,
+    [proIds]
+  );
+  const latest: { proId: string; rating: number; comment: string; createdAt: Date }[] = await AppDataSource.query(
+    `SELECT DISTINCT ON (r."revieweeId") r."revieweeId" AS "proId", r."rating", r."comment", r."createdAt"
+     FROM "reviews" r
+     WHERE r."revieweeId" = ANY($1) AND r."direction" = 'client_to_pro' AND COALESCE(r."comment", '') <> ''
+     ORDER BY r."revieweeId", r."createdAt" DESC`,
+    [proIds]
+  );
+  for (const id of proIds) out.set(id, { completedJobs: 0, latestReview: null });
+  for (const r of done) out.get(r.proId)!.completedJobs = Number(r.n);
+  for (const r of latest) {
+    out.get(r.proId)!.latestReview = { rating: Number(r.rating), comment: String(r.comment).slice(0, 200), createdAt: r.createdAt };
+  }
+  return out;
+}
+
 export async function listBids(req: Request, res: Response) {
   const ctx = await loadJobContext(req.valid.params.id);
   const v = viewer(req);
@@ -210,6 +239,7 @@ export async function listBids(req: Request, res: Response) {
   const matchWeights = await getMatchWeights();
   const heatWeight = await getHeatWeight();
   const bestValueBlend = await getBestValueBlend();
+  const track = await proTrackRecords(proIds);
 
   const shaped = bids.map((b) => {
     const p = profileMap.get(b.tradespersonId);
@@ -259,6 +289,11 @@ export async function listBids(req: Request, res: Response) {
             lng: roundCoord(p.lng),
             yearsExperience: p.yearsExperience ?? null,
             verificationStatus: p.verificationStatus,
+            bio: p.bio ? p.bio.slice(0, 280) : null,
+            avatarUrl: publicUrl(b.tradesperson?.avatarUrl),
+            galleryPreview: publicUrls((p.galleryUrls ?? []).slice(0, 3)),
+            completedJobs: track.get(b.tradespersonId)?.completedJobs ?? 0,
+            latestReview: track.get(b.tradespersonId)?.latestReview ?? null,
           }
         : null,
       ...match,
