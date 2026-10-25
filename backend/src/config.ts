@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./loadEnv";
 import path from "path";
 import { z } from "zod";
 

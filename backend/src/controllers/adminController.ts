@@ -15,7 +15,7 @@ import { notifyFavoritersProAvailable } from "../utils/matchAlerts";
 import { createNotifications } from "../utils/notifications";
 import { revokeThreadStreams } from "../utils/sse";
 import { haversineKm } from "../utils/geo";
-import { scoreProForJob, type ScoreablePro } from "../utils/matchScore";
+import { boostedScore, scoreProForJob, type ScoreablePro } from "../utils/matchScore";
 import { getMatchWeights, setMatchWeights, weightsSum, DEFAULT_MATCH_WEIGHTS, MATCH_WEIGHT_PRESETS, detectMatchPreset, normalizeMatchWeights, getHeatWeight, setHeatWeight, DEFAULT_HEAT_WEIGHT, normalizeHeatWeight, computeHeatBoost, getBestValueBlend, setBestValueBlend, DEFAULT_BEST_VALUE_BLEND, blendsEqual, normalizeBestValueBlend, BEST_VALUE_BLEND_PRESETS, detectBestValueBlendPreset, getShortlistInviteMinHeat, setShortlistInviteMinHeat } from "../utils/matchWeights";
 import { scoreBestValueBids, escrowHoldFromAmounts } from "../utils/bestValueScore";
 import { hoursBetween, buildEventSla } from "../utils/responseSla";
@@ -837,7 +837,7 @@ export async function previewBestValueBlend(req: Request, res: Response) {
         const breakdown = scoreProForJob(job, input, matchWeights);
         const availabilityHeat = buildAvailabilityHeat(profile.weeklyAvailability, profile.blockedDates);
         heatBoost = computeHeatBoost(availabilityHeat, heatWeightCfg);
-        matchScore = Math.round((breakdown.total + heatBoost) * 10) / 10;
+        matchScore = boostedScore(breakdown.total, heatBoost);
       }
       const jobToBidHours = hoursBetween(job.createdAt, b.createdAt);
       const sla = buildEventSla({ jobToBidHours });
@@ -951,7 +951,7 @@ export async function matchQualityLite(_req: Request, res: Response) {
       const breakdown = scoreProForJob(job, proInput, weights);
       const availabilityHeat = buildAvailabilityHeat(p.weeklyAvailability, p.blockedDates, p.user?.timezone);
       const heatBoost = computeHeatBoost(availabilityHeat, heatWeight);
-      const rankedScore = Math.round((breakdown.total + heatBoost) * 10) / 10;
+      const rankedScore = boostedScore(breakdown.total, heatBoost);
       scored.push({
         userId: p.userId,
         name: p.user?.name || null,

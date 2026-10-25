@@ -59,7 +59,7 @@ describe("GET routes are read-only (M-3)", () => {
     const hired = await awardedJob({ stage: "in_progress" });
     const { owner, worker, job: workJob } = hired;
     const done = await awardedJob({ stage: "completed" });
-    await api().post(`/api/reviews/job/${done.job.id}`).set(done.owner.auth).send({ rating: 5, comment: "Great" });
+    await api().post("/api/reviews").set(done.owner.auth).send({ jobId: done.job.id, rating: 5, comment: "Great" }).expect(201);
     const disputed = await awardedJob({ stage: "in_progress" });
     await api().post(`/api/jobs/${disputed.job.id}/disputes`).set(disputed.owner.auth).send({ reason: "Work unfinished" }).expect(201);
 
@@ -126,6 +126,7 @@ describe("GET routes are read-only (M-3)", () => {
       ["/api/profile/counter-analytics", "/api/profile/counter-analytics", bidder],
       ["/api/profile/user/:userId", `/api/profile/user/${worker.user.id}`, owner],
       ["/api/profile", "/api/profile", worker],
+      ["/api/reviews/pending", "/api/reviews/pending", done.worker],
       ["/api/reviews/pro/:userId", `/api/reviews/pro/${done.worker.user.id}`, owner],
       ["/api/reviews/client/:userId", `/api/reviews/client/${done.owner.user.id}`, done.worker],
       ["/api/reviews/job/:jobId", `/api/reviews/job/${done.job.id}`, done.owner],

@@ -150,3 +150,13 @@ export function scoreProForJob(
 }
 
 export { escrowAmountFromBid } from "../domain/escrow";
+
+/**
+ * A match score plus a heat/tag boost, rounded to 0.1 and kept on the 0–100 scale the UI shows
+ * ("Match 104" used to leak through when a strong pro also had a full availability boost).
+ */
+export function boostedScore(base: number, boost = 0): number {
+  const v = Math.round((Number(base) + Number(boost || 0)) * 10) / 10;
+  if (!Number.isFinite(v)) return 0;
+  return Math.min(100, Math.max(0, v));
+}
