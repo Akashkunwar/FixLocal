@@ -74,7 +74,7 @@ export function LoginPage() {
           {err && (
             <div className="space-y-1 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200" role="alert">
               <p>{err}</p>
-              <p className="text-rose-800/80">
+              <p className="text-rose-800">
                 Just signed up? Confirm your email first.{" "}
                 {resent ? (
                   <span>If that address needs confirming, a new link is on its way.</span>

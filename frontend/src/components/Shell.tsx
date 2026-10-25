@@ -161,7 +161,7 @@ export function Shell({
                     <p className="text-xs font-semibold text-slate-800 max-w-40 truncate">
                       {user.name || user.email}
                     </p>
-                    <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500">
                       {roleLabel(user.role)}
                     </p>
                   </div>

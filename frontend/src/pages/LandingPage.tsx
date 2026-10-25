@@ -72,7 +72,7 @@ export function LandingPage() {
             </div>
           </div>
           <div className="card relative p-6 shadow-lift">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">How it works</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">How it works</p>
             <ol className="mt-4 space-y-4">
               {STEPS.map((s) => (
                 <li key={s.n} className="flex gap-4">
@@ -140,7 +140,7 @@ export function LandingPage() {
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {categoryGroups().map(([group, cats]) => (
               <div key={group}>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{group}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{group}</p>
                 <ul className="mt-1 space-y-0.5 text-sm text-slate-700">
                   {cats.map((c) => (
                     <li key={c.value}>

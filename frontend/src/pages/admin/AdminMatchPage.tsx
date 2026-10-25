@@ -46,7 +46,7 @@ function ScoreBar({ score }: { score: number }) {
 }
 
 function TopProsList({ pros }: { pros: MatchTopPro[] }) {
-  if (!pros?.length) return <span className="text-xs text-slate-400">—</span>;
+  if (!pros?.length) return <span className="text-xs text-slate-500">—</span>;
   return (
     <ul className="space-y-1.5">
       {pros.slice(0, 3).map((p) => (
@@ -65,7 +65,7 @@ function TopProsList({ pros }: { pros: MatchTopPro[] }) {
               +{p.heatBoost} heat
             </span>
           ) : null}
-          <span className="ml-1 text-[10px] text-slate-400">
+          <span className="ml-1 text-[10px] text-slate-500">
             sk{p.breakdown.skills.toFixed(0)}·rt{p.breakdown.rating.toFixed(0)}·rs
             {p.breakdown.response.toFixed(0)}·ds{p.breakdown.distance.toFixed(0)}
           </span>
@@ -234,40 +234,40 @@ export function AdminMatchPage() {
         <div className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="card p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Open jobs</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Open jobs</p>
               <p className="mt-1 text-2xl font-semibold">{summary.openJobs}</p>
             </div>
             <div className="card p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Verified pros</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Verified pros</p>
               <p className="mt-1 text-2xl font-semibold">{summary.verifiedPros}</p>
             </div>
             <div className="card p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">No nearby match</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">No nearby match</p>
               <p className="mt-1 text-2xl font-semibold text-rose-700">{summary.jobsWithNoNearby}</p>
             </div>
             <div className="card p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Avg best score</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Avg best score</p>
               <p className="mt-1 text-2xl font-semibold text-brand-800">
                 {summary.avgBestScore != null ? summary.avgBestScore.toFixed(0) : "—"}
               </p>
             </div>
             <div className="card p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Radius</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Radius</p>
               <p className="mt-1 text-2xl font-semibold">{summary.radiusKm} km</p>
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="card p-4 text-center">
-              <p className="text-xs text-slate-400">Thin (1–2)</p>
+              <p className="text-xs text-slate-500">Thin (1–2)</p>
               <p className="text-xl font-semibold">{summary.jobsThin}</p>
             </div>
             <div className="card p-4 text-center">
-              <p className="text-xs text-slate-400">OK (3–6)</p>
+              <p className="text-xs text-slate-500">OK (3–6)</p>
               <p className="text-xl font-semibold">{summary.jobsOk}</p>
             </div>
             <div className="card p-4 text-center">
-              <p className="text-xs text-slate-400">Strong (7+)</p>
+              <p className="text-xs text-slate-500">Strong (7+)</p>
               <p className="text-xl font-semibold">{summary.jobsStrong}</p>
             </div>
           </div>
@@ -401,7 +401,7 @@ export function AdminMatchPage() {
                   Reset heat ({defaultHeatWeight})
                 </button>
               </div>
-              <p className="mt-2 text-[11px] text-amber-900/80">
+              <p className="mt-2 text-[11px] text-amber-900">
                 Clean weekly schedules get up to +{heatWeight} on suggested-pros / match-quality{" "}
                 <span className="font-mono">rankedScore</span> (proportional to heat 0–100).
                 Unclean schedules get 0. Presets include heat (balanced 10 · speed 15 · quality 8 · availability 20).
@@ -429,7 +429,7 @@ export function AdminMatchPage() {
                   Reset gate ({defaultShortlistMinHeat})
                 </button>
               </div>
-              <p className="mt-2 text-[11px] text-amber-900/80">
+              <p className="mt-2 text-[11px] text-amber-900">
                 Clients can't invite a shortlisted pro whose published schedule has less availability heat than this.
                 Pros without a schedule are never blocked. Saved with the weights; changes are audited and can be rolled back.
               </p>
@@ -594,7 +594,7 @@ export function AdminMatchPage() {
                     ? "Disable SLA/heat weight"
                     : "Enable SLA/heat (~15%)"}
                 </button>
-                <p className="text-[11px] text-sky-900/80">
+                <p className="text-[11px] text-sky-900">
                   Current mix {bestValueBlend.matchPct}% match · {bestValueBlend.pricePct}% price
                   {Number(bestValueBlend.slaHeatPct ?? 0) > 0
                     ? ` · ${bestValueBlend.slaHeatPct}% SLA/heat`
@@ -628,9 +628,9 @@ export function AdminMatchPage() {
                   </span>
                 </div>
                 {blendPreviewBusy && !blendPreviewJobs.length ? (
-                  <p className="mt-2 text-xs text-slate-400">Loading sample…</p>
+                  <p className="mt-2 text-xs text-slate-500">Loading sample…</p>
                 ) : blendPreviewJobs.length === 0 ? (
-                  <p className="mt-2 text-xs text-slate-400">
+                  <p className="mt-2 text-xs text-slate-500">
                     {blendPreviewMsg || "No open jobs with ≥2 active bids yet — post competing bids to preview."}
                   </p>
                 ) : (
@@ -643,7 +643,7 @@ export function AdminMatchPage() {
                         <div className="flex flex-wrap items-baseline justify-between gap-2">
                           <p className="text-sm font-medium text-slate-900">
                             {j.title}
-                            <span className="ml-2 text-[11px] font-normal text-slate-400">
+                            <span className="ml-2 text-[11px] font-normal text-slate-500">
                               {[j.category, j.city].filter(Boolean).join(" · ")} · {j.bidCount} bids
                             </span>
                           </p>
@@ -662,7 +662,7 @@ export function AdminMatchPage() {
                               <span className="ml-1 font-mono">
                                 {b.valueScore.toFixed(1)}
                               </span>
-                              <span className="ml-1 text-slate-400">
+                              <span className="ml-1 text-slate-500">
                                 mt{b.matchScore.toFixed(0)} · ₹{Math.round(b.hold)}
                               </span>
                               {b.isBest ? <span className="ml-1">best</span> : null}
@@ -702,14 +702,14 @@ export function AdminMatchPage() {
                         >
                           {j.title}
                         </Link>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-slate-500">
                           {j.category} · {fmtDate(j.createdAt)}
                         </p>
                       </td>
                       <td className="px-4 py-3 text-slate-600">
                         {[j.area, j.city].filter(Boolean).join(", ") || "—"}
                         {j.lat != null && j.lng != null && (
-                          <span className="block text-[11px] text-slate-400">
+                          <span className="block text-[11px] text-slate-500">
                             {Number(j.lat).toFixed(3)}, {Number(j.lng).toFixed(3)}
                           </span>
                         )}

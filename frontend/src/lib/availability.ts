@@ -283,8 +283,8 @@ export function buildBestInviteHint(
 
 /** Tailwind-ish heat cell class by level. */
 export function heatLevelClass(level: number, blocked?: boolean): string {
-  if (blocked) return "bg-slate-200 text-slate-400";
-  if (level <= 0) return "bg-slate-100 text-slate-400";
+  if (blocked) return "bg-slate-200 text-slate-500";
+  if (level <= 0) return "bg-slate-100 text-slate-500";
   if (level === 1) return "bg-emerald-100 text-emerald-800";
   if (level === 2) return "bg-emerald-300 text-emerald-950";
   return "bg-emerald-500 text-white";

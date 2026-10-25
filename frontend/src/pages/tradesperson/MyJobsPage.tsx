@@ -39,23 +39,23 @@ export function MyJobsPage() {
           {earnings && (
             <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="card p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-400">Earned (completed)</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Earned (completed)</p>
                 <p className="mt-1 font-display text-2xl font-semibold text-brand-800">
                   {money(earnings.totalEarned)}
                 </p>
               </div>
               <div className="card p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-400">Completed</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Completed</p>
                 <p className="mt-1 text-2xl font-semibold">{earnings.completedJobs}</p>
               </div>
               <div className="card p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-400">In progress / awarded</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">In progress / awarded</p>
                 <p className="mt-1 text-2xl font-semibold">
                   {earnings.inProgressJobs + earnings.awardedJobs}
                 </p>
               </div>
               <div className="card p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-400">Active bids</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Active bids</p>
                 <p className="mt-1 text-2xl font-semibold">{earnings.activeBids}</p>
               </div>
             </div>

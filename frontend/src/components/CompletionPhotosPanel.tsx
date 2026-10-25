@@ -150,11 +150,11 @@ export function CompletionPhotosPanel({
     if (urls.length === 0 && !canEdit) return null;
     return (
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
           {title}
         </p>
         {urls.length === 0 ? (
-          <p className="text-xs text-slate-400 mb-2">None yet</p>
+          <p className="text-xs text-slate-500 mb-2">None yet</p>
         ) : (
           <ul className="flex flex-wrap gap-2 mb-2">
             {urls.map((u) => (
@@ -199,7 +199,7 @@ export function CompletionPhotosPanel({
       return (
         <div>
           <p className="text-xs font-semibold text-slate-500 mb-1">{label}</p>
-          <p className="text-xs text-slate-400">None uploaded</p>
+          <p className="text-xs text-slate-500">None uploaded</p>
         </div>
       );
     }
@@ -254,8 +254,8 @@ export function CompletionPhotosPanel({
         <div className="space-y-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="label">Before photos</label>
-              <input
+              <label className="label" htmlFor="completion-before">Before photos</label>
+              <input id="completion-before"
                 className="input"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
@@ -265,8 +265,8 @@ export function CompletionPhotosPanel({
               />
             </div>
             <div>
-              <label className="label">After photos</label>
-              <input
+              <label className="label" htmlFor="completion-after">After photos</label>
+              <input id="completion-after"
                 className="input"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
@@ -300,8 +300,8 @@ export function CompletionPhotosPanel({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-sky-950">Portfolio case study</p>
-              <p className="text-[11px] text-sky-800/80">Draft autosaves in this browser until you publish.</p>
-              <p className="text-xs text-sky-800/80">
+              <p className="text-[11px] text-sky-800">Draft autosaves in this browser until you publish.</p>
+              <p className="text-xs text-sky-800">
                 One-click publish before/after to your professional portfolio.
                 {multiPair ? " Pick which pair when several exist." : ""}
               </p>

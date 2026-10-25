@@ -46,7 +46,7 @@ export function AdminTradespeoplePage() {
   return (
     <Shell title="Verify professionals" subtitle="Approve, reject, or suspend pro accounts">
       <div className="mb-4 flex gap-2">
-        <select className="input w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
+        <select className="input w-auto" aria-label="Filter by verification status" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All</option>
           <option value="pending">Pending</option>
           <option value="verified">Verified</option>
@@ -72,7 +72,7 @@ export function AdminTradespeoplePage() {
                   {p.skills || "No skills listed"}
                   {p.yearsExperience != null ? ` · ${p.yearsExperience} yrs` : ""}
                 </p>
-                <p className="text-sm text-slate-400">{p.serviceAreas}</p>
+                <p className="text-sm text-slate-500">{p.serviceAreas}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Badge status={p.verificationStatus} />
                   {p.licenseDocUrl ? (

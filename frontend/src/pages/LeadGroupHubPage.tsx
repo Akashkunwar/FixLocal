@@ -115,7 +115,7 @@ export function LeadGroupHubPage() {
         </section>
 
         <section className="mt-12">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
             Other category groups
           </h2>
           <div className="mt-3 flex flex-wrap gap-2" role="navigation" aria-label="Other lead groups">

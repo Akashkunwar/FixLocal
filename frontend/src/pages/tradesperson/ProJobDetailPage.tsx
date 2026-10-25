@@ -417,7 +417,7 @@ export function ProJobDetailPage() {
       {inviteBanner && job.status === "open" && !myBid && (
         <div className="mb-4 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-950">
           <p className="font-medium">You were invited to bid on this job</p>
-          <p className="mt-1 text-xs text-brand-800/80">
+          <p className="mt-1 text-xs text-brand-800">
             Jump to the bid form below, or softly decline if you are not available.
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -668,7 +668,7 @@ export function ProJobDetailPage() {
                   <p className="text-xs font-semibold text-violet-950">
                     Fill from portfolio packages
                   </p>
-                  <p className="text-[11px] text-violet-900/80">
+                  <p className="text-[11px] text-violet-900">
                     One-click fills bid amount + structured quote from your custom or soft rate cards.
                   </p>
                   <div className="flex flex-wrap gap-2" role="group" aria-label="Portfolio packages for bid">
@@ -681,7 +681,7 @@ export function ProJobDetailPage() {
                         onClick={() => applyPortfolioPackageToBid(pkg)}
                       >
                         {pkg.label}
-                        <span className="ml-1 text-slate-400">
+                        <span className="ml-1 text-slate-500">
                           · {money(pkg.amountMin)}
                           {pkg.source === "soft" ? " ≈" : ""}
                         </span>
@@ -791,7 +791,7 @@ export function ProJobDetailPage() {
           {myBid && myBid.counterOffer && myBid.counterOffer.status === "pending" && (
             <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
               <p className="font-medium">Client requested a quote revise</p>
-              <p className="mt-1 text-xs text-violet-900/80">
+              <p className="mt-1 text-xs text-violet-900">
                 Suggested amount:{" "}
                 <strong>
                   ₹{Number(myBid.counterOffer.suggestedAmount).toFixed(0)}
@@ -829,7 +829,7 @@ export function ProJobDetailPage() {
               {showCounterDecline && (
                 <div className="mt-3 rounded-xl bg-white/90 p-3 ring-1 ring-violet-200">
                   <p className="text-xs font-semibold text-violet-950">Decline with a template</p>
-                  <p className="mt-0.5 text-[11px] text-violet-900/70">
+                  <p className="mt-0.5 text-[11px] text-violet-900">
                     Pick a chip (no browser prompt). Optional floor replaces ₹X.
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -944,7 +944,7 @@ export function ProJobDetailPage() {
           {myBid?.viewedNoReply?.due && (
             <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
               <p className="font-medium">Viewed but no reply</p>
-              <p className="mt-1 text-xs text-amber-900/80">
+              <p className="mt-1 text-xs text-amber-900">
                 Homeowner viewed your revised quote
                 {myBid.viewedNoReply.hoursSinceView != null
                   ? ` ~${Math.floor(myBid.viewedNoReply.hoursSinceView)}h ago`
@@ -963,7 +963,7 @@ export function ProJobDetailPage() {
                 {[...myBid.counterHistory].reverse().map((h, i) => (
                   <li key={`${h.requestedAt}-${i}`}>
                     ₹{Number(h.suggestedAmount).toFixed(0)} · {h.status}
-                    <span className="text-slate-400">
+                    <span className="text-slate-500">
                       {" "}
                       · {new Date(h.requestedAt).toLocaleString()}
                     </span>
@@ -1029,7 +1029,7 @@ export function ProJobDetailPage() {
                                 Was {h.amount != null ? money(h.amount) : "—"} ·{" "}
                                 {new Date(h.revisedAt).toLocaleString()}
                                 {h.notes ? (
-                                  <span className="block truncate text-slate-400">“{h.notes}”</span>
+                                  <span className="block truncate text-slate-500">“{h.notes}”</span>
                                 ) : null}
                               </li>
                             ))}
@@ -1139,7 +1139,7 @@ export function ProJobDetailPage() {
                   ? "No other active bids yet."
                   : `${otherBidCount} other active bid${otherBidCount === 1 ? "" : "s"} (amounts are private).`}
             </p>
-            <p className="mt-1 text-xs text-slate-400">Up to {job.maxBids} bids are accepted on this job.</p>
+            <p className="mt-1 text-xs text-slate-500">Up to {job.maxBids} bids are accepted on this job.</p>
           </div>
           <ReportButton targetType="job" targetId={job.id} label="Report this job" />
           <BlockButton userId={job.homeownerId} name="this client" />

@@ -55,7 +55,7 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
       <aside className="relative z-10 flex h-full w-full max-w-md flex-col bg-white shadow-xl">
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Why best value</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Why best value</p>
             <h2 className="text-lg font-semibold text-slate-900">
               {row.name}
               {row.isBest ? " · Best value" : ""}

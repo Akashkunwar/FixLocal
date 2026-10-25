@@ -54,7 +54,7 @@ export function AdminStatsPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {PRIMARY.map(({ key, label }) => (
               <div key={key} className="card p-5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
                 <p className="mt-2 font-display text-3xl font-semibold text-slate-900">
                   {stats[key] ?? 0}
                 </p>
@@ -67,7 +67,7 @@ export function AdminStatsPage() {
             <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {JOBS.map(({ key, label }) => (
                 <div key={key} className="card p-4 text-center">
-                  <p className="text-xs text-slate-400">{label}</p>
+                  <p className="text-xs text-slate-500">{label}</p>
                   <p className="mt-1 text-2xl font-semibold text-slate-900">{stats[key] ?? 0}</p>
                 </div>
               ))}
@@ -89,19 +89,19 @@ export function AdminStatsPage() {
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-4">
                 <div>
-                  <p className="text-xs text-slate-400">No nearby</p>
+                  <p className="text-xs text-slate-500">No nearby</p>
                   <p className="text-xl font-semibold text-rose-700">{match.jobsWithNoNearby}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400">Thin</p>
+                  <p className="text-xs text-slate-500">Thin</p>
                   <p className="text-xl font-semibold">{match.jobsThin}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400">OK</p>
+                  <p className="text-xs text-slate-500">OK</p>
                   <p className="text-xl font-semibold">{match.jobsOk}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400">Strong</p>
+                  <p className="text-xs text-slate-500">Strong</p>
                   <p className="text-xl font-semibold">{match.jobsStrong}</p>
                 </div>
               </div>
@@ -110,19 +110,19 @@ export function AdminStatsPage() {
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="card p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active bids</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Active bids</p>
               <p className="mt-2 font-display text-3xl font-semibold">{stats.activeBids ?? 0}</p>
             </div>
             <div className="card p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Reviews</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Reviews</p>
               <p className="mt-2 font-display text-3xl font-semibold">{stats.totalReviews ?? 0}</p>
             </div>
             <div className="card p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Simulated GMV</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Simulated GMV</p>
               <p className="mt-2 font-display text-3xl font-semibold text-brand-800">
                 {money(stats.simulatedGMV ?? 0)}
               </p>
-              <p className="mt-1 text-xs text-slate-400">Sum of accepted bids on completed jobs</p>
+              <p className="mt-1 text-xs text-slate-500">Sum of accepted bids on completed jobs</p>
             </div>
           </div>
         </div>

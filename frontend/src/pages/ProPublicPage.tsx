@@ -162,8 +162,9 @@ export function ProPublicPage() {
           ) : (
             <>
               <div>
-                <label className="label">Open job</label>
+                <label className="label" htmlFor="invite-job">Open job</label>
                 <select
+                  id="invite-job"
                   className="input"
                   value={inviteJobId}
                   onChange={(e) => setInviteJobId(e.target.value)}
@@ -176,8 +177,8 @@ export function ProPublicPage() {
                 </select>
               </div>
               <div>
-                <label className="label">Optional message</label>
-                <input
+                <label className="label" htmlFor="invite-message">Optional message</label>
+                <input id="invite-message"
                   className="input"
                   value={inviteMessage}
                   onChange={(e) => setInviteMessage(e.target.value)}
@@ -254,7 +255,7 @@ export function ProPublicPage() {
             )}
             {normalizeCustomRatePackages(profile.customRatePackages).length > 0 && (
               <div className="mt-5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Custom rate packages
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-500">
@@ -278,7 +279,7 @@ export function ProPublicPage() {
             )}
             {softRatePackages(profile.hourlyRateMin, profile.hourlyRateMax).length > 0 && (
               <div className="mt-5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Soft rate packages
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-500">
@@ -317,7 +318,7 @@ export function ProPublicPage() {
                       className={`rounded-xl px-3 py-2.5 text-sm ring-1 ${
                         slot.enabled
                           ? "bg-emerald-50 text-emerald-950 ring-emerald-100"
-                          : "bg-slate-50 text-slate-400 ring-slate-100"
+                          : "bg-slate-50 text-slate-500 ring-slate-100"
                       }`}
                     >
                       <p className="font-semibold">{DAY_LABELS[day]}</p>
@@ -372,7 +373,7 @@ export function ProPublicPage() {
                               />
                             </a>
                           ) : (
-                            <figcaption className="flex h-full items-center justify-center text-[11px] text-slate-400">
+                            <figcaption className="flex h-full items-center justify-center text-[11px] text-slate-500">
                               Before
                             </figcaption>
                           )}
@@ -390,7 +391,7 @@ export function ProPublicPage() {
                               />
                             </a>
                           ) : (
-                            <figcaption className="flex h-full items-center justify-center text-[11px] text-slate-400">
+                            <figcaption className="flex h-full items-center justify-center text-[11px] text-slate-500">
                               After
                             </figcaption>
                           )}
@@ -401,7 +402,7 @@ export function ProPublicPage() {
                       </div>
                     )}
                     {(cs.beforeUrl || cs.afterUrl) && (
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                         Before · After
                       </p>
                     )}
@@ -439,7 +440,7 @@ export function ProPublicPage() {
                       <span className="text-sm font-medium">{r.reviewerName}</span>
                     </div>
                     {r.comment && <p className="mt-1 text-sm text-slate-600">{r.comment}</p>}
-                    {r.jobTitle && <p className="mt-1 text-xs text-slate-400">Job: {r.jobTitle}</p>}
+                    {r.jobTitle && <p className="mt-1 text-xs text-slate-500">Job: {r.jobTitle}</p>}
                   </li>
                 ))}
               </ul>

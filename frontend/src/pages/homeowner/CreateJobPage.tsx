@@ -272,7 +272,7 @@ export function CreateJobPage() {
                 ? "bg-brand-700 text-white"
                 : i < step
                   ? "bg-brand-100 text-brand-800"
-                  : "bg-slate-100 text-slate-500"
+                  : "bg-slate-100 text-slate-600"
             )}
           >
             {i + 1}. {label}
@@ -455,7 +455,7 @@ export function CreateJobPage() {
                         onClick={() => applyNamedTemplate(tmpl)}
                       >
                         {tmpl.name}
-                        <span className="ml-1 text-violet-500/80">
+                        <span className="ml-1 text-violet-700">
                           · {categoryLabel(tmpl.category)}
                         </span>
                       </button>
