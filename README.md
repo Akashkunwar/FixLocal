@@ -25,7 +25,7 @@ The history of features built during the course is in [docs/FEATURE_HISTORY.md](
 | Frontend | React 18, Vite, TypeScript, Tailwind CSS, React Router 7, Leaflet |
 | Backend | Node.js 22, Express 5, TypeORM 0.3, PostgreSQL, zod validation, pino logging |
 | Cache / live updates | Redis (optional in development): auth-state cache, rate limits, open-job cache, cross-instance chat fan-out |
-| Files | Local disk (`UPLOADS_DIR`), served through `/api/files/:name` with signed, expiring URLs |
+| Files | Local disk (`UPLOADS_DIR`) or any S3-compatible bucket (`STORAGE_DRIVER=s3`), always served through `/api/files/:name` with signed, expiring URLs |
 | Tests | Vitest + Supertest (API), Vitest + Testing Library (UI), Playwright (end to end) |
 
 ```
@@ -150,6 +150,7 @@ Backend settings added for launch:
 | `MAIL_PROVIDER` | `console` | `smtp` sends real email through `SMTP_URL` (`smtps://user:pass@host:465`). Production refuses `console` unless `ALLOW_CONSOLE_MAIL=true` |
 | `MAIL_FROM` | `FixLocal <no-reply@fixlocal.local>` | Sender address |
 | `ERROR_WEBHOOK_URL` | empty | Receives a JSON POST for every unexpected 500, unhandled rejection and crash (Slack or Discord webhook, Sentry relay…) |
+| `STORAGE_DRIVER` | `local` | `s3` stores uploads in `S3_BUCKET` (`S3_REGION`, `S3_ENDPOINT` for R2/B2/MinIO, optional `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE`, `S3_PREFIX`). Needed for more than one API instance |
 
 ## Testing
 

@@ -6,7 +6,9 @@ Review date: 25 October 2026 · Branch `launch-readiness-2026-10-25` (stacks on 
 
 **Code: ready for a closed pilot / soft launch.** Every launch blocker that can be fixed in code is fixed and tested.
 
-**Business: not ready for a public launch that takes real money.** Seven items need the owner (Kunwar), not code. They are listed under [Needs Kunwar](#needs-kunwar-before-a-public-launch). The most important are a payment gateway with KYC, a real email provider, legal review of the Terms and Privacy drafts, and production hosting with backups.
+A second pass on the same day closed the remaining code items: account enumeration, accessibility, bundle size, SEO for pro profiles and S3 storage (see [Second pass](#second-pass-same-day)). **Nothing code-fixable is left open**; what remains needs Kunwar or a human tester.
+
+**Business: not ready for a public launch that takes real money.** Eight items need the owner (Kunwar), not code. They are listed under [Needs Kunwar](#needs-kunwar-before-a-public-launch). The most important are a payment gateway with KYC, a real email provider, legal review of the Terms and Privacy drafts, and production hosting with backups.
 
 | Launch type | Go? | Condition |
 | --- | --- | --- |
@@ -36,6 +38,16 @@ Legend: **P0** = launch blocker, **P1** = fix before or right after launch, **P2
 | 14 | UX / SEO | Unknown URLs silently redirected to `/`; no robots or sitemap; one title for every page | P1 | 404 page; per-page titles (WCAG 2.4.2); canonical and Open Graph tags; build-time `sitemap.xml` and `robots.txt` (`VITE_SITE_URL`); `lang="en-IN"` |
 | 15 | Security | Production bundles linked public source maps | P2 | Maps are `hidden` and deleted from the served image |
 
+## Second pass (same day)
+
+| # | Area | Gap | Fix |
+| --- | --- | --- | --- |
+| 16 | Security (enumeration) | Sign-up said "email already registered"; register-then-login and the unverified-login message also revealed accounts | Sign-up always answers `202` with the same message and no session; the existing owner gets an email ("someone tried to sign up with your address") or, if unconfirmed, a fresh confirmation link. Login answers "Invalid email or password" for unknown, wrong-password and unconfirmed accounts alike. Forgot-password and the new public `POST /api/auth/resend-confirmation` answer the same either way. The password is hashed on both paths and mail is sent in the background, so timing doesn't leak either. A per-address cap (`emailSends`, 5/h) stops using sign-up to spam someone's inbox. The UI shows a "Check your inbox" screen and a resend link on login |
+| 17 | Accessibility | No automated WCAG check; axe found 94 violations (page × rule) on 19 of 22 key pages: contrast (`slate-400` text, translucent text), links inside text distinguished by colour only, icon buttons whose accessible name didn't contain the visible text, unlabelled selects and inputs | All fixed. `e2e/a11y.spec.ts` runs axe (WCAG 2.0/2.1 A and AA) on 23 pages (public, signed-out pro profile, client, pro, admin) at 1280 px and 390 px in CI: **0 violations** |
+| 18 | Performance | Job-wizard chunk 175 KB (55 KB gzip) because Leaflet was bundled in | Leaflet and the map picker load on demand (prefetched when the browser is idle); AMC, match-score and best-value panels are lazy; React is a separate cacheable vendor chunk. Wizard **18.7 KB (5.8 KB gzip)**; Leaflet is its own 155 KB chunk. `npm run size` enforces budgets in CI and fails if Leaflet reaches the entry chunk |
+| 19 | SEO | Pro profiles needed an account and were invisible to search engines and link previews | `/pros/:id` is public (contact details still hidden; unverified or suspended pros 404). nginx serves a built `pro.html` and inlines the pro's own title, description, canonical, Open Graph and `LocalBusiness` JSON-LD from `GET /api/seo/pros/:id/head` (SSI), so crawlers get them without JavaScript. `/sitemap-pros.xml` lists every verified pro; robots.txt points to both sitemaps. Job pages stay private by design (they hold addresses) |
+| 20 | Scaling | Uploads could only live on the API host's disk | `STORAGE_DRIVER=s3` stores uploads in any S3-compatible bucket (AWS S3, Cloudflare R2, Backblaze B2, MinIO). Files are still streamed through `/api/files/:name`, so access rules are unchanged. CI runs the storage contract and an upload round-trip against a local S3 server |
+
 Schema changes are in migration `1790000000003-LaunchReadiness` (up and down), which adds:
 
 - the `user_blocks` table
@@ -60,13 +72,13 @@ Status: ✅ done · 🟡 partial / acceptable for pilot · ❌ open.
 | A05 Misconfiguration | ✅ | Startup validation refuses weak secrets, console mail and https with insecure cookies. helmet sets API headers; nginx sets the web CSP, `frame-ancestors 'none'` and a Permissions-Policy |
 | A06 Vulnerable components | ✅ | `npm audit --audit-level=high` in CI; Dependabot |
 | A07 Auth failures | ✅ | Per-email and per-IP login limits, constant-time login, a 10–128 character password policy, email verification before posting or bidding, and single-use reset links valid for 1 hour |
-| A07 Account enumeration on register | 🟡 P2 | Sign-up says "email already registered". The usual fix (a generic reply plus an email to the owner) hurts sign-up UX, so it is left for a product call |
+| A07 Account enumeration | ✅ | Sign-up, login, forgot-password and resend-confirmation give the same answer whether or not an account exists; the owner is emailed instead (fixed in the second pass) |
 | A08 Integrity | ✅ | Docker builds come from lockfiles. Migrations are versioned |
 | A09 Logging | ✅ | pino JSON logs with X-Request-Id, an admin audit log, and the error webhook (new) |
 | A10 SSRF | ✅ | No user-supplied URLs are fetched server-side |
 | Uploads | ✅ | Type is sniffed from content; images are re-encoded (EXIF stripped); random names; private by default |
 | Sessions / JWT | ✅ | The access token lives in memory; the refresh cookie is httpOnly with configurable SameSite (lax by default); `tokenVersion` supports logout everywhere |
-| Rate limits | ✅ | Auth, uploads, messages, reports, job posts, bids, blocks and exports. Redis-backed with an in-memory fallback |
+| Rate limits | ✅ | Auth, uploads, messages, reports, job posts, bids, blocks, exports, emails per address (5/h) and public profile reads. Redis-backed with an in-memory fallback |
 | CSRF | ✅ | Bearer access token. The refresh cookie only mints tokens for the same origin (CORS allowlist plus SameSite) |
 
 ### Data integrity
@@ -105,7 +117,7 @@ Status: ✅ done · 🟡 partial / acceptable for pilot · ❌ open.
 | N+1 queries | ✅ | Query-count budget test per request |
 | Indexes | ✅ | Unique and lookup indexes on the hot paths (bids per job, threads, ledger, blocks); the 300 ms perf budget test guards regressions |
 | Pagination | ✅ | Job lists, notifications, admin lists |
-| Bundle size | 🟡 P2 | Main chunk 253 KB (78 KB gzip); routes are lazy-loaded; the wizard chunk is 175 KB because of Leaflet |
+| Bundle size | ✅ | Entry 38 KB + React vendor 259 KB (95 KB gzip together, vendor cached across deploys); every route lazy; job wizard 18.7 KB with Leaflet loaded on demand. Budgets enforced by `npm run size` in CI |
 
 ### Deployability
 
@@ -113,9 +125,9 @@ Status: ✅ done · 🟡 partial / acceptable for pilot · ❌ open.
 | --- | --- | --- |
 | Dockerfiles | ✅ | Multi-stage, non-root API, nginx web |
 | Env validation | ✅ | zod at startup, extended this round |
-| CI/CD | ✅ | lint, typecheck, unit (coverage), API, e2e, audit and Docker builds |
+| CI/CD | ✅ | lint, typecheck, unit (coverage), API (including S3 storage against a local S3 server), e2e (including axe), bundle budgets, audit, Docker builds and `nginx -t` on the web image |
 | Backups | ✅ (opt-in) | `docker compose --profile backup up -d`; restore steps in OPERATIONS.md. Off-site copies are on Kunwar |
-| Uploads on local disk | 🟡 P1 Kunwar | Fine on one server. For several API instances, move to S3-compatible storage |
+| Uploads storage | ✅ code | Local disk by default; `STORAGE_DRIVER=s3` for a bucket (needed for several API instances). Creating the bucket is on Kunwar |
 
 ### Legal and trust
 
@@ -150,9 +162,10 @@ Status: ✅ done · 🟡 partial / acceptable for pilot · ❌ open.
 | --- | --- | --- |
 | Page titles, meta description, canonical, Open Graph | ✅ | `VITE_SITE_URL` sets absolute URLs |
 | robots.txt and sitemap.xml | ✅ | Generated at build; private areas disallowed |
-| SSR or prerendering for job and pro pages | 🟡 P2 | SPA only. Category hubs, Terms and Privacy are in the sitemap; Google renders JS |
+| Server-rendered meta for public pages | ✅ | Pro profiles get their own title, description, Open Graph and JSON-LD from nginx SSI, plus `sitemap-pros.xml`. Job pages are private (addresses), so they are not indexed |
 | PWA | ✅ | Manifest, icons, service worker |
-| WCAG AA | 🟡 | Labelled controls, switches with `role="switch"`, focus styles, per-page titles. A full manual screen-reader audit is still a good idea |
+| WCAG 2.1 AA (automated) | ✅ | axe on 23 key pages at desktop and mobile in CI, 0 violations. Labelled controls, switches with `role="switch"`, focus styles, per-page titles |
+| Screen-reader walkthrough | 🟡 human | Automated checks catch roughly half of WCAG issues. Do one manual pass with NVDA or TalkBack before a public launch |
 | India locale | ✅ | ₹ with en-IN grouping; IST default time zone; `lang="en-IN"` |
 
 ## Needs Kunwar before a public launch
@@ -163,13 +176,10 @@ Status: ✅ done · 🟡 partial / acceptable for pilot · ❌ open.
 4. **Domain and hosting.** Set up the domain, HTTPS, managed Postgres and Redis (or the compose stack on a VM), `APP_URL`, `COOKIE_SECURE=true` and `VITE_SITE_URL`.
 5. **Backups off the host.** Turn on the `backup` profile and sync the volume to S3 or another server. Test a restore.
 6. **Map tiles.** Choose a production tile provider (`VITE_MAP_TILE_URL`); OSM's public servers are not for production traffic.
-7. **Object storage** for uploads if you run more than one API instance.
+7. **Object storage** if you run more than one API instance: create a private bucket (S3, R2 or B2) and set `STORAGE_DRIVER=s3` and `S3_*`. The code is ready.
 8. **Monitoring.** Set up an uptime check on `/health` and an `ERROR_WEBHOOK_URL` destination (Slack or Discord channel).
 
-## Remaining code items (P2, not blocking)
+## Remaining items that aren't code
 
-- Generic sign-up response to stop account enumeration.
-- Prerendered public pro profile pages for SEO.
-- A manual WCAG pass with a screen reader.
-- An S3 storage adapter.
-- Splitting Leaflet out of the job-wizard chunk.
+- A manual screen-reader walkthrough (NVDA on Windows or TalkBack on Android) of sign-up, posting a job, comparing bids and paying.
+- When a payment gateway is chosen: its adapter behind `PaymentProvider`, with webhooks and an outbox (the design is in `services/payments.ts`; it can't be built before the gateway account exists).

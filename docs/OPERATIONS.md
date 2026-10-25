@@ -12,6 +12,7 @@ A runbook for a single-server deployment with `docker-compose.yml`. Managed Post
    - `VITE_SITE_URL`, `VITE_LEGAL_ENTITY`, `VITE_SUPPORT_EMAIL`, `VITE_GRIEVANCE_OFFICER` and `VITE_GRIEVANCE_EMAIL`.
    - `VITE_MAP_TILE_URL` and `VITE_MAP_ATTRIBUTION` for your tile provider.
    - Optionally, `ERROR_WEBHOOK_URL` (a Slack or Discord incoming webhook, or a Sentry relay).
+   - Optionally, `STORAGE_DRIVER=s3` with `S3_BUCKET` (plus `S3_ENDPOINT` and keys for R2/B2/MinIO) to keep uploads in a bucket instead of the `uploads` volume. Required before running more than one API instance. Keep the bucket private: files are always served through the API, which checks access.
 2. Put HTTPS in front of the `web` container (Caddy, nginx or a cloud load balancer) and forward to port 8080.
 3. Start the stack:
 
