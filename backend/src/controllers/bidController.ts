@@ -12,7 +12,7 @@ import { invalidateOpenJobsCache } from "../utils/cache";
 import { createNotification, createNotifications } from "../utils/notifications";
 import { revokeThreadStreams } from "../utils/sse";
 import { haversineKm } from "../utils/geo";
-import { scoreProForJob, type ScoreablePro } from "../utils/matchScore";
+import { boostedScore, scoreProForJob, type ScoreablePro } from "../utils/matchScore";
 import { computeHeatBoost, getBestValueBlend, getHeatWeight, getMatchWeights } from "../utils/matchWeights";
 import { buildAvailabilityHeat, resolveQuoteViewNudgeHours } from "../utils/availabilityHeat";
 import { buildEventSla, hoursBetween, isTierImproved } from "../utils/responseSla";
@@ -91,6 +91,7 @@ export async function placeBid(req: Request, res: Response) {
   }
   const files = filesOf(req, "quoteAttachment");
   let stored: string[] = [];
+  let rebid = false;
   const bid = await AppDataSource.transaction(async (m) => {
     const rows: { status: JobStatus; maxBids: number }[] = await m.query(
       `SELECT "status", "maxBids" FROM "jobs" WHERE "id" = $1 FOR UPDATE`,
@@ -98,27 +99,62 @@ export async function placeBid(req: Request, res: Response) {
     );
     const job = rows[0];
     if (job.status !== JobStatus.OPEN) throw conflict("This job is no longer open for bids", "JOB_NOT_OPEN");
-    if (await m.exists(Bid, { where: { jobId: ctx.job.id, tradespersonId: req.user!.id } })) {
+    const existing = await m.findOne(Bid, { where: { jobId: ctx.job.id, tradespersonId: req.user!.id } });
+    if (existing && existing.status !== BidStatus.WITHDRAWN) {
       throw conflict("You already placed a bid on this job", "DUPLICATE_BID");
     }
     const active = await m.count(Bid, { where: { jobId: ctx.job.id, status: BidStatus.ACTIVE } });
     if (active >= job.maxBids) throw conflict("This job has reached the maximum number of bids", "MAX_BIDS");
 
-    const created = await m.save(
-      m.create(Bid, {
-        jobId: ctx.job.id,
-        tradespersonId: req.user!.id,
-        amount: b.amount,
-        message: b.message || undefined,
-        etaDays: b.etaDays,
-        proposedVisitStart: b.proposedVisitStart,
-        proposedVisitEnd:
-          b.proposedVisitEnd || (b.proposedVisitStart ? new Date(b.proposedVisitStart.getTime() + 2 * 3600_000) : undefined),
-        quoteAmount: b.quoteAmount,
-        quoteNotes: b.quoteNotes || undefined,
-        status: BidStatus.ACTIVE,
-      })
-    );
+    const fields = {
+      amount: b.amount,
+      message: b.message || undefined,
+      etaDays: b.etaDays,
+      proposedVisitStart: b.proposedVisitStart,
+      proposedVisitEnd:
+        b.proposedVisitEnd || (b.proposedVisitStart ? new Date(b.proposedVisitStart.getTime() + 2 * 3600_000) : undefined),
+      quoteAmount: b.quoteAmount,
+      quoteNotes: b.quoteNotes || undefined,
+      status: BidStatus.ACTIVE,
+    };
+    let created: Bid;
+    if (existing) {
+      // Re-bidding after a withdrawal reuses the row (one bid per pro per job) and keeps the
+      // old offer in the quote history so the client can see what changed.
+      rebid = true;
+      const history = Array.isArray(existing.quoteHistory) ? [...existing.quoteHistory] : [];
+      history.push({
+        amount: existing.quoteAmount != null ? Number(existing.quoteAmount) : Number(existing.amount),
+        notes: existing.quoteNotes || null,
+        attachmentUrl: existing.quoteAttachmentUrl || null,
+        revisedAt: new Date().toISOString(),
+      });
+      const counterHistory = Array.isArray(existing.counterHistory) ? [...existing.counterHistory] : [];
+      if (existing.counterOffer) {
+        counterHistory.push({
+          ...existing.counterOffer,
+          status: existing.counterOffer.status === "pending" ? "dismissed" : existing.counterOffer.status,
+          resolvedAt: new Date().toISOString(),
+        });
+      }
+      Object.assign(existing, fields, {
+        quoteHistory: history.slice(-20),
+        quoteRevision: (existing.quoteRevision || 0) + 1,
+        counterOffer: null,
+        counterHistory: counterHistory.slice(-20),
+        quoteViewedNudgeSentAt: null,
+      });
+      created = await m.save(existing);
+      await m.query(
+        `UPDATE "bids" SET "message" = $2, "etaDays" = $3, "proposedVisitStart" = $4, "proposedVisitEnd" = $5,
+           "quoteAmount" = $6, "quoteNotes" = $7, "quoteAttachmentUrl" = NULL, "counterOffer" = NULL WHERE "id" = $1`,
+        [existing.id, fields.message ?? null, fields.etaDays ?? null, fields.proposedVisitStart ?? null,
+          fields.proposedVisitEnd ?? null, fields.quoteAmount ?? null, fields.quoteNotes ?? null]
+      );
+      created.quoteAttachmentUrl = undefined;
+    } else {
+      created = await m.save(m.create(Bid, { jobId: ctx.job.id, tradespersonId: req.user!.id, ...fields }));
+    }
     const uploads = await storeUploads(
       files,
       { kind: UploadKind.QUOTE, ownerUserId: req.user!.id, jobId: ctx.job.id, bidId: created.id, allowPdf: true },
@@ -139,15 +175,15 @@ export async function placeBid(req: Request, res: Response) {
   await createNotification({
     userId: ctx.job.homeownerId,
     type: NotificationType.NEW_BID,
-    title: "New bid on your job",
-    body: `${pro?.name || "A professional"} bid ₹${b.amount} on "${ctx.job.title}".`,
+    title: rebid ? "A professional bid again on your job" : "New bid on your job",
+    body: `${pro?.name || "A professional"} ${rebid ? "re-submitted a bid of" : "bid"} ₹${b.amount} on "${ctx.job.title}".`,
     link: `/client/jobs/${ctx.job.id}`,
     meta: { jobId: ctx.job.id, bidId: bid.id },
   });
   await notifyShortlistersOfFasterReplies(req.user!.id, bid.id, ctx.job.homeownerId, pro?.name).catch((err) =>
     logger.warn({ err }, "sla improve notify skipped")
   );
-  return res.status(201).json({ bid: toBid(bid) });
+  return res.status(201).json({ bid: toBid(bid), rebid });
 }
 
 async function notifyShortlistersOfFasterReplies(proId: string, bidId: string, skipUserId: string, proName?: string | null) {
@@ -266,7 +302,7 @@ export async function listBids(req: Request, res: Response) {
       match = {
         matchScore: breakdown.total,
         heatBoost,
-        rankedScore: Math.round((breakdown.total + heatBoost) * 10) / 10,
+        rankedScore: boostedScore(breakdown.total, heatBoost),
         matchBreakdown: breakdown,
       };
     }
