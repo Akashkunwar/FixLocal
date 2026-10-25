@@ -3,6 +3,10 @@ import { useAuth } from "../auth/AuthContext";
 import { dashboardPath } from "../api/client";
 import { NotificationBell } from "./NotificationBell";
 import { EmailVerifyBanner } from "./EmailVerifyBanner";
+import { TermsBanner } from "./TermsBanner";
+import { SiteFooter } from "./SiteFooter";
+import { useEffect } from "react";
+import { setPageMeta } from "../lib/site";
 import {
   BarChart3,
   Bookmark,
@@ -90,6 +94,7 @@ export function Shell({
 }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  useEffect(() => setPageMeta(title), [title]);
 
   const links =
     user?.role === "ADMIN"
@@ -175,6 +180,7 @@ export function Shell({
           </div>
         </div>
       </header>
+      <TermsBanner />
       <EmailVerifyBanner />
 
       <main className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8">
@@ -199,6 +205,7 @@ export function Shell({
         )}
         {children}
       </main>
+      <SiteFooter className={user ? "pb-24 md:pb-6" : ""} />
 
       {user && (
         <nav

@@ -1,13 +1,26 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import { robotsTxt, sitemapXml } from "./src/lib/seo";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   // The dev server proxies API calls so the app and API share an origin (cookies just work).
   const target = env.VITE_PROXY_TARGET || "http://localhost:3001";
   const port = Number(env.VITE_PORT || 5173);
+  // Public origin used for the sitemap, robots.txt and Open Graph URLs. Set VITE_SITE_URL for production builds.
+  const siteUrl = (env.VITE_SITE_URL || "https://fixlocal.example").replace(/\/+$/, "");
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: "fixlocal-seo",
+        transformIndexHtml: (html: string) => html.replace(/%SITE_URL%/g, siteUrl),
+        generateBundle() {
+          this.emitFile({ type: "asset", fileName: "sitemap.xml", source: sitemapXml(siteUrl) });
+          this.emitFile({ type: "asset", fileName: "robots.txt", source: robotsTxt(siteUrl) });
+        },
+      },
+    ],
     define: {
       __BUILD_ID__: JSON.stringify(new Date().toISOString()),
     },
@@ -29,7 +42,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      sourcemap: true,
+      // Maps are generated for error-tracking uploads but not linked from the shipped bundles.
+      sourcemap: "hidden",
     },
   };
 });

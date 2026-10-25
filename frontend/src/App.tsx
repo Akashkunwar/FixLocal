@@ -19,6 +19,9 @@ const ForgotPasswordPage = page(() => import("./pages/AccountPages"), "ForgotPas
 const ResetPasswordPage = page(() => import("./pages/AccountPages"), "ResetPasswordPage");
 const VerifyEmailPage = page(() => import("./pages/AccountPages"), "VerifyEmailPage");
 const SettingsPage = page(() => import("./pages/SettingsPage"), "SettingsPage");
+const TermsPage = page(() => import("./pages/LegalPages"), "TermsPage");
+const PrivacyPage = page(() => import("./pages/LegalPages"), "PrivacyPage");
+const NotFoundPage = page(() => import("./pages/LegalPages"), "NotFoundPage");
 const FavoritesPage = page(() => import("./pages/FavoritesPage"), "FavoritesPage");
 const ProPublicPage = page(() => import("./pages/ProPublicPage"), "ProPublicPage");
 const AdminStatsPage = page(() => import("./pages/admin/AdminStatsPage"), "AdminStatsPage");
@@ -100,6 +103,8 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           {PROTECTED.map((r) => (
             <Route
               key={r.path}
@@ -109,7 +114,7 @@ export default function App() {
           ))}
           <Route path={`${LEGACY_CLIENT_ROOT}/*`} element={<LegacyRedirect from={LEGACY_CLIENT_ROOT} to={CLIENT_ROOT} />} />
           <Route path={`${LEGACY_PRO_ROOT}/*`} element={<LegacyRedirect from={LEGACY_PRO_ROOT} to={PRO_ROOT} />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </ErrorBoundary>

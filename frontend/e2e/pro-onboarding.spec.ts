@@ -18,6 +18,7 @@ test("pro registers, is blocked until verified, then filters, saves a search and
   await page.getByLabel("Full name").fill(name);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/professional/);
   await page.goto(await mailLink(request, email, "verify-email"));

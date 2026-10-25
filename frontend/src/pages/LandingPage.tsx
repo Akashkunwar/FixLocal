@@ -2,6 +2,7 @@ import { Link, Navigate } from "react-router-dom";
 import { ArrowRight, BadgeCheck, Briefcase, MessageSquare, Shield, Star, Wrench } from "lucide-react";
 import { CATEGORIES, categoryGroups } from "../lib/format";
 import { useAuth } from "../auth/AuthContext";
+import { SiteFooter } from "../components/SiteFooter";
 import { dashboardPath } from "../api/client";
 import { clientPath } from "../lib/paths";
 import {
@@ -158,9 +159,7 @@ export function LandingPage() {
         </details>
       </section>
 
-      <footer className="border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-500">
-        FixLocal · App Dev Lab project · Simulated payments only
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

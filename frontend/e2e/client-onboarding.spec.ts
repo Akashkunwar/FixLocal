@@ -10,6 +10,7 @@ test("client registers, verifies email, and posts a job with photos and a map pi
   await page.getByLabel("Full name").fill("Asha Client");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/client$/);
 

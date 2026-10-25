@@ -32,6 +32,7 @@ export function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"HOMEOWNER" | "TRADESPERSON">("HOMEOWNER");
+  const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -50,6 +51,10 @@ export function RegisterPage() {
     e.preventDefault();
     if (password.length < 10) {
       setErr("Password must be at least 10 characters");
+      return;
+    }
+    if (!agreed) {
+      setErr("Please accept the Terms of Service and Privacy Policy to continue");
       return;
     }
     setBusy(true);
@@ -135,6 +140,20 @@ export function RegisterPage() {
           <input id="password" className="input" type="password" required minLength={10} maxLength={128} aria-describedby="password-hint" value={password} onChange={(e) => setPassword(e.target.value)} />
           <p id="password-hint" className="mt-1 text-xs text-slate-500">At least 10 characters. Avoid common passwords.</p>
         </div>
+        <label className="flex items-start gap-2 text-sm text-slate-600" htmlFor="accept-terms">
+          <input
+            id="accept-terms"
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+          />
+          <span>
+            I am 18 or older and agree to the{" "}
+            <Link to="/terms" target="_blank" rel="noopener">Terms of Service</Link> and{" "}
+            <Link to="/privacy" target="_blank" rel="noopener">Privacy Policy</Link>.
+          </span>
+        </label>
         <button type="submit" className="btn-primary w-full" disabled={busy}>
           {busy ? "Creating…" : "Create account"}
         </button>
