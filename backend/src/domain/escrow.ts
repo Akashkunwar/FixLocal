@@ -1,7 +1,7 @@
 import type { EntityManager } from "typeorm";
 import { In } from "typeorm";
 import { Bid } from "../entities/Bid";
-import { Job, PaymentStatus } from "../entities/Job";
+import { Job, JobStatus, PaymentStatus } from "../entities/Job";
 import { LedgerEntry, LedgerType } from "../entities/LedgerEntry";
 import { MilestoneStatus, PaymentMilestone } from "../entities/PaymentMilestone";
 import { badRequest, conflict, notFound } from "../http/errors";
@@ -37,9 +37,44 @@ export function escrowAmountFromBid(bid: { amount: number | string; quoteAmount?
   return { amount: Number.isFinite(a) && a > 0 ? round2(a) : 0, source: "bid" as const };
 }
 
-async function lockJob(manager: EntityManager, jobId: string) {
-  const rows = await manager.query(`SELECT "id" FROM "jobs" WHERE "id" = $1 FOR UPDATE`, [jobId]);
+async function lockJob(manager: EntityManager, jobId: string): Promise<JobStatus> {
+  const rows: { status: JobStatus }[] = await manager.query(`SELECT "status" FROM "jobs" WHERE "id" = $1 FOR UPDATE`, [jobId]);
   if (!rows.length) throw notFound("Job not found");
+  return rows[0].status;
+}
+
+const S = JobStatus;
+
+/**
+ * Which job stage a milestone may be released in by hand. Money follows the work:
+ * - Deposit (first): once a pro is hired
+ * - Progress (middle): once work has started
+ * - Completion (last): once the pro has marked the work done
+ * Confirming completion (or an admin dispute ruling) releases everything left regardless.
+ * A disputed or cancelled job never releases by hand.
+ */
+export function milestoneReleaseStages(sequence: number, totalMilestones: number): JobStatus[] {
+  const afterDone = [S.PENDING_CONFIRMATION, S.COMPLETED];
+  if (sequence >= totalMilestones && totalMilestones > 1) return afterDone;
+  if (sequence > 1) return [S.IN_PROGRESS, ...afterDone];
+  return [S.AWARDED, S.IN_PROGRESS, ...afterDone];
+}
+
+/** Null when the milestone may be released in this job status, otherwise a reason the client can read. */
+export function milestoneReleaseBlock(
+  sequence: number,
+  totalMilestones: number,
+  status: JobStatus
+): { code: string; message: string } | null {
+  if (milestoneReleaseStages(sequence, totalMilestones).includes(status)) return null;
+  if (status === S.DISPUTED) return { code: "DISPUTED", message: "Payments are frozen while a dispute is open" };
+  if (status === S.CANCELLED || status === S.OPEN || status === S.BIDDING_CLOSED) {
+    return { code: "INVALID_STATUS", message: "Payments can't be released in the job's current status" };
+  }
+  if (sequence >= totalMilestones && totalMilestones > 1) {
+    return { code: "TOO_EARLY", message: "The completion payment unlocks when the professional marks the work done" };
+  }
+  return { code: "TOO_EARLY", message: "This payment unlocks once the professional starts work" };
 }
 
 async function payeeFor(manager: EntityManager, job: Pick<Job, "acceptedBidId">): Promise<string | null> {
@@ -137,7 +172,9 @@ async function releaseRow(manager: EntityManager, jobId: string, milestoneId: st
 
 /** Release one milestone. Earlier milestones must be settled first. */
 export async function releaseMilestone(manager: EntityManager, job: Job, milestoneId: string, actorUserId: string) {
-  await lockJob(manager, job.id);
+  // The status is read under the row lock, so a dispute or cancellation that lands
+  // between the request arriving and this transaction is respected.
+  const status = await lockJob(manager, job.id);
   const milestone = await manager.findOne(PaymentMilestone, { where: { id: milestoneId, jobId: job.id } });
   if (!milestone) throw notFound("Milestone not found");
   if (milestone.status === MilestoneStatus.RELEASED) throw conflict("Milestone already released", "ALREADY_RELEASED");
@@ -148,6 +185,9 @@ export async function releaseMilestone(manager: EntityManager, job: Job, milesto
     .andWhere(`m."status" IN (:...open)`, { open: [MilestoneStatus.HELD, MilestoneStatus.PENDING] })
     .getCount();
   if (unsettledBefore > 0) throw badRequest("Release earlier milestones first", "OUT_OF_ORDER");
+  const total = await manager.count(PaymentMilestone, { where: { jobId: job.id } });
+  const block = milestoneReleaseBlock(milestone.sequence, total, status);
+  if (block) throw conflict(block.message, block.code, { status });
 
   const released = await releaseRow(manager, job.id, milestone.id, actorUserId);
   if (!released) throw conflict("Milestone already released", "ALREADY_RELEASED");
