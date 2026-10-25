@@ -140,16 +140,26 @@ Frontend settings ([`frontend/.env.example`](frontend/.env.example)):
 | `VITE_PROXY_TARGET` | `http://localhost:3001` | Where the Vite dev server sends `/api` |
 | `VITE_DEMO_MODE` | `false` | Show demo accounts on the login page |
 | `VITE_MAP_TILE_URL` / `VITE_MAP_ATTRIBUTION` | OpenStreetMap | OSM's public tiles are for light use only; use a provider with a production policy before launch |
+| `VITE_SITE_URL` | `https://fixlocal.example` | Public origin for `sitemap.xml`, `robots.txt`, canonical and Open Graph URLs |
+| `VITE_LEGAL_ENTITY`, `VITE_SUPPORT_EMAIL`, `VITE_GRIEVANCE_OFFICER`, `VITE_GRIEVANCE_EMAIL` | placeholders | Operator details shown on `/terms` and `/privacy` (Indian IT Rules require a named Grievance Officer) |
+
+Backend settings added for launch:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MAIL_PROVIDER` | `console` | `smtp` sends real email through `SMTP_URL` (`smtps://user:pass@host:465`). Production refuses `console` unless `ALLOW_CONSOLE_MAIL=true` |
+| `MAIL_FROM` | `FixLocal <no-reply@fixlocal.local>` | Sender address |
+| `ERROR_WEBHOOK_URL` | empty | Receives a JSON POST for every unexpected 500, unhandled rejection and crash (Slack or Discord webhook, Sentry relay…) |
 
 ## Testing
 
 | Command | What it covers |
 | --- | --- |
-| `cd backend && npm test` | 186 API tests on a throwaway database (`fixlocal_test`, Redis DB 15; only DB connection settings are read from `backend/.env`): every audit finding's repro, escrow timing (stage gates, dispute freeze, auto-confirm after a dispute), an 840-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), and a sweep proving no GET request changes any table |
+| `cd backend && npm test` | 202 API tests on a throwaway database (`fixlocal_test`, Redis DB 15; only DB connection settings are read from `backend/.env`): every audit finding's repro, escrow timing (stage gates, dispute freeze, auto-confirm after a dispute), an 896-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), and a sweep proving no GET request changes any table |
 | `cd backend && npm run test:coverage` | The same with a coverage report |
 | `cd backend && npm run test:tz` | Date logic under three server time zones (UTC, IST, US Pacific) |
-| `cd frontend && npm test` | UI unit tests: bid comparison (highlights, sorting, budget fit), token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary |
-| `cd frontend && npm run test:e2e` | 31 Playwright tests in a real browser against a real API |
+| `cd frontend && npm test` | UI unit tests: bid comparison (highlights, sorting, budget fit), token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary, booking cancellation, blocking, data export, Terms consent, sitemap |
+| `cd frontend && npm run test:e2e` | 36 Playwright tests in a real browser against a real API |
 | `npm run lint` / `npm run typecheck` | In both packages; lint fails on any warning |
 
 The end-to-end suite starts its own API on port **3101** with a fresh `fixlocal_e2e` database (Redis DB 14), and a Vite server on port **5174**. It never touches the development database or the servers on 3001/5173. The first run needs `npx playwright install chromium`.
@@ -172,6 +182,7 @@ The E2E journeys cover:
 14. Session expiry and logout.
 15. Mobile layout, including comparing bids on a phone.
 16. Public pages and legacy URLs.
+17. Launch: Terms and Privacy pages, consent at sign-up, the 404 page, cancelling a booking before work starts (client and pro), blocking and unblocking, and downloading your data.
 
 Plus: each role is redirected away from other roles' pages, pending pros see why they can't bid, portfolio and case-study editing, bid withdrawal, server errors when posting a job, the admin availability gate, and the "schedule not published" label.
 
@@ -199,6 +210,9 @@ npm run legacy:smoke
 - The web app (nginx) sends a strict Content-Security-Policy (`script-src 'self'`, `frame-ancestors 'none'`), `X-Frame-Options: DENY` and a Permissions-Policy, so the hire and payment buttons can't be framed.
 - helmet security headers on the API, a CORS allowlist, request IDs in logs, and graceful shutdown.
 - Admin actions (verification, suspension, disputes, force-cancel, weight changes) are written to an audit log.
+- Completion can only be confirmed after work starts. Before that, either side can cancel the booking and every held milestone is refunded.
+- Users can block each other (no bids, invites or new messages) and download all their data as JSON. Sign-up records Terms consent and version.
+- Job posting, bidding, blocking and data export are rate limited per user.
 
 ## Project layout
 
@@ -233,12 +247,17 @@ fixlocal/
 
 ## Before a real launch
 
-These need a product or business decision and aren't done yet:
+See [docs/LAUNCH_READINESS.md](docs/LAUNCH_READINESS.md) for the go/no-go verdict and the full checklist, and [docs/OPERATIONS.md](docs/OPERATIONS.md) for deploys, backups, restore and monitoring.
+
+Already in place: Terms and Privacy pages with recorded consent, SMTP email, error tracking, backups, data export, account deletion, blocking and reporting, and cancellation and refund rules.
+
+These still need a product or business decision:
 
 - **Payments**: escrow is simulated. A real launch needs a licensed payment gateway with escrow or marketplace payouts (for example Razorpay Route or Stripe Connect), plus refunds, KYC for payouts, invoices and tax handling.
-- **Email**: messages are written to the log (console mailer). Plug a provider (SES, Postmark, SendGrid…) into `backend/src/services/mailer.ts`.
+- **Email**: choose a provider (SES, Postmark, SendGrid, Zoho…) and set `MAIL_PROVIDER=smtp` and `SMTP_URL`.
 - **Identity checks**: admins review uploaded licences by hand. Consider an ID-verification service.
 - **SMS / WhatsApp** notifications, if needed.
 - **Hosting**: object storage for uploads (S3 or similar) instead of local disk if you run more than one API instance; managed Postgres and Redis; HTTPS; backups; monitoring and alerting.
 - **Map tiles**: set `VITE_MAP_TILE_URL` to a provider whose terms allow production traffic.
-- **Legal**: terms of service, privacy policy, and cookie notice.
+- **Legal**: have a lawyer review the drafts at `/terms` and `/privacy`, and name the Grievance Officer.
+- **Payments**: a `PaymentProvider` interface (`backend/src/services/payments.ts`) is ready for a Razorpay adapter once KYC is done.

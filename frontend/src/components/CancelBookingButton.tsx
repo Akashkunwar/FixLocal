@@ -44,7 +44,7 @@ export function CancelBookingButton({ jobId, side, onDone }: Props) {
       <p className="text-sm text-slate-600">
         {side === "client"
           ? "The professional hasn't started yet. Any payment still held in escrow is refunded to you; a deposit you already released stays with the professional. The job closes and can't be reopened."
-          : "You haven't started yet. Any payment still held in escrow goes back to the client and the job closes. Frequent cancellations can affect your standing."}
+          : "You haven't started yet. Any payment still held in escrow goes back to the client and the job closes. The client is told straight away."}
       </p>
       <div>
         <label className="label" htmlFor={`cb-reason-${jobId}`}>Reason (shared with the other side)</label>
