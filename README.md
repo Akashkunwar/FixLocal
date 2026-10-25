@@ -140,7 +140,7 @@ Frontend settings ([`frontend/.env.example`](frontend/.env.example)):
 | `VITE_PROXY_TARGET` | `http://localhost:3001` | Where the Vite dev server sends `/api` |
 | `VITE_DEMO_MODE` | `false` | Show demo accounts on the login page |
 | `VITE_MAP_TILE_URL` / `VITE_MAP_ATTRIBUTION` | OpenStreetMap | OSM's public tiles are for light use only; use a provider with a production policy before launch |
-| `VITE_SITE_URL` | `https://fixlocal.example` | Public origin for `sitemap.xml`, `robots.txt`, canonical and Open Graph URLs |
+| `VITE_SITE_URL` | `https://fixlocal.example` | Public origin for `sitemap.xml`, `robots.txt`, canonical and Open Graph URLs. Pro profiles (`/pros/:id`) get their own tags server-side: nginx inlines `/api/seo/pros/:id/head` into `pro.html` (SSI), and `/sitemap-pros.xml` lists every verified pro; both use the API's `APP_URL` |
 | `VITE_LEGAL_ENTITY`, `VITE_SUPPORT_EMAIL`, `VITE_GRIEVANCE_OFFICER`, `VITE_GRIEVANCE_EMAIL` | placeholders | Operator details shown on `/terms` and `/privacy` (Indian IT Rules require a named Grievance Officer) |
 
 Backend settings added for launch:
@@ -156,11 +156,12 @@ Backend settings added for launch:
 
 | Command | What it covers |
 | --- | --- |
-| `cd backend && npm test` | 202 API tests on a throwaway database (`fixlocal_test`, Redis DB 15; only DB connection settings are read from `backend/.env`): every audit finding's repro, escrow timing (stage gates, dispute freeze, auto-confirm after a dispute), an 896-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), and a sweep proving no GET request changes any table |
+| `cd backend && npm test` | 215 API tests on a throwaway database (`fixlocal_test`, Redis DB 15; only DB connection settings are read from `backend/.env`): every audit finding's repro, escrow timing (stage gates, dispute freeze, auto-confirm after a dispute), an 896-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), a sweep proving no GET request changes any table, account-enumeration probes, SEO tags and escaping, and the S3 storage driver (2 of them run only when `S3_TEST_ENDPOINT` points at an S3-compatible server, as in CI) |
 | `cd backend && npm run test:coverage` | The same with a coverage report |
 | `cd backend && npm run test:tz` | Date logic under three server time zones (UTC, IST, US Pacific) |
-| `cd frontend && npm test` | UI unit tests: bid comparison (highlights, sorting, budget fit), token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary, booking cancellation, blocking, data export, Terms consent, sitemap |
-| `cd frontend && npm run test:e2e` | 36 Playwright tests in a real browser against a real API |
+| `cd frontend && npm test` | UI unit tests: bid comparison (highlights, sorting, budget fit), token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary, booking cancellation, blocking, data export, Terms consent, sitemap and the pro-profile SEO shell (60 tests) |
+| `cd frontend && npm run size` | Bundle budgets after `npm run build` (entry, React vendor, job wizard, job page); fails if Leaflet reaches the entry chunk |
+| `cd frontend && npm run test:e2e` | 44 Playwright tests in a real browser against a real API, including an axe WCAG 2.1 A/AA and reflow check on 23 pages at 1280 px and 390 px |
 | `npm run lint` / `npm run typecheck` | In both packages; lint fails on any warning |
 
 The end-to-end suite starts its own API on port **3101** with a fresh `fixlocal_e2e` database (Redis DB 14), and a Vite server on port **5174**. It never touches the development database or the servers on 3001/5173. The first run needs `npx playwright install chromium`.
