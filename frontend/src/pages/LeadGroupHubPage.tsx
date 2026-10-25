@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
+import { setPageMeta } from "../lib/site";
 import { ArrowLeft, ArrowRight, Briefcase, Search, Wrench } from "lucide-react";
 import {
   categoriesForLeadGroup,
@@ -14,6 +16,9 @@ export function LeadGroupHubPage() {
   const { groupSlug } = useParams<{ groupSlug: string }>();
   const group = leadGroupFromSlug(groupSlug || "");
   const { user } = useAuth();
+  useEffect(() => {
+    if (group) setPageMeta(`${group} near you`, `${group}: ${leadGroupBlurb(group)} Compare quotes from verified local professionals on FixLocal.`);
+  }, [group]);
 
   if (!group) {
     return <Navigate to="/" replace />;

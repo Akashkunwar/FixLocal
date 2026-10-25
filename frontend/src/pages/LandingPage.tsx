@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { Link, Navigate } from "react-router-dom";
+import { setPageMeta } from "../lib/site";
 import { ArrowRight, BadgeCheck, Briefcase, MessageSquare, Shield, Star, Wrench } from "lucide-react";
 import { CATEGORIES, categoryGroups } from "../lib/format";
 import { useAuth } from "../auth/AuthContext";
@@ -19,6 +21,7 @@ const STEPS = [
 
 export function LandingPage() {
   const { user, loading } = useAuth();
+  useEffect(() => setPageMeta(null), []);
   if (!loading && user) return <Navigate to={dashboardPath(user.role)} replace />;
 
   const leadCats = LEAD_GROUPS.map((g) => {

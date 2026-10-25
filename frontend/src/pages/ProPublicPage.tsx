@@ -32,6 +32,12 @@ import {
   normalizeWeeklyAvailability,
 } from "../lib/availability";
 
+function proDescription(p: TradespersonProfile) {
+  const name = p.name || "Professional";
+  const rating = p.reviewCount ? ` Rated ${Number(p.averageRating).toFixed(1)}/5 from ${p.reviewCount} reviews.` : "";
+  return `${name}${p.skills ? `: ${p.skills}` : ""}${p.city ? ` in ${p.city}` : ""}.${rating} Verified professional on FixLocal.`;
+}
+
 export function ProPublicPage() {
   const { userId } = useParams<{ userId: string }>();
   const { user } = useAuth();
@@ -122,6 +128,7 @@ export function ProPublicPage() {
     <Shell
       title={profile.name || "Professional"}
       subtitle={profile.city || "Local pro"}
+      description={proDescription(profile)}
       actions={
         <div className="flex flex-wrap gap-2">
           {canInvite && (
@@ -133,17 +140,27 @@ export function ProPublicPage() {
               <Send className="h-4 w-4" /> Invite to job
             </button>
           )}
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={() =>
-              addFavorite("pro", profile.userId)
-                .then(() => success("Saved"))
-                .catch((e) => error(e.message))
-            }
-          >
-            <Heart className="h-4 w-4" /> Save
-          </button>
+          {!user && (
+            <Link
+              className="btn-primary btn-sm no-underline"
+              to={`/register?next=${encodeURIComponent(`/pros/${profile.userId}`)}`}
+            >
+              <Send className="h-4 w-4" aria-hidden /> Sign up to get a quote
+            </Link>
+          )}
+          {user && (
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() =>
+                addFavorite("pro", profile.userId)
+                  .then(() => success("Saved"))
+                  .catch((e) => error(e.message))
+              }
+            >
+              <Heart className="h-4 w-4" /> Save
+            </button>
+          )}
           {user?.role === "HOMEOWNER" && <BlockButton userId={profile.userId} name={profile.name} />}
         </div>
       }

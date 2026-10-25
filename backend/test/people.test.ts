@@ -35,6 +35,27 @@ describe("professional profiles (H-5)", () => {
     expect((await api().get(`/api/profile/user/${worker.user.id}`).set(a.auth)).body.profile.licenseDocUrl).toBeDefined();
   });
 
+  it("anyone can open a verified pro's profile without an account; contact details stay hidden", async () => {
+    const p = await pro({ name: "Public Pro" });
+    const res = await api().get(`/api/profile/user/${p.user.id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.profile.name).toBe("Public Pro");
+    expect(res.body.profile).not.toHaveProperty("email");
+    expect(res.body.profile).not.toHaveProperty("phone");
+    expect(res.body.profile).not.toHaveProperty("licenseDocUrl");
+    expect(res.body.contactRevealed).toBe(false);
+    // A bad token is still rejected (so the app refreshes it) rather than silently treated as anonymous.
+    expect((await api().get(`/api/profile/user/${p.user.id}`).set("Authorization", "Bearer nope")).status).toBe(401);
+    // Unverified and suspended pros stay hidden from the public.
+    const pending = await pro({ proStatus: VerificationStatus.PENDING });
+    expect((await api().get(`/api/profile/user/${pending.user.id}`)).status).toBe(404);
+    const banned = await pro({ suspended: true });
+    expect((await api().get(`/api/profile/user/${banned.user.id}`)).status).toBe(404);
+    expect((await api().get(`/api/profile/user/${banned.user.id}`).set((await admin()).auth)).status).toBe(200);
+    // Everything else on /api/profile still needs a session.
+    expect((await api().get("/api/profile/browse")).status).toBe(401);
+  });
+
   it("unverified pros aren't publicly visible or browseable", async () => {
     const pending = await pro({ proStatus: VerificationStatus.PENDING, name: "Hidden Pending" });
     const c = await client();

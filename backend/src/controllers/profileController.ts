@@ -172,18 +172,19 @@ async function inviteHoursForPro(proId: string, bids: Bid[]) {
 
 export async function getPublicProfile(req: Request, res: Response) {
   const userId = req.valid.params.userId;
-  const v = viewer(req);
+  // Anonymous visitors (public, shareable profile) get the same view as any other non-hiring user.
+  const v: { id: string | null; role: UserRole | null } = req.user ? viewer(req) : { id: null, role: null };
   const user = await AppDataSource.getRepository(User).findOne({ where: { id: userId, role: UserRole.TRADESPERSON } });
   const profile = user && !user.deletedAt ? await profiles().findOne({ where: { userId } }) : null;
   if (!user || !profile) throw notFound("Professional not found");
   const self = v.id === userId;
   const admin = v.role === UserRole.ADMIN;
-  if (profile.verificationStatus !== VerificationStatus.VERIFIED && !self && !admin) {
+  if ((profile.verificationStatus !== VerificationStatus.VERIFIED || user.isSuspended) && !self && !admin) {
     throw notFound("Professional not found");
   }
   // Contact details only once this client has hired this professional.
   let revealContact = false;
-  if (v.role === UserRole.HOMEOWNER) {
+  if (v.role === UserRole.HOMEOWNER && v.id) {
     const hired = await AppDataSource.getRepository(Job)
       .createQueryBuilder("j")
       .innerJoin(Bid, "b", "b.id = j.acceptedBidId")

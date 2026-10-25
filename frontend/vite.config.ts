@@ -1,6 +1,8 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
-import { robotsTxt, sitemapXml } from "./src/lib/seo";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { proShellHtml, robotsTxt, sitemapXml } from "./src/lib/seo";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -19,6 +21,12 @@ export default defineConfig(({ mode }) => {
           this.emitFile({ type: "asset", fileName: "sitemap.xml", source: sitemapXml(siteUrl) });
           this.emitFile({ type: "asset", fileName: "robots.txt", source: robotsTxt(siteUrl) });
         },
+        // dist/pro.html: the shell nginx serves for /pros/:id with the pro's own meta tags (SSI).
+        writeBundle(options: { dir?: string }) {
+          const dir = options.dir || "dist";
+          const index = readFileSync(join(dir, "index.html"), "utf8");
+          writeFileSync(join(dir, "pro.html"), proShellHtml(index));
+        },
       },
     ],
     define: {
@@ -31,6 +39,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/api": { target, changeOrigin: false },
         "/uploads": { target, changeOrigin: false },
+        "/sitemap-pros.xml": { target, changeOrigin: false, rewrite: () => "/api/seo/sitemap-pros.xml" },
       },
     },
     preview: {
@@ -39,6 +48,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/api": { target, changeOrigin: false },
         "/uploads": { target, changeOrigin: false },
+        "/sitemap-pros.xml": { target, changeOrigin: false, rewrite: () => "/api/seo/sitemap-pros.xml" },
       },
     },
     build: {

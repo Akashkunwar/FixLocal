@@ -100,3 +100,19 @@ test("block a pro, see them in Settings, unblock; download my data", async ({ pa
   const file = await download;
   expect(file.suggestedFilename()).toMatch(/^fixlocal-data-\d{4}-\d{2}-\d{2}\.json$/);
 });
+
+test("a pro's public profile opens without an account, with its own title and description", async ({ page, request }) => {
+  const pro = await apiLogin(request, SEEDED.pro);
+  await page.goto(`/pros/${pro.id}`);
+  await expect(page).toHaveURL(new RegExp(`/pros/${pro.id}$`));
+  await expect(page.getByRole("link", { name: "Sign up to get a quote" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Log in" })).toBeVisible();
+  const name = (await page.getByRole("heading", { level: 1 }).textContent())?.trim() || "";
+  expect(name.length).toBeGreaterThan(0);
+  await expect(page).toHaveTitle(`${name} · FixLocal`);
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", /Verified professional on FixLocal/);
+  // Search engines find every verified pro through the pro sitemap.
+  const sitemap = await request.get("/sitemap-pros.xml");
+  expect(sitemap.ok()).toBe(true);
+  expect(await sitemap.text()).toContain(`/pros/${pro.id}</loc>`);
+});

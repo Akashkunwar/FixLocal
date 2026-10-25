@@ -4,7 +4,7 @@ import { RedisStore } from "rate-limit-redis";
 import { config } from "../config";
 import { redisClient } from "../utils/cache";
 
-type LimitName = "login" | "loginHourly" | "register" | "refresh" | "passwordReset" | "messages" | "invites" | "uploads" | "reports" | "jobPosts" | "bids" | "blocks" | "exports" | "emailSends";
+type LimitName = "login" | "loginHourly" | "register" | "refresh" | "passwordReset" | "messages" | "invites" | "uploads" | "reports" | "jobPosts" | "bids" | "blocks" | "exports" | "emailSends" | "publicReads";
 
 const LIMITS: Record<LimitName, { windowMs: number; limit: number }> = {
   login: { windowMs: 60_000, limit: 5 },
@@ -22,6 +22,8 @@ const LIMITS: Record<LimitName, { windowMs: number; limit: number }> = {
   exports: { windowMs: 3_600_000, limit: 5 },
   // Caps mail sent to any one address (sign-up, reset, confirmation), whoever asks for it.
   emailSends: { windowMs: 3_600_000, limit: 5 },
+  // Pages anyone can open without an account (public pro profiles and their SEO tags).
+  publicReads: { windowMs: 60_000, limit: 120 },
 };
 
 const ip = (req: Request) => ipKeyGenerator(req.ip || "unknown");

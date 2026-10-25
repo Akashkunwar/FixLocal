@@ -24,6 +24,7 @@ import favoriteRoutes from "./routes/favorites";
 import reportRoutes from "./routes/reports";
 import fileRoutes from "./routes/files";
 import blockRoutes from "./routes/blocks";
+import seoRoutes from "./routes/seo";
 import { consoleMailer } from "./services/mailer";
 
 export function createApp(): Express {
@@ -104,6 +105,7 @@ export function createApp(): Express {
   app.use("/api/reports", reportRoutes);
   app.use("/api/files", fileRoutes);
   app.use("/api/blocks", blockRoutes);
+  app.use("/api/seo", seoRoutes);
   // Old links (/uploads/<name>) go through the same access checks.
   app.get("/uploads/:name", serveFile);
 

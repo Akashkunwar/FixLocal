@@ -8,12 +8,13 @@ export const SITE = {
   legalUpdated: "25 October 2026",
 };
 
+export const DEFAULT_DESCRIPTION =
+  "FixLocal — post work and hire verified local professionals for blue-collar, office, and technical jobs.";
+
 /** Sets the tab title (WCAG 2.4.2) and the meta description for the current page. */
-export function setPageMeta(title?: string | null, description?: string) {
+export function setPageMeta(title?: string | null, description: string = DEFAULT_DESCRIPTION) {
   if (typeof document === "undefined") return;
   document.title = title ? `${title} · ${SITE.name}` : `${SITE.name} — Hire trusted local professionals`;
-  if (description) {
-    const meta = document.querySelector('meta[name="description"]');
-    if (meta) meta.setAttribute("content", description);
-  }
+  const meta = document.querySelector('meta[name="description"]');
+  if (meta) meta.setAttribute("content", description);
 }

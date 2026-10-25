@@ -32,7 +32,8 @@ for (const size of sizes) {
   test.describe(`accessibility (${size.name})`, () => {
     test.use({ viewport: size.viewport });
 
-    test("public pages have no WCAG A/AA violations", async ({ page }) => {
+    test("public pages have no WCAG A/AA violations", async ({ page, request }) => {
+      const pro = await apiLogin(request, SEEDED.pro);
       const found = [];
       for (const [name, path] of [
         ["landing", "/"],
@@ -43,6 +44,7 @@ for (const size of sizes) {
         ["privacy", "/privacy"],
         ["404", "/no-such-page"],
         ["category hub", "/categories/home-repair-and-maintenance"],
+        ["public pro profile (signed out)", `/pros/${pro.id}`],
       ]) {
         await page.goto(path);
         found.push(...(await audit(page, name)));

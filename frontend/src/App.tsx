@@ -46,7 +46,6 @@ const ANY: Role[] = ["ADMIN", "HOMEOWNER", "TRADESPERSON"];
 
 const PROTECTED: { path: string; allow: Role[]; element: ReactNode }[] = [
   { path: "/settings", allow: ANY, element: <SettingsPage /> },
-  { path: "/pros/:userId", allow: ANY, element: <ProPublicPage /> },
   { path: "/admin", allow: ["ADMIN"], element: <AdminStatsPage /> },
   { path: "/admin/users", allow: ["ADMIN"], element: <AdminUsersPage /> },
   { path: "/admin/tradespeople", allow: ["ADMIN"], element: <AdminTradespeoplePage /> },
@@ -105,6 +104,8 @@ export default function App() {
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          {/* Public so profiles can be shared and indexed; contact details stay hidden server-side. */}
+          <Route path="/pros/:userId" element={<ProPublicPage />} />
           {PROTECTED.map((r) => (
             <Route
               key={r.path}
