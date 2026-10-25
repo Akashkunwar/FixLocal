@@ -44,6 +44,16 @@ export default defineConfig(({ mode }) => {
     build: {
       // Maps are generated for error-tracking uploads but not linked from the shipped bundles.
       sourcemap: "hidden",
+      rollupOptions: {
+        output: {
+          // React rarely changes between releases: a separate chunk stays cached across deploys.
+          manualChunks(id: string) {
+            if (/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom)\//.test(id)) return "react-vendor";
+            if (id.includes("node_modules/leaflet/")) return "leaflet";
+            return undefined;
+          },
+        },
+      },
     },
   };
 });

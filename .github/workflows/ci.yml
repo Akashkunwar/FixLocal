@@ -66,6 +66,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:coverage
       - run: npm run build
+      - run: npm run size
       - run: npm audit --omit=dev --audit-level=high
 
   e2e:

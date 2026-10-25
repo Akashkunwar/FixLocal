@@ -47,7 +47,8 @@
     "wave29:smoke": "node scripts/wave29-smoke.mjs",
     "wave30:smoke": "node scripts/wave30-smoke.mjs",
     "wave31:smoke": "node scripts/wave31-smoke.mjs",
-    "wave32:smoke": "node scripts/wave32-smoke.mjs"
+    "wave32:smoke": "node scripts/wave32-smoke.mjs",
+    "size": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.3.0",

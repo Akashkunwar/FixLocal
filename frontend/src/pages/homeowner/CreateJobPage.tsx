@@ -8,7 +8,8 @@ import { templatesForGroup, type JobTemplate } from "../../lib/jobTemplates";
 import { compressImageFiles } from "../../lib/compressImage";
 import { useToast } from "../../components/Toast";
 import clsx from "clsx";
-import { MapPinPicker, BLR_CENTER } from "../../components/MapPinPicker";
+import { LazyMapPinPicker, preloadMapPicker } from "../../components/LazyMapPinPicker";
+import { BLR_CENTER } from "../../lib/geo";
 import {
   CADENCE_OPTIONS,
   cadenceLabel,
@@ -83,6 +84,11 @@ export function CreateJobPage() {
   const { success, error } = useToast();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  // Fetch the map chunk while the user is still on step one, so step two's map appears instantly.
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
+    idle(() => preloadMapPicker());
+  }, []);
   const [files, setFiles] = useState<File[]>([]);
   const [repeatBanner, setRepeatBanner] = useState(() => peekRepeatBanner());
   const namedLibrary = useMemo(
@@ -627,8 +633,8 @@ export function CreateJobPage() {
             </div>
 
             <div>
-              <label className="label">Pin on map</label>
-              <MapPinPicker
+              <p className="label">Pin on map</p>
+              <LazyMapPinPicker
                 lat={draft.lat ? Number(draft.lat) : null}
                 lng={draft.lng ? Number(draft.lng) : null}
                 onChange={({ lat, lng }) =>

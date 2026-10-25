@@ -1,12 +1,11 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
+import { BLR_CENTER } from "../lib/geo";
 import "leaflet/dist/leaflet.css";
 import markerIconUrl from "leaflet/dist/images/marker-icon.png";
 import markerIconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
 import markerShadowUrl from "leaflet/dist/images/marker-shadow.png";
 
-/** Bengaluru demo centre */
-export const BLR_CENTER = { lat: 12.9716, lng: 77.5946 };
 
 // OpenStreetMap's public tiles are fine for development only; set VITE_MAP_TILE_URL
 // to a provider with a production usage policy before launch.

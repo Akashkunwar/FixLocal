@@ -6,15 +6,15 @@ import { useAuth } from "./auth/AuthContext";
 import { dashboardPath, type Role } from "./api/client";
 import { Spinner } from "./components/ui/Spinner";
 import { LandingPage } from "./pages/LandingPage";
-import { LeadGroupHubPage } from "./pages/LeadGroupHubPage";
 import { LoginPage } from "./pages/LoginPage";
-import { RegisterPage } from "./pages/RegisterPage";
 import { CLIENT_ROOT, LEGACY_CLIENT_ROOT, LEGACY_PRO_ROOT, PRO_ROOT } from "./lib/paths";
 
 function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) {
   return lazy(() => load().then((m) => ({ default: m[name] })));
 }
 
+const RegisterPage = page(() => import("./pages/RegisterPage"), "RegisterPage");
+const LeadGroupHubPage = page(() => import("./pages/LeadGroupHubPage"), "LeadGroupHubPage");
 const ForgotPasswordPage = page(() => import("./pages/AccountPages"), "ForgotPasswordPage");
 const ResetPasswordPage = page(() => import("./pages/AccountPages"), "ResetPasswordPage");
 const VerifyEmailPage = page(() => import("./pages/AccountPages"), "VerifyEmailPage");

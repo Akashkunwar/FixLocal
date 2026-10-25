@@ -9,12 +9,14 @@ import { DisputeForm } from "./job/DisputeForm";
 import { JobConversations } from "../../components/JobConversations";
 import { ReportButton } from "../../components/ReportButton";
 import { BlockButton } from "../../components/BlockButton";
-import { CancelBookingButton, CancellationNote } from "../../components/CancelBookingButton";
+import {
+  CancelBookingButton,
+  CancellationNote,
+} from "../../components/CancelBookingButton";
 import { PaymentPanel } from "../../components/PaymentPanel";
 import { CompletionPhotosPanel } from "../../components/CompletionPhotosPanel";
 import { SchedulePanel } from "../../components/SchedulePanel";
 import { VisitPrepCard } from "../../components/VisitPrepCard";
-import { AmcProposalCard } from "../../components/AmcProposalCard";
 import { clientPath } from "../../lib/paths";
 import { cadenceLabel, normalizeCadence } from "../../lib/jobCadence";
 import { saveRepeatDraft } from "../../lib/repeatJob";
@@ -31,8 +33,24 @@ import {
   money,
 } from "../../lib/format";
 import { Heart, MapPin } from "lucide-react";
-import { MatchScorePanel } from "../../components/MatchScorePanel";
-import { BestValueExplainPanel } from "../../components/BestValueExplainPanel";
+import { Suspense, lazy } from "react";
+
+// Below-the-fold and on-demand panels load in their own chunks.
+const AmcProposalCard = lazy(() =>
+  import("../../components/AmcProposalCard").then((m) => ({
+    default: m.AmcProposalCard,
+  })),
+);
+const MatchScorePanel = lazy(() =>
+  import("../../components/MatchScorePanel").then((m) => ({
+    default: m.MatchScorePanel,
+  })),
+);
+const BestValueExplainPanel = lazy(() =>
+  import("../../components/BestValueExplainPanel").then((m) => ({
+    default: m.BestValueExplainPanel,
+  })),
+);
 import { useJobDetail } from "./job/useJobDetail";
 import { ShortlistInvitePanel } from "./job/ShortlistInvitePanel";
 import { SuggestedProsPanel } from "./job/SuggestedProsPanel";
@@ -77,7 +95,11 @@ export function JobDetailPage() {
           <p className="font-medium">We couldn't open this job.</p>
           <p className="mt-1 text-sm text-slate-600">{loadError}</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" className="btn-secondary" onClick={() => reload()}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => reload()}
+            >
               Try again
             </button>
             <Link to={clientPath()} className="btn-ghost">
@@ -211,15 +233,28 @@ export function JobDetailPage() {
             )}
             <div className="flex flex-wrap gap-2 pt-2">
               {job.status === "awarded" && (
-                <p className="w-full text-sm text-slate-600" data-testid="awaiting-start">
+                <p
+                  className="w-full text-sm text-slate-600"
+                  data-testid="awaiting-start"
+                >
                   You can confirm completion once the professional starts work.
                 </p>
               )}
-              {job.status === "awarded" && <CancelBookingButton jobId={job.id} side="client" onDone={() => load()} />}
-              {job.status === "cancelled" && (
-                <CancellationNote cancelledBy={job.cancelledBy} reason={job.cancellationReason} />
+              {job.status === "awarded" && (
+                <CancelBookingButton
+                  jobId={job.id}
+                  side="client"
+                  onDone={() => load()}
+                />
               )}
-              {(job.status === "in_progress" || job.status === "pending_confirmation") && (
+              {job.status === "cancelled" && (
+                <CancellationNote
+                  cancelledBy={job.cancelledBy}
+                  reason={job.cancellationReason}
+                />
+              )}
+              {(job.status === "in_progress" ||
+                job.status === "pending_confirmation") && (
                 <button
                   type="button"
                   className={
@@ -346,7 +381,9 @@ export function JobDetailPage() {
           )}
 
           {(liveWork || job.status === "completed") && (
-            <AmcProposalCard job={job} role="client" onChanged={load} />
+            <Suspense fallback={null}>
+              <AmcProposalCard job={job} role="client" onChanged={load} />
+            </Suspense>
           )}
 
           {showEscrow && (
@@ -464,27 +501,35 @@ export function JobDetailPage() {
           )}
           {job.acceptedBidId && (
             <BlockButton
-              userId={bids.find((b) => b.id === job.acceptedBidId)?.tradespersonId}
-              name={bids.find((b) => b.id === job.acceptedBidId)?.tradesperson?.name}
+              userId={
+                bids.find((b) => b.id === job.acceptedBidId)?.tradespersonId
+              }
+              name={
+                bids.find((b) => b.id === job.acceptedBidId)?.tradesperson?.name
+              }
             />
           )}
         </aside>
       </div>
 
-      {scorePro && (
-        <MatchScorePanel
-          open={!!scorePro}
-          onClose={() => setScorePro(null)}
-          name={scorePro.name}
-          score={scorePro.score}
-          breakdown={scorePro.breakdown}
-        />
-      )}
-      <BestValueExplainPanel
-        open={!!bestValueExplain}
-        onClose={() => setBestValueExplain(null)}
-        row={bestValueExplain}
-      />
+      <Suspense fallback={null}>
+        {scorePro && (
+          <MatchScorePanel
+            open={!!scorePro}
+            onClose={() => setScorePro(null)}
+            name={scorePro.name}
+            score={scorePro.score}
+            breakdown={scorePro.breakdown}
+          />
+        )}
+        {bestValueExplain && (
+          <BestValueExplainPanel
+            open={!!bestValueExplain}
+            onClose={() => setBestValueExplain(null)}
+            row={bestValueExplain}
+          />
+        )}
+      </Suspense>
     </Shell>
   );
 }

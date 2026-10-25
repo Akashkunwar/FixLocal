@@ -21,7 +21,13 @@ import {
 import { JobChat } from "../../components/JobChat";
 import { PaymentPanel } from "../../components/PaymentPanel";
 import { CompletionPhotosPanel } from "../../components/CompletionPhotosPanel";
-import { AmcProposalCard } from "../../components/AmcProposalCard";
+import { Suspense, lazy } from "react";
+
+const AmcProposalCard = lazy(() =>
+  import("../../components/AmcProposalCard").then((m) => ({
+    default: m.AmcProposalCard,
+  })),
+);
 import { SchedulePanel } from "../../components/SchedulePanel";
 import { ProVisitDayCard } from "../../components/ProVisitDayCard";
 import { cadenceLabel, normalizeCadence } from "../../lib/jobCadence";
@@ -31,11 +37,19 @@ import { StatusTimeline } from "../../components/ui/StatusTimeline";
 import { useToast } from "../../components/Toast";
 import { useAuth } from "../../auth/AuthContext";
 import { categoryLabel, fmtDate, fmtDateTime, money } from "../../lib/format";
-import { addFavorite, createReview, getJobReview, type JobReview } from "../../api/extras";
+import {
+  addFavorite,
+  createReview,
+  getJobReview,
+  type JobReview,
+} from "../../api/extras";
 import { ApiError } from "../../api/client";
 import { ReportButton } from "../../components/ReportButton";
 import { BlockButton } from "../../components/BlockButton";
-import { CancelBookingButton, CancellationNote } from "../../components/CancelBookingButton";
+import {
+  CancelBookingButton,
+  CancellationNote,
+} from "../../components/CancelBookingButton";
 import { StarRating } from "../../components/ui/StarRating";
 import { Heart } from "lucide-react";
 import { mergeCounterTemplates } from "../../lib/counterTemplates";
@@ -73,10 +87,15 @@ export function ProJobDetailPage() {
   const [declineNote, setDeclineNote] = useState("");
   const bidFormRef = useRef<HTMLFormElement | null>(null);
   const fromInvite = useMemo(
-    () => searchParams.get("invite") === "1" || window.location.hash === "#bid-form",
-    [searchParams]
+    () =>
+      searchParams.get("invite") === "1" ||
+      window.location.hash === "#bid-form",
+    [searchParams],
   );
-  const fromCounter = useMemo(() => searchParams.get("counter") === "1", [searchParams]);
+  const fromCounter = useMemo(
+    () => searchParams.get("counter") === "1",
+    [searchParams],
+  );
   const [amount, setAmount] = useState("");
   const [message, setMessage] = useState("");
   const [etaDays, setEtaDays] = useState("1");
@@ -89,14 +108,23 @@ export function ProJobDetailPage() {
   const [quoteEditNotes, setQuoteEditNotes] = useState("");
   const [quoteEditBusy, setQuoteEditBusy] = useState(false);
   const [showQuoteEdit, setShowQuoteEdit] = useState(false);
-  const [proAvailability, setProAvailability] = useState<WeeklyAvailability | null>(null);
+  const [proAvailability, setProAvailability] =
+    useState<WeeklyAvailability | null>(null);
   const [amcCustomPackages, setAmcCustomPackages] = useState<
-    NonNullable<import("../../api/jobs").TradespersonProfile["customRatePackages"]>
+    NonNullable<
+      import("../../api/jobs").TradespersonProfile["customRatePackages"]
+    >
   >([]);
-  const [amcHourlyMin, setAmcHourlyMin] = useState<string | number | null>(null);
-  const [amcHourlyMax, setAmcHourlyMax] = useState<string | number | null>(null);
+  const [amcHourlyMin, setAmcHourlyMin] = useState<string | number | null>(
+    null,
+  );
+  const [amcHourlyMax, setAmcHourlyMax] = useState<string | number | null>(
+    null,
+  );
   const [showCounterDecline, setShowCounterDecline] = useState(false);
-  const [counterDeclineTplId, setCounterDeclineTplId] = useState<string | null>(null);
+  const [counterDeclineTplId, setCounterDeclineTplId] = useState<string | null>(
+    null,
+  );
   const [counterDeclineNote, setCounterDeclineNote] = useState("");
   const [counterDeclineFloor, setCounterDeclineFloor] = useState("");
   const [counterDeclineBusy, setCounterDeclineBusy] = useState(false);
@@ -117,7 +145,8 @@ export function ProJobDetailPage() {
       const j = await getJob(id);
       // Pros only see their own bid; no bid yet is a normal state.
       const b = await listBids(id).catch((e) => {
-        if (e instanceof ApiError && e.status === 403) return { bids: [] as Bid[], otherActiveBidCount: undefined };
+        if (e instanceof ApiError && e.status === 403)
+          return { bids: [] as Bid[], otherActiveBidCount: undefined };
         throw e;
       });
       setJob(j.job);
@@ -134,7 +163,7 @@ export function ProJobDetailPage() {
       setLoadError(
         err.code === "NOT_VERIFIED"
           ? "Your professional account needs to be verified by FixLocal before you can view job details."
-          : err.message
+          : err.message,
       );
     } finally {
       setLoading(false);
@@ -148,12 +177,12 @@ export function ProJobDetailPage() {
         setProAvailability(
           r.profile.weeklyAvailability
             ? normalizeWeeklyAvailability(r.profile.weeklyAvailability)
-            : null
+            : null,
         );
         setAmcCustomPackages(
           Array.isArray(r.profile.customRatePackages)
             ? r.profile.customRatePackages
-            : []
+            : [],
         );
         setAmcHourlyMin(r.profile.hourlyRateMin ?? null);
         setAmcHourlyMax(r.profile.hourlyRateMax ?? null);
@@ -169,7 +198,10 @@ export function ProJobDetailPage() {
     if (!fromInvite) return;
     setInviteBanner(true);
     const t = window.setTimeout(() => {
-      bidFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      bidFormRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
     }, 250);
     return () => clearTimeout(t);
   }, [fromInvite, loading, id]);
@@ -211,7 +243,7 @@ export function ProJobDetailPage() {
     setQuoteAmount(
       pkg.amountMax != null && Number(pkg.amountMax) > pkg.amountMin
         ? String(pkg.amountMax)
-        : amt
+        : amt,
     );
     const unit = (pkg.unit && String(pkg.unit).trim()) || "";
     const hint = (pkg.hint && String(pkg.hint).trim()) || "";
@@ -219,28 +251,39 @@ export function ProJobDetailPage() {
       `Package: ${pkg.label}`,
       unit ? `Unit: ${unit}` : "",
       hint,
-      pkg.source === "soft" ? "(soft estimate from hourly range)" : "(from portfolio package)",
+      pkg.source === "soft"
+        ? "(soft estimate from hourly range)"
+        : "(from portfolio package)",
     ].filter(Boolean);
     setQuoteNotes((prev) => (prev.trim() ? prev : noteBits.join(" · ")));
     setMessage((prev) =>
       prev.trim()
         ? prev
-        : `Based on my ${pkg.label} package${unit ? ` (${unit})` : ""}.`
+        : `Based on my ${pkg.label} package${unit ? ` (${unit})` : ""}.`,
     );
     success(
-      `Filled bid/quote from ${pkg.source === "custom" ? "portfolio" : "soft"} package`
+      `Filled bid/quote from ${pkg.source === "custom" ? "portfolio" : "soft"} package`,
     );
   }
 
-
   useEffect(() => {
-    if (!fromCounter || !myBid?.counterOffer || myBid.counterOffer.status !== "pending") return;
+    if (
+      !fromCounter ||
+      !myBid?.counterOffer ||
+      myBid.counterOffer.status !== "pending"
+    )
+      return;
     setQuoteEditAmount(String(myBid.counterOffer.suggestedAmount));
     setQuoteEditNotes(myBid.counterOffer.notes || "");
     setShowQuoteEdit(true);
     // Prefill once per counter-offer (keyed by its request time), not on every bid refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromCounter, myBid?.id, myBid?.counterOffer?.requestedAt, myBid?.counterOffer?.status]);
+  }, [
+    fromCounter,
+    myBid?.id,
+    myBid?.counterOffer?.requestedAt,
+    myBid?.counterOffer?.status,
+  ]);
 
   async function onBid(e: FormEvent) {
     e.preventDefault();
@@ -249,13 +292,19 @@ export function ProJobDetailPage() {
         amount: Number(amount),
         message: message || undefined,
         etaDays: etaDays ? Number(etaDays) : undefined,
-        proposedVisitStart: visitStart ? new Date(visitStart).toISOString() : undefined,
-        proposedVisitEnd: visitEnd ? new Date(visitEnd).toISOString() : undefined,
+        proposedVisitStart: visitStart
+          ? new Date(visitStart).toISOString()
+          : undefined,
+        proposedVisitEnd: visitEnd
+          ? new Date(visitEnd).toISOString()
+          : undefined,
         quoteAmount: quoteAmount ? Number(quoteAmount) : undefined,
         quoteNotes: quoteNotes || undefined,
         quoteAttachment: quoteFile,
       });
-      success(myBid?.status === "withdrawn" ? "Bid re-submitted" : "Bid placed");
+      success(
+        myBid?.status === "withdrawn" ? "Bid re-submitted" : "Bid placed",
+      );
       try {
         localStorage.setItem("fixlocal:onboarding:pro:bid", "1");
       } catch {
@@ -269,7 +318,12 @@ export function ProJobDetailPage() {
 
   async function onWithdraw() {
     if (!myBid) return;
-    if (!confirm("Withdraw your bid? You can bid again while the job is still open.")) return;
+    if (
+      !confirm(
+        "Withdraw your bid? You can bid again while the job is still open.",
+      )
+    )
+      return;
     try {
       await withdrawBid(myBid.id);
       success("Bid withdrawn");
@@ -292,7 +346,9 @@ export function ProJobDetailPage() {
   async function onComplete() {
     try {
       await markJobDone(id!);
-      success("Marked as done — the client has been asked to confirm and release the remaining payment");
+      success(
+        "Marked as done — the client has been asked to confirm and release the remaining payment",
+      );
       load();
     } catch (e) {
       error((e as Error).message);
@@ -351,9 +407,13 @@ export function ProJobDetailPage() {
 
   // Review prompts (dashboard / notifications) deep-link to #review once the job has loaded.
   useEffect(() => {
-    if (job?.status !== "completed" || window.location.hash !== "#review") return;
+    if (job?.status !== "completed" || window.location.hash !== "#review")
+      return;
     const t = window.setTimeout(
-      () => document.getElementById("review")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      () =>
+        document
+          .getElementById("review")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
       150,
     );
     return () => window.clearTimeout(t);
@@ -378,13 +438,19 @@ export function ProJobDetailPage() {
   }
 
   const isAwardedToMe = myBid?.status === "accepted";
-  const liveWork = ["awarded", "in_progress", "pending_confirmation"].includes(job.status);
+  const liveWork = ["awarded", "in_progress", "pending_confirmation"].includes(
+    job.status,
+  );
   const showEscrow =
     isAwardedToMe &&
     (job.acceptedBidId ||
-      ["held", "partially_released", "released", "refunded", "simulated_paid"].includes(
-        job.paymentStatus || ""
-      ));
+      [
+        "held",
+        "partially_released",
+        "released",
+        "refunded",
+        "simulated_paid",
+      ].includes(job.paymentStatus || ""));
 
   return (
     <Shell
@@ -408,7 +474,8 @@ export function ProJobDetailPage() {
         <StatusTimeline status={job.status} />
         {job.scheduledStart && (
           <p className="mt-3 text-sm text-slate-600">
-            Visit {job.scheduleStatus === "confirmed" ? "confirmed" : "proposed"}:{" "}
+            Visit{" "}
+            {job.scheduleStatus === "confirmed" ? "confirmed" : "proposed"}:{" "}
             <strong>{fmtDateTime(job.scheduledStart)}</strong>
             {job.scheduledEnd ? ` – ${fmtDateTime(job.scheduledEnd)}` : ""}
           </p>
@@ -418,13 +485,16 @@ export function ProJobDetailPage() {
         <div className="mb-4 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-950">
           <p className="font-medium">You were invited to bid on this job</p>
           <p className="mt-1 text-xs text-brand-800">
-            Jump to the bid form below, or softly decline if you are not available.
+            Jump to the bid form below, or softly decline if you are not
+            available.
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
               className="btn-primary btn-sm"
-              onClick={() => bidFormRef.current?.scrollIntoView({ behavior: "smooth" })}
+              onClick={() =>
+                bidFormRef.current?.scrollIntoView({ behavior: "smooth" })
+              }
             >
               Place a bid
             </button>
@@ -439,7 +509,9 @@ export function ProJobDetailPage() {
           </div>
           {showDeclineSheet && (
             <div className="mt-3 rounded-xl bg-white/80 p-3 ring-1 ring-brand-100 space-y-3">
-              <p className="text-xs font-medium text-brand-950">Why are you declining? (optional)</p>
+              <p className="text-xs font-medium text-brand-950">
+                Why are you declining? (optional)
+              </p>
               <div className="flex flex-wrap gap-2">
                 {DECLINE_CHIPS.map((c) => (
                   <button
@@ -450,7 +522,9 @@ export function ProJobDetailPage() {
                         ? "rounded-full bg-brand-700 px-3 py-1 text-xs font-medium text-white"
                         : "rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200"
                     }
-                    onClick={() => setDeclineReason((prev) => (prev === c.id ? "" : c.id))}
+                    onClick={() =>
+                      setDeclineReason((prev) => (prev === c.id ? "" : c.id))
+                    }
                   >
                     {c.label}
                   </button>
@@ -495,17 +569,23 @@ export function ProJobDetailPage() {
           <section className="card p-6 space-y-3">
             <div className="flex flex-wrap gap-2">
               <Badge status={job.status} />
-              {job.paymentStatus && isAwardedToMe && <Badge status={job.paymentStatus} />}
+              {job.paymentStatus && isAwardedToMe && (
+                <Badge status={job.paymentStatus} />
+              )}
               {job.cadence && normalizeCadence(job.cadence) !== "one_time" && (
                 <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-800 ring-1 ring-violet-100">
                   {cadenceLabel(job.cadence)}
                 </span>
               )}
             </div>
-            <p className="text-slate-700 whitespace-pre-wrap">{job.description}</p>
+            <p className="text-slate-700 whitespace-pre-wrap">
+              {job.description}
+            </p>
             <p className="text-sm text-slate-500">
               {job.exactLocation
-                ? [job.address, job.area, job.pincode].filter(Boolean).join(", ") || "Location TBD"
+                ? [job.address, job.area, job.pincode]
+                    .filter(Boolean)
+                    .join(", ") || "Location TBD"
                 : `${[job.area, job.city].filter(Boolean).join(", ") || "Location TBD"} (exact address shared once you're hired)`}{" "}
               · Budget {money(job.budgetMin)} – {money(job.budgetMax)}
             </p>
@@ -528,30 +608,52 @@ export function ProJobDetailPage() {
                 </button>
               )}
               {isAwardedToMe && job.status === "awarded" && (
-                <CancelBookingButton jobId={job.id} side="professional" onDone={() => load()} />
+                <CancelBookingButton
+                  jobId={job.id}
+                  side="professional"
+                  onDone={() => load()}
+                />
               )}
               {isAwardedToMe && job.status === "cancelled" && (
-                <CancellationNote cancelledBy={job.cancelledBy} reason={job.cancellationReason} />
+                <CancellationNote
+                  cancelledBy={job.cancelledBy}
+                  reason={job.cancellationReason}
+                />
               )}
               {isAwardedToMe && job.status === "in_progress" && (
-                <button type="button" className="btn-primary" onClick={onComplete}>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={onComplete}
+                >
                   Mark work done
                 </button>
               )}
               {isAwardedToMe && (liveWork || job.status === "completed") && (
-                <button type="button" className="btn-secondary" onClick={() => setDisputeOpen((v) => !v)}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setDisputeOpen((v) => !v)}
+                >
                   Open dispute
                 </button>
               )}
             </div>
             {isAwardedToMe && job.status === "pending_confirmation" && (
-              <p className="rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-900 ring-1 ring-sky-100" role="status">
-                Waiting for the client to confirm. If they don't respond, the job is confirmed automatically and the
-                remaining payment is released.
+              <p
+                className="rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-900 ring-1 ring-sky-100"
+                role="status"
+              >
+                Waiting for the client to confirm. If they don't respond, the
+                job is confirmed automatically and the remaining payment is
+                released.
               </p>
             )}
             {disputeOpen && (
-              <form onSubmit={onDispute} className="space-y-3 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200">
+              <form
+                onSubmit={onDispute}
+                className="space-y-3 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200"
+              >
                 <label className="label" htmlFor="pro-dispute-reason">
                   What went wrong?
                 </label>
@@ -572,7 +674,11 @@ export function ProJobDetailPage() {
                   type="file"
                   accept="image/jpeg,image/png,image/webp,application/pdf"
                   multiple
-                  onChange={(e) => setDisputeFiles(Array.from(e.target.files || []).slice(0, 5))}
+                  onChange={(e) =>
+                    setDisputeFiles(
+                      Array.from(e.target.files || []).slice(0, 5),
+                    )
+                  }
                 />
                 <button type="submit" className="btn-primary btn-sm">
                   Submit dispute
@@ -591,26 +697,39 @@ export function ProJobDetailPage() {
             />
           )}
 
-          {isAwardedToMe && (job.status === "awarded" || job.status === "in_progress") && (
-            <ProVisitDayCard job={job} />
-          )}
+          {isAwardedToMe &&
+            (job.status === "awarded" || job.status === "in_progress") && (
+              <ProVisitDayCard job={job} />
+            )}
 
           {isAwardedToMe && (liveWork || job.status === "completed") && (
-            <AmcProposalCard
-              job={job}
-              role="pro"
-              onChanged={load}
-              customRatePackages={amcCustomPackages}
-              hourlyRateMin={amcHourlyMin}
-              hourlyRateMax={amcHourlyMax}
-            />
+            <Suspense fallback={null}>
+              <AmcProposalCard
+                job={job}
+                role="pro"
+                onChanged={load}
+                customRatePackages={amcCustomPackages}
+                hourlyRateMin={amcHourlyMin}
+                hourlyRateMax={amcHourlyMax}
+              />
+            </Suspense>
           )}
 
-          {showEscrow && <PaymentPanel job={job} canRelease={false} onChanged={load} />}
-
-          {isAwardedToMe && (liveWork || job.status === "completed" || job.status === "disputed") && (
-            <CompletionPhotosPanel job={job} canEdit canPublishCaseStudy onChanged={load} />
+          {showEscrow && (
+            <PaymentPanel job={job} canRelease={false} onChanged={load} />
           )}
+
+          {isAwardedToMe &&
+            (liveWork ||
+              job.status === "completed" ||
+              job.status === "disputed") && (
+              <CompletionPhotosPanel
+                job={job}
+                canEdit
+                canPublishCaseStudy
+                onChanged={load}
+              />
+            )}
 
           {isAwardedToMe && job.status === "completed" && (
             <section
@@ -626,7 +745,11 @@ export function ProJobDetailPage() {
               {clientReview ? (
                 <div>
                   <StarRating value={clientReview.rating} readonly />
-                  {clientReview.comment && <p className="mt-2 text-sm text-slate-600">{clientReview.comment}</p>}
+                  {clientReview.comment && (
+                    <p className="mt-2 text-sm text-slate-600">
+                      {clientReview.comment}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <form onSubmit={onReviewClient} className="space-y-3">
@@ -647,299 +770,353 @@ export function ProJobDetailPage() {
             </section>
           )}
 
-          {job.status === "open" && (!myBid || myBid.status === "withdrawn") && (
-            <form
-              id="bid-form"
-              ref={bidFormRef}
-              onSubmit={onBid}
-              className="card p-6 space-y-3 scroll-mt-24"
-            >
-              <h2 className="font-semibold text-lg">{myBid ? "Bid again" : "Place a bid"}</h2>
-              {myBid ? (
-                <p className="text-sm text-slate-600" data-testid="rebid-note">
-                  You withdrew your earlier bid of {money(myBid.quoteAmount ?? myBid.amount)}. A new bid replaces
-                  it, and the client can see your previous offer in the quote history.
-                </p>
-              ) : (
-                <p className="text-xs text-slate-500">You must be admin-verified to bid.</p>
-              )}
-              {bidFillPackages.length > 0 && (
-                <div className="rounded-xl bg-violet-50/70 p-3 ring-1 ring-violet-100 space-y-2">
-                  <p className="text-xs font-semibold text-violet-950">
-                    Fill from portfolio packages
+          {job.status === "open" &&
+            (!myBid || myBid.status === "withdrawn") && (
+              <form
+                id="bid-form"
+                ref={bidFormRef}
+                onSubmit={onBid}
+                className="card p-6 space-y-3 scroll-mt-24"
+              >
+                <h2 className="font-semibold text-lg">
+                  {myBid ? "Bid again" : "Place a bid"}
+                </h2>
+                {myBid ? (
+                  <p
+                    className="text-sm text-slate-600"
+                    data-testid="rebid-note"
+                  >
+                    You withdrew your earlier bid of{" "}
+                    {money(myBid.quoteAmount ?? myBid.amount)}. A new bid
+                    replaces it, and the client can see your previous offer in
+                    the quote history.
                   </p>
-                  <p className="text-[11px] text-violet-900">
-                    One-click fills bid amount + structured quote from your custom or soft rate cards.
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    You must be admin-verified to bid.
                   </p>
-                  <div className="flex flex-wrap gap-2" role="group" aria-label="Portfolio packages for bid">
-                    {bidFillPackages.map((pkg) => (
-                      <button
-                        key={pkg.id}
-                        type="button"
-                        className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-violet-50 hover:ring-violet-200"
-                        title={pkg.hint || formatCustomPackage(pkg as CustomRatePackage)}
-                        onClick={() => applyPortfolioPackageToBid(pkg)}
-                      >
-                        {pkg.label}
-                        <span className="ml-1 text-slate-500">
-                          · {money(pkg.amountMin)}
-                          {pkg.source === "soft" ? " ≈" : ""}
-                        </span>
-                      </button>
-                    ))}
+                )}
+                {bidFillPackages.length > 0 && (
+                  <div className="rounded-xl bg-violet-50/70 p-3 ring-1 ring-violet-100 space-y-2">
+                    <p className="text-xs font-semibold text-violet-950">
+                      Fill from portfolio packages
+                    </p>
+                    <p className="text-[11px] text-violet-900">
+                      One-click fills bid amount + structured quote from your
+                      custom or soft rate cards.
+                    </p>
+                    <div
+                      className="flex flex-wrap gap-2"
+                      role="group"
+                      aria-label="Portfolio packages for bid"
+                    >
+                      {bidFillPackages.map((pkg) => (
+                        <button
+                          key={pkg.id}
+                          type="button"
+                          className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-violet-50 hover:ring-violet-200"
+                          title={
+                            pkg.hint ||
+                            formatCustomPackage(pkg as CustomRatePackage)
+                          }
+                          onClick={() => applyPortfolioPackageToBid(pkg)}
+                        >
+                          {pkg.label}
+                          <span className="ml-1 text-slate-500">
+                            · {money(pkg.amountMin)}
+                            {pkg.source === "soft" ? " ≈" : ""}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="label" htmlFor="bid-amount">Amount (₹)</label>
-                  <input
-                    id="bid-amount"
-                    className="input"
-                    type="number"
-                    min={1}
-                    required
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label" htmlFor="bid-eta">ETA days</label>
-                  <input
-                    id="bid-eta"
-                    className="input"
-                    type="number"
-                    min={1}
-                    value={etaDays}
-                    onChange={(e) => setEtaDays(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="label" htmlFor="bid-visit-start">Proposed visit start (optional)</label>
-                  <input
-                    id="bid-visit-start"
-                    className="input"
-                    type="datetime-local"
-                    value={visitStart}
-                    onChange={(e) => setVisitStart(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label" htmlFor="bid-visit-end">Proposed visit end</label>
-                  <input
-                    id="bid-visit-end"
-                    className="input"
-                    type="datetime-local"
-                    value={visitEnd}
-                    onChange={(e) => setVisitEnd(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="label" htmlFor="bid-message">Message</label>
-                <textarea
-                  id="bid-message"
-                  className="input"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="What's included?"
-                />
-              </div>
-              <div className="rounded-xl bg-amber-50 p-3 ring-1 ring-amber-100 space-y-2">
-                <p className="text-xs font-semibold text-amber-900">Optional structured quote / estimate</p>
-                <div className="grid gap-2 sm:grid-cols-2">
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="label" htmlFor="bid-quote-amount">Quote amount (₹)</label>
+                    <label className="label" htmlFor="bid-amount">
+                      Amount (₹)
+                    </label>
                     <input
-                      id="bid-quote-amount"
+                      id="bid-amount"
                       className="input"
                       type="number"
                       min={1}
-                      value={quoteAmount}
-                      onChange={(e) => setQuoteAmount(e.target.value)}
-                      placeholder="Defaults to bid amount if blank"
+                      required
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
                     />
                   </div>
                   <div>
-                    <label className="label" htmlFor="bid-quote-file">Quote PDF / image</label>
+                    <label className="label" htmlFor="bid-eta">
+                      ETA days
+                    </label>
                     <input
-                      id="bid-quote-file"
+                      id="bid-eta"
                       className="input"
-                      type="file"
-                      accept="application/pdf,image/jpeg,image/png,image/webp"
-                      onChange={(e) => setQuoteFile(e.target.files?.[0] || null)}
+                      type="number"
+                      min={1}
+                      value={etaDays}
+                      onChange={(e) => setEtaDays(e.target.value)}
                     />
                   </div>
                 </div>
-                <textarea
-                  className="input"
-                  rows={2}
-                  aria-label="Quote notes"
-                  value={quoteNotes}
-                  onChange={(e) => setQuoteNotes(e.target.value)}
-                  placeholder="Materials, labour breakdown, warranty…"
-                />
-              </div>
-              <button type="submit" className="btn-primary">
-                Submit bid
-              </button>
-            </form>
-          )}
-
-          {myBid && myBid.counterOffer && myBid.counterOffer.status === "pending" && (
-            <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
-              <p className="font-medium">Client requested a quote revise</p>
-              <p className="mt-1 text-xs text-violet-900">
-                Suggested amount:{" "}
-                <strong>
-                  ₹{Number(myBid.counterOffer.suggestedAmount).toFixed(0)}
-                </strong>
-                {myBid.counterOffer.notes
-                  ? ` — “${myBid.counterOffer.notes}”`
-                  : ""}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="btn-primary btn-sm"
-                  onClick={() => {
-                    setQuoteEditAmount(String(myBid.counterOffer!.suggestedAmount));
-                    setQuoteEditNotes(myBid.counterOffer?.notes || "");
-                    setShowQuoteEdit(true);
-                    document.getElementById("bid-form")?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                >
-                  Revise toward suggestion
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary btn-sm"
-                  onClick={() => {
-                    setShowCounterDecline(true);
-                    setCounterDeclineTplId(null);
-                    setCounterDeclineNote("");
-                    setCounterDeclineFloor("");
-                  }}
-                >
-                  Decline counter
-                </button>
-              </div>
-              {showCounterDecline && (
-                <div className="mt-3 rounded-xl bg-white/90 p-3 ring-1 ring-violet-200">
-                  <p className="text-xs font-semibold text-violet-950">Decline with a template</p>
-                  <p className="mt-0.5 text-[11px] text-violet-900">
-                    Pick a chip (no browser prompt). Optional floor replaces ₹X.
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {mergeCounterTemplates(user?.counterTemplates).map((t) => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        className={
-                          counterDeclineTplId === t.id
-                            ? "rounded-full bg-violet-700 px-2.5 py-1 text-[11px] font-semibold text-white"
-                            : "rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-medium text-violet-900 ring-1 ring-violet-200"
-                        }
-                        onClick={() => {
-                          setCounterDeclineTplId(t.id);
-                          setCounterDeclineNote(t.body);
-                        }}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      className={
-                        counterDeclineTplId === "__custom"
-                          ? "rounded-full bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-white"
-                          : "rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700 ring-1 ring-slate-200"
-                      }
-                      onClick={() => {
-                        setCounterDeclineTplId("__custom");
-                        setCounterDeclineNote("");
-                      }}
-                    >
-                      Freeform
-                    </button>
-                  </div>
-                  {counterDeclineNote.includes("₹X") || counterDeclineNote.includes(" X ") ? (
-                    <label className="mt-2 block text-[11px] text-slate-600">
-                      Floor amount for ₹X
-                      <input
-                        className="input mt-1 h-8 text-sm"
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="e.g. 2800"
-                        value={counterDeclineFloor}
-                        onChange={(e) => setCounterDeclineFloor(e.target.value)}
-                      />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="label" htmlFor="bid-visit-start">
+                      Proposed visit start (optional)
                     </label>
-                  ) : null}
-                  <textarea
-                    className="input mt-2 text-sm"
-                    rows={3}
-                    placeholder="Decline note (optional)"
-                    value={counterDeclineNote}
-                    onChange={(e) => {
-                      setCounterDeclineTplId((cur) =>
-                        cur && cur !== "__custom" ? cur : "__custom"
-                      );
-                      setCounterDeclineNote(e.target.value);
-                    }}
-                  />
-                  {counterDeclineFloor.trim() && /₹X|\bX\b/i.test(counterDeclineNote) ? (
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      Preview:{" "}
-                      {counterDeclineNote
-                        .replace(/₹X/gi, `₹${counterDeclineFloor.trim()}`)
-                        .replace(/\bX\b/g, counterDeclineFloor.trim())}
-                    </p>
-                  ) : null}
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="btn-primary btn-sm"
-                      disabled={counterDeclineBusy}
-                      onClick={async () => {
-                        let notes = counterDeclineNote;
-                        if (counterDeclineFloor.trim()) {
-                          notes = notes
-                            .replace(/₹X/gi, `₹${counterDeclineFloor.trim()}`)
-                            .replace(/\bX\b/g, counterDeclineFloor.trim());
-                        }
-                        setCounterDeclineBusy(true);
-                        try {
-                          await declineCounterOffer(myBid.id, {
-                            notes: notes.trim() || undefined,
-                          });
-                          success("Counter-offer declined");
-                          setShowCounterDecline(false);
-                          load();
-                        } catch (e) {
-                          error((e as Error).message || "Could not decline counter");
-                        } finally {
-                          setCounterDeclineBusy(false);
-                        }
-                      }}
-                    >
-                      {counterDeclineBusy ? "…" : "Confirm decline"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost btn-sm"
-                      disabled={counterDeclineBusy}
-                      onClick={() => setShowCounterDecline(false)}
-                    >
-                      Cancel
-                    </button>
+                    <input
+                      id="bid-visit-start"
+                      className="input"
+                      type="datetime-local"
+                      value={visitStart}
+                      onChange={(e) => setVisitStart(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="bid-visit-end">
+                      Proposed visit end
+                    </label>
+                    <input
+                      id="bid-visit-end"
+                      className="input"
+                      type="datetime-local"
+                      value={visitEnd}
+                      onChange={(e) => setVisitEnd(e.target.value)}
+                    />
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+                <div>
+                  <label className="label" htmlFor="bid-message">
+                    Message
+                  </label>
+                  <textarea
+                    id="bid-message"
+                    className="input"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="What's included?"
+                  />
+                </div>
+                <div className="rounded-xl bg-amber-50 p-3 ring-1 ring-amber-100 space-y-2">
+                  <p className="text-xs font-semibold text-amber-900">
+                    Optional structured quote / estimate
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <label className="label" htmlFor="bid-quote-amount">
+                        Quote amount (₹)
+                      </label>
+                      <input
+                        id="bid-quote-amount"
+                        className="input"
+                        type="number"
+                        min={1}
+                        value={quoteAmount}
+                        onChange={(e) => setQuoteAmount(e.target.value)}
+                        placeholder="Defaults to bid amount if blank"
+                      />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="bid-quote-file">
+                        Quote PDF / image
+                      </label>
+                      <input
+                        id="bid-quote-file"
+                        className="input"
+                        type="file"
+                        accept="application/pdf,image/jpeg,image/png,image/webp"
+                        onChange={(e) =>
+                          setQuoteFile(e.target.files?.[0] || null)
+                        }
+                      />
+                    </div>
+                  </div>
+                  <textarea
+                    className="input"
+                    rows={2}
+                    aria-label="Quote notes"
+                    value={quoteNotes}
+                    onChange={(e) => setQuoteNotes(e.target.value)}
+                    placeholder="Materials, labour breakdown, warranty…"
+                  />
+                </div>
+                <button type="submit" className="btn-primary">
+                  Submit bid
+                </button>
+              </form>
+            )}
+
+          {myBid &&
+            myBid.counterOffer &&
+            myBid.counterOffer.status === "pending" && (
+              <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
+                <p className="font-medium">Client requested a quote revise</p>
+                <p className="mt-1 text-xs text-violet-900">
+                  Suggested amount:{" "}
+                  <strong>
+                    ₹{Number(myBid.counterOffer.suggestedAmount).toFixed(0)}
+                  </strong>
+                  {myBid.counterOffer.notes
+                    ? ` — “${myBid.counterOffer.notes}”`
+                    : ""}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    onClick={() => {
+                      setQuoteEditAmount(
+                        String(myBid.counterOffer!.suggestedAmount),
+                      );
+                      setQuoteEditNotes(myBid.counterOffer?.notes || "");
+                      setShowQuoteEdit(true);
+                      document
+                        .getElementById("bid-form")
+                        ?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                  >
+                    Revise toward suggestion
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    onClick={() => {
+                      setShowCounterDecline(true);
+                      setCounterDeclineTplId(null);
+                      setCounterDeclineNote("");
+                      setCounterDeclineFloor("");
+                    }}
+                  >
+                    Decline counter
+                  </button>
+                </div>
+                {showCounterDecline && (
+                  <div className="mt-3 rounded-xl bg-white/90 p-3 ring-1 ring-violet-200">
+                    <p className="text-xs font-semibold text-violet-950">
+                      Decline with a template
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-violet-900">
+                      Pick a chip (no browser prompt). Optional floor replaces
+                      ₹X.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {mergeCounterTemplates(user?.counterTemplates).map(
+                        (t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            className={
+                              counterDeclineTplId === t.id
+                                ? "rounded-full bg-violet-700 px-2.5 py-1 text-[11px] font-semibold text-white"
+                                : "rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-medium text-violet-900 ring-1 ring-violet-200"
+                            }
+                            onClick={() => {
+                              setCounterDeclineTplId(t.id);
+                              setCounterDeclineNote(t.body);
+                            }}
+                          >
+                            {t.label}
+                          </button>
+                        ),
+                      )}
+                      <button
+                        type="button"
+                        className={
+                          counterDeclineTplId === "__custom"
+                            ? "rounded-full bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-white"
+                            : "rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700 ring-1 ring-slate-200"
+                        }
+                        onClick={() => {
+                          setCounterDeclineTplId("__custom");
+                          setCounterDeclineNote("");
+                        }}
+                      >
+                        Freeform
+                      </button>
+                    </div>
+                    {counterDeclineNote.includes("₹X") ||
+                    counterDeclineNote.includes(" X ") ? (
+                      <label className="mt-2 block text-[11px] text-slate-600">
+                        Floor amount for ₹X
+                        <input
+                          className="input mt-1 h-8 text-sm"
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="e.g. 2800"
+                          value={counterDeclineFloor}
+                          onChange={(e) =>
+                            setCounterDeclineFloor(e.target.value)
+                          }
+                        />
+                      </label>
+                    ) : null}
+                    <textarea
+                      className="input mt-2 text-sm"
+                      rows={3}
+                      placeholder="Decline note (optional)"
+                      value={counterDeclineNote}
+                      onChange={(e) => {
+                        setCounterDeclineTplId((cur) =>
+                          cur && cur !== "__custom" ? cur : "__custom",
+                        );
+                        setCounterDeclineNote(e.target.value);
+                      }}
+                    />
+                    {counterDeclineFloor.trim() &&
+                    /₹X|\bX\b/i.test(counterDeclineNote) ? (
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Preview:{" "}
+                        {counterDeclineNote
+                          .replace(/₹X/gi, `₹${counterDeclineFloor.trim()}`)
+                          .replace(/\bX\b/g, counterDeclineFloor.trim())}
+                      </p>
+                    ) : null}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn-primary btn-sm"
+                        disabled={counterDeclineBusy}
+                        onClick={async () => {
+                          let notes = counterDeclineNote;
+                          if (counterDeclineFloor.trim()) {
+                            notes = notes
+                              .replace(/₹X/gi, `₹${counterDeclineFloor.trim()}`)
+                              .replace(/\bX\b/g, counterDeclineFloor.trim());
+                          }
+                          setCounterDeclineBusy(true);
+                          try {
+                            await declineCounterOffer(myBid.id, {
+                              notes: notes.trim() || undefined,
+                            });
+                            success("Counter-offer declined");
+                            setShowCounterDecline(false);
+                            load();
+                          } catch (e) {
+                            error(
+                              (e as Error).message ||
+                                "Could not decline counter",
+                            );
+                          } finally {
+                            setCounterDeclineBusy(false);
+                          }
+                        }}
+                      >
+                        {counterDeclineBusy ? "…" : "Confirm decline"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
+                        disabled={counterDeclineBusy}
+                        onClick={() => setShowCounterDecline(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
           {myBid?.viewedNoReply?.due && (
             <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -948,31 +1125,38 @@ export function ProJobDetailPage() {
                 Homeowner viewed your revised quote
                 {myBid.viewedNoReply.hoursSinceView != null
                   ? ` ~${Math.floor(myBid.viewedNoReply.hoursSinceView)}h ago`
-                  : ""}
-                {" "}with no further revise (SLA soft flag). Consider updating the quote or messaging.
+                  : ""}{" "}
+                with no further revise (SLA soft flag). Consider updating the
+                quote or messaging.
               </p>
             </div>
           )}
 
-          {myBid && Array.isArray(myBid.counterHistory) && myBid.counterHistory.length > 0 && (
-            <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
-              <summary className="cursor-pointer font-medium text-slate-800">
-                Counter-offer history ({myBid.counterHistory.length})
-              </summary>
-              <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                {[...myBid.counterHistory].reverse().map((h, i) => (
-                  <li key={`${h.requestedAt}-${i}`}>
-                    ₹{Number(h.suggestedAmount).toFixed(0)} · {h.status}
-                    <span className="text-slate-500">
-                      {" "}
-                      · {new Date(h.requestedAt).toLocaleString()}
-                    </span>
-                    {h.declinedNotes ? ` — “${h.declinedNotes}”` : h.notes ? ` — “${h.notes}”` : ""}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
+          {myBid &&
+            Array.isArray(myBid.counterHistory) &&
+            myBid.counterHistory.length > 0 && (
+              <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                <summary className="cursor-pointer font-medium text-slate-800">
+                  Counter-offer history ({myBid.counterHistory.length})
+                </summary>
+                <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                  {[...myBid.counterHistory].reverse().map((h, i) => (
+                    <li key={`${h.requestedAt}-${i}`}>
+                      ₹{Number(h.suggestedAmount).toFixed(0)} · {h.status}
+                      <span className="text-slate-500">
+                        {" "}
+                        · {new Date(h.requestedAt).toLocaleString()}
+                      </span>
+                      {h.declinedNotes
+                        ? ` — “${h.declinedNotes}”`
+                        : h.notes
+                          ? ` — “${h.notes}”`
+                          : ""}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
 
           {myBid && (
             <div className="card p-6">
@@ -981,16 +1165,25 @@ export function ProJobDetailPage() {
               <div className="mt-2">
                 <Badge status={myBid.status} />
               </div>
-              {myBid.message && <p className="mt-2 text-sm text-slate-600">{myBid.message}</p>}
-              {(myBid.quoteAmount != null || myBid.quoteNotes || (myBid.quoteHistory && myBid.quoteHistory.length > 0)) && (
+              {myBid.message && (
+                <p className="mt-2 text-sm text-slate-600">{myBid.message}</p>
+              )}
+              {(myBid.quoteAmount != null ||
+                myBid.quoteNotes ||
+                (myBid.quoteHistory && myBid.quoteHistory.length > 0)) && (
                 <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm ring-1 ring-amber-100">
                   <p className="font-semibold text-amber-950">
-                    Quote {myBid.quoteAmount != null ? money(myBid.quoteAmount) : ""}
+                    Quote{" "}
+                    {myBid.quoteAmount != null ? money(myBid.quoteAmount) : ""}
                     {myBid.quoteHistory && myBid.quoteHistory.length > 0
                       ? ` · ${myBid.quoteHistory.length} prior revision(s)`
                       : ""}
                   </p>
-                  {myBid.quoteNotes && <p className="mt-1 text-slate-700 whitespace-pre-wrap">{myBid.quoteNotes}</p>}
+                  {myBid.quoteNotes && (
+                    <p className="mt-1 text-slate-700 whitespace-pre-wrap">
+                      {myBid.quoteNotes}
+                    </p>
+                  )}
                   {myBid.quoteAttachmentUrl && (
                     <a
                       className="mt-1 inline-block text-xs text-brand-700 underline"
@@ -1024,15 +1217,20 @@ export function ProJobDetailPage() {
                                 {money(delta)}
                               </li>
                             )}
-                            {[...hist].reverse().slice(0, 5).map((h, i) => (
-                              <li key={`${h.revisedAt}-${i}`}>
-                                Was {h.amount != null ? money(h.amount) : "—"} ·{" "}
-                                {new Date(h.revisedAt).toLocaleString()}
-                                {h.notes ? (
-                                  <span className="block truncate text-slate-500">“{h.notes}”</span>
-                                ) : null}
-                              </li>
-                            ))}
+                            {[...hist]
+                              .reverse()
+                              .slice(0, 5)
+                              .map((h, i) => (
+                                <li key={`${h.revisedAt}-${i}`}>
+                                  Was {h.amount != null ? money(h.amount) : "—"}{" "}
+                                  · {new Date(h.revisedAt).toLocaleString()}
+                                  {h.notes ? (
+                                    <span className="block truncate text-slate-500">
+                                      “{h.notes}”
+                                    </span>
+                                  ) : null}
+                                </li>
+                              ))}
                           </>
                         );
                       })()}
@@ -1048,7 +1246,9 @@ export function ProJobDetailPage() {
                       className="btn-secondary btn-sm"
                       onClick={() => {
                         setQuoteEditAmount(
-                          myBid.quoteAmount != null ? String(myBid.quoteAmount) : ""
+                          myBid.quoteAmount != null
+                            ? String(myBid.quoteAmount)
+                            : "",
                         );
                         setQuoteEditNotes(myBid.quoteNotes || "");
                         setShowQuoteEdit(true);
@@ -1058,7 +1258,9 @@ export function ProJobDetailPage() {
                     </button>
                   ) : (
                     <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50/50 p-3 space-y-2">
-                      <p className="text-xs font-semibold text-amber-950">Revise structured quote</p>
+                      <p className="text-xs font-semibold text-amber-950">
+                        Revise structured quote
+                      </p>
                       <input
                         className="input"
                         type="number"
@@ -1091,7 +1293,9 @@ export function ProJobDetailPage() {
                               setShowQuoteEdit(false);
                               await load();
                             } catch (e) {
-                              error((e as Error).message || "Quote revise failed");
+                              error(
+                                (e as Error).message || "Quote revise failed",
+                              );
                             } finally {
                               setQuoteEditBusy(false);
                             }
@@ -1114,18 +1318,25 @@ export function ProJobDetailPage() {
               {myBid.proposedVisitStart && (
                 <p className="mt-2 text-sm text-brand-700">
                   Proposed visit: {fmtDateTime(myBid.proposedVisitStart)}
-                  {myBid.proposedVisitEnd ? ` – ${fmtDateTime(myBid.proposedVisitEnd)}` : ""}
+                  {myBid.proposedVisitEnd
+                    ? ` – ${fmtDateTime(myBid.proposedVisitEnd)}`
+                    : ""}
                 </p>
               )}
               {myBid.status === "active" && job.status === "open" && (
-                <button type="button" className="btn-danger btn-sm mt-3" onClick={onWithdraw}>
+                <button
+                  type="button"
+                  className="btn-danger btn-sm mt-3"
+                  onClick={onWithdraw}
+                >
                   Withdraw
                 </button>
               )}
             </div>
           )}
 
-          {(isAwardedToMe || (myBid?.status === "active" && job.status === "open")) && (
+          {(isAwardedToMe ||
+            (myBid?.status === "active" && job.status === "open")) && (
             <JobChat jobId={job.id} title="Messages with the client" />
           )}
         </div>
@@ -1139,9 +1350,15 @@ export function ProJobDetailPage() {
                   ? "No other active bids yet."
                   : `${otherBidCount} other active bid${otherBidCount === 1 ? "" : "s"} (amounts are private).`}
             </p>
-            <p className="mt-1 text-xs text-slate-500">Up to {job.maxBids} bids are accepted on this job.</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Up to {job.maxBids} bids are accepted on this job.
+            </p>
           </div>
-          <ReportButton targetType="job" targetId={job.id} label="Report this job" />
+          <ReportButton
+            targetType="job"
+            targetId={job.id}
+            label="Report this job"
+          />
           <BlockButton userId={job.homeownerId} name="this client" />
         </aside>
       </div>
