@@ -3,28 +3,70 @@ import { useAuth } from "../auth/AuthContext";
 import { dashboardPath } from "../api/client";
 import { NotificationBell } from "./NotificationBell";
 import { EmailVerifyBanner } from "./EmailVerifyBanner";
-import { LogOut, Wrench } from "lucide-react";
+import {
+  BarChart3,
+  Bookmark,
+  Briefcase,
+  ClipboardList,
+  Heart,
+  LogOut,
+  PlusCircle,
+  Search,
+  Settings,
+  UserRound,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import clsx from "clsx";
 import { initials, roleLabel } from "../lib/format";
 
-const clientLinks = [
-  { to: "/client", label: "My jobs", end: true },
-  { to: "/client/jobs/new", label: "Post a job" },
-  { to: "/client/pros", label: "Find professionals" },
-  { to: "/client/favorites", label: "Shortlist" },
-  { to: "/settings", label: "Settings" },
+type NavItem = {
+  to: string;
+  label: string;
+  end?: boolean;
+  short?: string;
+  icon?: LucideIcon;
+};
+
+const clientLinks: NavItem[] = [
+  { to: "/client", label: "My jobs", end: true, icon: ClipboardList },
+  {
+    to: "/client/jobs/new",
+    label: "Post a job",
+    short: "Post",
+    icon: PlusCircle,
+  },
+  {
+    to: "/client/pros",
+    label: "Find professionals",
+    short: "Find pros",
+    icon: Search,
+  },
+  { to: "/client/favorites", label: "Shortlist", icon: Heart },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
-const proLinks = [
-  { to: "/professional", label: "Browse jobs", end: true },
-  { to: "/professional/my-jobs", label: "My jobs" },
-  { to: "/professional/analytics", label: "Analytics" },
-  { to: "/professional/profile", label: "Portfolio" },
-  { to: "/professional/favorites", label: "Saved" },
-  { to: "/settings", label: "Settings" },
+const proLinks: NavItem[] = [
+  {
+    to: "/professional",
+    label: "Browse jobs",
+    end: true,
+    short: "Jobs",
+    icon: Search,
+  },
+  { to: "/professional/my-jobs", label: "My jobs", icon: Briefcase },
+  {
+    to: "/professional/analytics",
+    label: "Analytics",
+    short: "Stats",
+    icon: BarChart3,
+  },
+  { to: "/professional/profile", label: "Portfolio", icon: UserRound },
+  { to: "/professional/favorites", label: "Saved", icon: Bookmark },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
-const adminLinks = [
+const adminLinks: NavItem[] = [
   { to: "/admin", label: "Overview", end: true },
   { to: "/admin/users", label: "Users" },
   { to: "/admin/tradespeople", label: "Verify" },
@@ -72,11 +114,16 @@ export function Shell({
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-700 text-white shadow-xs">
               <Wrench className="h-4 w-4" />
             </span>
-            <span className="font-display text-xl font-semibold tracking-tight">FixLocal</span>
+            <span className="font-display text-xl font-semibold tracking-tight">
+              FixLocal
+            </span>
           </Link>
 
           {user && (
-            <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
+            <nav
+              className="hidden items-center gap-1 md:flex"
+              aria-label="Primary"
+            >
               {links.map((l) => (
                 <NavLink
                   key={l.to}
@@ -87,7 +134,7 @@ export function Shell({
                       "rounded-lg px-3 py-2 text-sm font-medium no-underline transition",
                       isActive
                         ? "bg-brand-50 text-brand-800"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
                     )
                   }
                 >
@@ -109,7 +156,9 @@ export function Shell({
                     <p className="text-xs font-semibold text-slate-800 max-w-40 truncate">
                       {user.name || user.email}
                     </p>
-                    <p className="text-[10px] uppercase tracking-wide text-slate-400">{roleLabel(user.role)}</p>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                      {roleLabel(user.role)}
+                    </p>
                   </div>
                 </div>
                 <button
@@ -137,9 +186,15 @@ export function Shell({
                   {title}
                 </h1>
               )}
-              {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+              {subtitle && (
+                <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+              )}
             </div>
-            {actions && <div className="flex flex-wrap gap-2 w-full sm:w-auto">{actions}</div>}
+            {actions && (
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                {actions}
+              </div>
+            )}
           </div>
         )}
         {children}
@@ -159,11 +214,12 @@ export function Shell({
                 className={({ isActive }) =>
                   clsx(
                     "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2 text-[11px] font-semibold no-underline touch-target",
-                    isActive ? "bg-brand-50 text-brand-800" : "text-slate-500"
+                    isActive ? "bg-brand-50 text-brand-800" : "text-slate-500",
                   )
                 }
               >
-                {l.label}
+                {l.icon && <l.icon className="h-5 w-5" aria-hidden />}
+                <span className="whitespace-nowrap">{l.short ?? l.label}</span>
               </NavLink>
             ))}
           </div>

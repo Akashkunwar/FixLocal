@@ -87,9 +87,11 @@ export function MapPinPicker({ lat, lng, onChange, height = 260, className }: Pr
     }
 
     // Leaflet needs a paint before sizing correctly in some layouts
-    setTimeout(() => map.invalidateSize(), 80);
+    // (cleared on unmount: invalidating a removed map throws "_leaflet_pos" errors)
+    const sizeTimer = window.setTimeout(() => map.invalidateSize(), 80);
 
     return () => {
+      window.clearTimeout(sizeTimer);
       map.remove();
       mapRef.current = null;
       markerRef.current = null;
