@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { createReview, type JobReview } from "../../../api/extras";
 import { StarRating } from "../../../components/ui/StarRating";
 import { useToast } from "../../../components/Toast";
@@ -9,30 +9,58 @@ export function ReviewPanel({
   review,
   proReview,
   onSaved,
+  proName,
 }: {
   jobId: string;
   review: JobReview | null;
   proReview: JobReview | null;
   onSaved: () => void;
+  proName?: string | null;
 }) {
   const { success, error } = useToast();
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLElement>(null);
+
+  // Notification / dashboard prompts deep-link to #review.
+  useEffect(() => {
+    if (window.location.hash !== "#review") return;
+    const t = window.setTimeout(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+    return () => window.clearTimeout(t);
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
+    setBusy(true);
     try {
       await createReview(jobId, rating, comment);
       success("Thanks for your review!");
       onSaved();
     } catch (err) {
       error((err as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <section className="card p-6">
-      <h2 className="text-lg font-semibold mb-3">Review</h2>
+    <section
+      id="review"
+      ref={ref}
+      aria-labelledby="review-heading"
+      className={`card scroll-mt-24 p-6 ${review ? "" : "ring-2 ring-brand-200"}`}
+    >
+      <h2 id="review-heading" className="text-lg font-semibold">
+        {review ? "Your review" : `How did it go${proName ? ` with ${proName}` : ""}?`}
+      </h2>
+      {!review && (
+        <p className="mb-3 mt-1 text-sm text-slate-600">
+          A quick rating helps other clients choose — and helps good pros get more work.
+        </p>
+      )}
+      {review && <div className="mb-3" />}
       {proReview && (
         <p className="mb-3 text-sm text-slate-600">
           The professional rated working with you {proReview.rating}/5
@@ -57,8 +85,8 @@ export function ReviewPanel({
             value={comment}
             onChange={(e) => setComment(e.target.value)}
           />
-          <button type="submit" className="btn-primary">
-            Submit review
+          <button type="submit" className="btn-primary" disabled={busy}>
+            {busy ? "Saving…" : "Submit review"}
           </button>
         </form>
       )}

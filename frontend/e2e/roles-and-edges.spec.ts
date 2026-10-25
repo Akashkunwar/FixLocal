@@ -85,10 +85,28 @@ test("a professional withdraws a bid", async ({ page, request }) => {
 
   await login(page, SEEDED.pro2);
   await page.goto(`/professional/jobs/${job.id}`);
+  page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Withdraw" }).click();
   await expect(page.getByText("Bid withdrawn")).toBeVisible();
   const { bids } = await apiCall<{ bids: { id: string; status: string }[] }>(request, client, "get", `/api/jobs/${job.id}/bids`);
   expect(bids.find((b) => b.id === bid.id)?.status).toBe("withdrawn");
+
+  // Changed their mind: the bid form comes back and the new bid replaces the withdrawn one.
+  await expect(page.getByRole("heading", { name: "Bid again" })).toBeVisible();
+  await expect(page.getByTestId("rebid-note")).toContainText("1,700");
+  await page.getByLabel("Amount (₹)").fill("1500");
+  await page.locator("#bid-form").getByRole("button", { name: /bid/i }).click();
+  await expect(page.getByText("Bid re-submitted")).toBeVisible();
+  const after = await apiCall<{ bids: { id: string; status: string; amount: number }[] }>(request, client, "get", `/api/jobs/${job.id}/bids`);
+  expect(after.bids.find((b) => b.id === bid.id)).toMatchObject({ status: "active", amount: 1500 });
+});
+
+test("a job the client can't open shows an error instead of spinning forever", async ({ page }) => {
+  await login(page, SEEDED.client);
+  await page.goto("/client/jobs/00000000-0000-4000-8000-000000000000");
+  await expect(page.getByRole("alert").filter({ hasText: "We couldn't open this job" })).toBeVisible();
+  await page.getByRole("link", { name: "Back to dashboard" }).click();
+  await expect(page).toHaveURL(/\/client$/);
 });
 
 test("posting a job shows the server's error and keeps the draft", async ({ page }) => {

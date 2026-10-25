@@ -64,6 +64,7 @@ export function useJobDetail() {
   const [job, setJob] = useState<Job | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showDispute, setShowDispute] = useState(false);
   const [review, setReview] = useState<JobReview | null>(null);
   const [proReview, setProReview] = useState<JobReview | null>(null);
@@ -175,6 +176,7 @@ export function useJobDetail() {
         soft(getJobReview(id, ctrl.signal)),
       ]);
       if (!current()) return;
+      setLoadError(null);
       setJob(j.job);
       setBids(b.bids);
       if (
@@ -275,7 +277,9 @@ export function useJobDetail() {
       }
     } catch (e) {
       if (isAbort(e) || !current()) return;
-      error((e as Error).message || "Failed to load job");
+      const msg = (e as Error).message || "Failed to load job";
+      setLoadError(msg);
+      error(msg);
     } finally {
       if (current()) setLoading(false);
     }
@@ -910,7 +914,14 @@ export function useJobDetail() {
   }
 
   async function onCancel() {
-    if (!confirm("Cancel this job?")) return;
+    if (
+      !confirm(
+        bids.some((b) => b.status === "active")
+          ? "Cancel this job? Open bids will be closed and the pros told. This can't be undone."
+          : "Cancel this job? This can't be undone.",
+      )
+    )
+      return;
     try {
       await cancelJob(id!);
       success("Job cancelled");
@@ -937,6 +948,8 @@ export function useJobDetail() {
   }
 
   return {
+    loadError,
+    reload: load,
     bestValueBlend,
     bestValueExplain,
     bestValueWeights,

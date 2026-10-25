@@ -132,11 +132,18 @@ test("completion: start, photos, mark done, confirm, escrow release, two-way rev
   const pay = await apiCall<{ milestones: { status: string }[] }>(request, client, "get", `/api/jobs/${job.id}/payments`);
   expect(pay.milestones.map((m) => m.status)).toEqual(["released", "released", "released"]);
 
+  // The dashboard prompts for a review, and the deep link lands on the review form at the top.
+  await page.goto("/client");
+  await expect(page.getByTestId("pending-reviews")).toBeVisible();
+  await page.goto(`/client/jobs/${job.id}#review`);
+  await expect(page.getByRole("heading", { name: /How did it go/ })).toBeVisible();
+
   // Client reviews the pro.
   await page.getByRole("radio", { name: "4 stars" }).click();
   await page.getByLabel("Review comment").fill("Quick and tidy.");
   await page.getByRole("button", { name: "Submit review" }).click();
   await expect(page.getByText("Quick and tidy.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your review" })).toBeVisible();
 
   // Pro reviews the client.
   await proPage.reload();
