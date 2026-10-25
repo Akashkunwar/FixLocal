@@ -30,7 +30,7 @@ class ConsoleMailer implements Mailer {
 
 /** SMTP delivery (works with SES, SendGrid, Postmark, Brevo, Zoho … via their SMTP endpoints). */
 export class SmtpMailer implements Mailer {
-  private transport: nodemailer.Transporter;
+  private transport: ReturnType<typeof nodemailer.createTransport>;
   constructor(url: string, private from: string) {
     this.transport = nodemailer.createTransport(url);
   }
