@@ -27,7 +27,18 @@ test("registration needs Terms consent", async ({ page }) => {
   await expect(page).toHaveURL(/\/register/);
   await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/client$/);
+  await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
+});
+
+test("sign-up with an existing email looks exactly like a new sign-up", async ({ page }) => {
+  await page.goto("/register");
+  await page.getByLabel("Full name").fill("Someone Else");
+  await page.getByLabel("Email").fill(SEEDED.client);
+  await page.getByLabel("Password").fill("Some-other-pass-1");
+  await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
+  await expect(page.getByText(/already registered/i)).toHaveCount(0);
 });
 
 test("client can't release escrow before work starts, and can cancel the booking with a refund", async ({ page, browser, request }) => {

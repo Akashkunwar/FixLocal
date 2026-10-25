@@ -178,12 +178,19 @@ export async function register(
   role: "HOMEOWNER" | "TRADESPERSON",
   extras?: { name?: string; phone?: string }
 ) {
-  const r = await api<SessionResponse>("/api/auth/register", {
+  // Sign-up never starts a session: the same "check your inbox" answer comes back whether or not
+  // the address already has an account. The user confirms their email, then logs in.
+  return api<{ ok: boolean; message: string }>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify({ email, password, role, ...extras, acceptTerms: true }),
   });
-  accessToken = r.token;
-  return r;
+}
+
+export function resendConfirmation(email: string) {
+  return api<{ ok: boolean; message: string }>("/api/auth/resend-confirmation", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
 }
 
 export async function logout() {

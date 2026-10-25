@@ -20,9 +20,11 @@ test("pro registers, is blocked until verified, then filters, saves a search and
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/professional/);
+  await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
   await page.goto(await mailLink(request, email, "verify-email"));
   await expect(page.getByRole("heading", { name: "Email verified" })).toBeVisible();
+  await login(page, email);
+  await expect(page).toHaveURL(/\/professional/);
 
   // Pending: job details are refused.
   await page.goto(`/professional/jobs/${job.id}`);

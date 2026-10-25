@@ -57,6 +57,26 @@ describe("rate limiting (H-7)", () => {
     }
   });
 
+  it("caps the mail any one address can be sent, whoever asks", async () => {
+    overrideConfig({ rateLimitEnabled: true });
+    await flushTestCache();
+    try {
+      const email = uniqueEmail("bomb");
+      const statuses: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const res = await api()
+          .post("/api/auth/register")
+          .send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true });
+        statuses.push(res.status);
+      }
+      expect(statuses.slice(0, 5)).toEqual([202, 202, 202, 202, 202]);
+      expect(statuses[5]).toBe(429);
+    } finally {
+      overrideConfig({ rateLimitEnabled: false });
+      await flushTestCache();
+    }
+  });
+
   it("throttles registrations per IP", async () => {
     overrideConfig({ rateLimitEnabled: true });
     await flushTestCache();
@@ -68,7 +88,7 @@ describe("rate limiting (H-7)", () => {
           .send({ email: uniqueEmail("rl"), password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true });
         statuses.push(res.status);
       }
-      expect(statuses.filter((s) => s === 201)).toHaveLength(10);
+      expect(statuses.filter((s) => s === 202)).toHaveLength(10);
       expect(statuses.at(-1)).toBe(429);
     } finally {
       overrideConfig({ rateLimitEnabled: false });

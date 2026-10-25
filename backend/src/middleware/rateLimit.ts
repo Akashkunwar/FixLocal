@@ -4,7 +4,7 @@ import { RedisStore } from "rate-limit-redis";
 import { config } from "../config";
 import { redisClient } from "../utils/cache";
 
-type LimitName = "login" | "loginHourly" | "register" | "refresh" | "passwordReset" | "messages" | "invites" | "uploads" | "reports" | "jobPosts" | "bids" | "blocks" | "exports";
+type LimitName = "login" | "loginHourly" | "register" | "refresh" | "passwordReset" | "messages" | "invites" | "uploads" | "reports" | "jobPosts" | "bids" | "blocks" | "exports" | "emailSends";
 
 const LIMITS: Record<LimitName, { windowMs: number; limit: number }> = {
   login: { windowMs: 60_000, limit: 5 },
@@ -20,6 +20,8 @@ const LIMITS: Record<LimitName, { windowMs: number; limit: number }> = {
   bids: { windowMs: 3_600_000, limit: 60 },
   blocks: { windowMs: 3_600_000, limit: 30 },
   exports: { windowMs: 3_600_000, limit: 5 },
+  // Caps mail sent to any one address (sign-up, reset, confirmation), whoever asks for it.
+  emailSends: { windowMs: 3_600_000, limit: 5 },
 };
 
 const ip = (req: Request) => ipKeyGenerator(req.ip || "unknown");
@@ -35,6 +37,7 @@ const KEYS: Partial<Record<LimitName, (req: Request) => string>> = {
   bids: (req) => req.user?.id || ip(req),
   blocks: (req) => req.user?.id || ip(req),
   exports: (req) => req.user?.id || ip(req),
+  emailSends: (req) => `mail:${String(req.body?.email || "").trim().toLowerCase()}`,
 };
 
 function store(name: LimitName): Store | undefined {

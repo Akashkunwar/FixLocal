@@ -8,7 +8,7 @@ import * as s from "../validation/auth";
 
 const router = Router();
 
-router.post("/register", limiter("register"), validate({ body: s.registerBody }), auth.register);
+router.post("/register", limiter("register"), limiter("emailSends"), validate({ body: s.registerBody }), auth.register);
 router.post("/login", limiter("login"), limiter("loginHourly"), validate({ body: s.loginBody }), auth.login);
 router.post("/refresh", limiter("refresh"), auth.refresh);
 router.post("/logout", auth.logout);
@@ -16,9 +16,28 @@ router.post("/logout-all", requireAuth, auth.logoutEverywhere);
 router.post("/sse-ticket", requireAuth, auth.sseTicket);
 router.post("/verify-email", limiter("passwordReset"), validate({ body: s.tokenBody }), auth.verifyEmail);
 router.post("/resend-verification", requireAuth, limiter("passwordReset"), auth.resendVerification);
-router.post("/forgot-password", limiter("passwordReset"), validate({ body: s.emailBody }), auth.forgotPassword);
+router.post(
+  "/resend-confirmation",
+  limiter("passwordReset"),
+  limiter("emailSends"),
+  validate({ body: s.emailBody }),
+  auth.resendVerificationPublic
+);
+router.post(
+  "/forgot-password",
+  limiter("passwordReset"),
+  limiter("emailSends"),
+  validate({ body: s.emailBody }),
+  auth.forgotPassword
+);
 router.post("/reset-password", limiter("passwordReset"), validate({ body: s.resetPasswordBody }), auth.resetPassword);
-router.post("/change-password", requireAuth, limiter("login"), validate({ body: s.changePasswordBody }), auth.changePassword);
+router.post(
+  "/change-password",
+  requireAuth,
+  limiter("login"),
+  validate({ body: s.changePasswordBody }),
+  auth.changePassword
+);
 
 router.get("/me", requireAuth, auth.me);
 router.get("/me/export", requireAuth, limiter("exports"), auth.exportMyData);

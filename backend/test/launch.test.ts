@@ -82,14 +82,14 @@ describe("calling off a hire before work starts", () => {
 
 describe("terms of service consent", () => {
   it("registration records the accepted version; legacy accounts accept once", async () => {
-    const res = await api()
+    const email = uniqueEmail("terms");
+    await api()
       .post("/api/auth/register")
-      .send({ email: uniqueEmail("terms"), password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true })
-      .expect(201);
-    expect(res.body.user.termsAccepted).toBe(true);
+      .send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true })
+      .expect(202);
     const [row] = await rows<{ termsVersion: string; termsAcceptedAt: Date }>(
-      `SELECT "termsVersion", "termsAcceptedAt" FROM "users" WHERE "id" = $1`,
-      [res.body.user.id]
+      `SELECT "termsVersion", "termsAcceptedAt" FROM "users" WHERE "email" = $1`,
+      [email]
     );
     expect(row.termsVersion).toBe(TERMS_VERSION);
     expect(row.termsAcceptedAt).toBeTruthy();

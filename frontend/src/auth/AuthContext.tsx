@@ -42,7 +42,7 @@ type AuthState = {
     password: string,
     role: "HOMEOWNER" | "TRADESPERSON",
     extras?: { name?: string; phone?: string }
-  ) => Promise<User>;
+  ) => Promise<string>;
   updateProfile: (body: ProfileUpdate) => Promise<User>;
   refreshUser: () => Promise<void>;
   setSessionUser: (user: User, token?: string) => void;
@@ -137,9 +137,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string, role: "HOMEOWNER" | "TRADESPERSON", extras?: { name?: string; phone?: string }) => {
       setError(null);
       const r = await apiRegister(email, password, role, extras);
-      return adopt(r.user);
+      return r.message;
     },
-    [adopt]
+    []
   );
 
   const refreshUser = useCallback(async () => {

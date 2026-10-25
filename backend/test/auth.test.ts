@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import request from "supertest";
 import { admin, api, client, createJob, listenLocal, PASSWORD, pro, rows, uniqueEmail } from "./helpers";
 import { consoleMailer } from "../src/services/mailer";
+import { REGISTER_RESPONSE } from "../src/controllers/authController";
 import { overrideConfig, config } from "../src/config";
 
 const cookieOf = (res: request.Response) => {
@@ -15,19 +16,30 @@ const tokenFromOutbox = (to: string, kind: "verify-email" | "reset-password") =>
 };
 
 describe("registration and login", () => {
-  it("registers with a normalized email, sets a refresh cookie, and sends a verification email", async () => {
+  it("registers with a normalized email, sends a confirmation link, and signs in only after confirming", async () => {
     const email = uniqueEmail("Reg").toUpperCase();
     const res = await api()
       .post("/api/auth/register")
       .send({ email: `  ${email} `, password: "Long-enough-pass-9", role: "HOMEOWNER", name: "Asha", acceptTerms: true });
-    expect(res.status).toBe(201);
-    expect(res.body.user.email).toBe(email.toLowerCase());
-    expect(res.body.user.emailVerified).toBe(false);
-    expect(res.body.token).toBeTruthy();
-    const cookie = cookieOf(res)!;
+    expect(res.status).toBe(202);
+    expect(res.body).toEqual(REGISTER_RESPONSE);
+    expect(cookieOf(res)).toBeUndefined();
+    const [row] = await rows<{ email: string; emailVerifiedAt: Date | null }>(
+      `SELECT "email", "emailVerifiedAt" FROM "users" WHERE "email" = $1`,
+      [email.toLowerCase()]
+    );
+    expect(row.emailVerifiedAt).toBeNull();
+
+    const creds = { email: email.toLowerCase(), password: "Long-enough-pass-9" };
+    const early = await api().post("/api/auth/login").send(creds);
+    expect(early.status).toBe(401);
+    await api().post("/api/auth/verify-email").send({ token: tokenFromOutbox(email.toLowerCase(), "verify-email") }).expect(200);
+    const ok = await api().post("/api/auth/login").send(creds);
+    expect(ok.status).toBe(200);
+    expect(ok.body.user.emailVerified).toBe(true);
+    const cookie = cookieOf(ok)!;
     expect(cookie).toMatch(/HttpOnly/i);
     expect(cookie).toMatch(/Path=\/api\/auth/);
-    expect(tokenFromOutbox(email.toLowerCase(), "verify-email")).toBeTruthy();
   });
 
   it("rejects bad registration input (H-10)", async () => {
@@ -47,14 +59,63 @@ describe("registration and login", () => {
     }
   });
 
-  it("treats an email that differs only by case/whitespace as taken", async () => {
-    const email = uniqueEmail("dupe");
-    await api().post("/api/auth/register").send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true }).expect(201);
-    const res = await api()
-      .post("/api/auth/register")
-      .send({ email: ` ${email.toUpperCase()} `, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true });
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe("EMAIL_TAKEN");
+  it("never reveals whether an email is registered: same answer, and the owner is emailed instead", async () => {
+    const owner = await client({ name: "Owner" });
+    const body = (email: string) => ({ email, password: "Attacker-pass-99", role: "HOMEOWNER", acceptTerms: true });
+    const taken = await api().post("/api/auth/register").send(body(` ${owner.user.email.toUpperCase()} `));
+    const fresh = await api().post("/api/auth/register").send(body(uniqueEmail("fresh")));
+    expect(taken.status).toBe(202);
+    expect(fresh.status).toBe(202);
+    expect(taken.body).toEqual(fresh.body);
+    expect(Object.keys(taken.headers).sort()).toEqual(Object.keys(fresh.headers).sort());
+    expect(cookieOf(taken)).toBeUndefined();
+    const notice = consoleMailer.outbox.find((m) => m.to === owner.user.email);
+    expect(notice?.subject).toBe("Someone tried to sign up with your email");
+    expect(notice?.text).toContain("/forgot-password");
+    // The attacker's password did not replace the owner's.
+    const [row] = await rows<{ n: string }>(`SELECT count(*) AS n FROM "users" WHERE "email" = $1`, [owner.user.email]);
+    expect(Number(row.n)).toBe(1);
+    expect((await api().post("/api/auth/login").send({ email: owner.user.email, password: "Attacker-pass-99" })).status).toBe(401);
+    expect((await api().post("/api/auth/login").send({ email: owner.user.email, password: PASSWORD })).status).toBe(200);
+  });
+
+  it("re-sends the confirmation link when an unconfirmed sign-up is repeated", async () => {
+    const email = uniqueEmail("retry");
+    const body = { email, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true };
+    await api().post("/api/auth/register").send(body).expect(202);
+    const first = tokenFromOutbox(email, "verify-email");
+    await api().post("/api/auth/register").send(body).expect(202);
+    const second = tokenFromOutbox(email, "verify-email");
+    expect(second).toBeTruthy();
+    expect(second).not.toBe(first);
+    // Only the newest link works.
+    expect((await api().post("/api/auth/verify-email").send({ token: first })).status).toBe(400);
+    await api().post("/api/auth/verify-email").send({ token: second }).expect(200);
+  });
+
+  it("register then log in can't be used to probe for accounts", async () => {
+    const owner = await client();
+    const probe = async (email: string) => {
+      await api().post("/api/auth/register").send({ email, password: "Probe-pass-1234", role: "HOMEOWNER", acceptTerms: true });
+      return api().post("/api/auth/login").send({ email, password: "Probe-pass-1234" });
+    };
+    const existing = await probe(owner.user.email);
+    const created = await probe(uniqueEmail("probe"));
+    expect(existing.status).toBe(401);
+    expect(created.status).toBe(401);
+    expect(existing.body).toEqual(created.body);
+  });
+
+  it("the public resend-confirmation endpoint answers the same for any address", async () => {
+    const unverified = await client({ verified: false });
+    const verified = await client();
+    const a = await api().post("/api/auth/resend-confirmation").send({ email: unverified.user.email });
+    const b = await api().post("/api/auth/resend-confirmation").send({ email: verified.user.email });
+    const c = await api().post("/api/auth/resend-confirmation").send({ email: uniqueEmail("ghost") });
+    expect(a.body).toEqual(b.body);
+    expect(b.body).toEqual(c.body);
+    expect(tokenFromOutbox(unverified.user.email, "verify-email")).toBeTruthy();
+    expect(tokenFromOutbox(verified.user.email, "verify-email")).toBeUndefined();
   });
 
   it("logs in, and gives the same answer for unknown email and wrong password", async () => {
@@ -181,9 +242,10 @@ describe("sessions (H-3)", () => {
 
 describe("email verification and password reset", () => {
   it("unverified clients can't post jobs until they verify", async () => {
-    const email = uniqueEmail("verify");
-    const reg = await api().post("/api/auth/register").send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true });
-    const auth = { Authorization: `Bearer ${reg.body.token}` };
+    const c = await client({ verified: false });
+    const email = c.user.email;
+    const auth = c.auth;
+    await api().post("/api/auth/resend-verification").set(auth).expect(200);
     const blocked = await api().post("/api/jobs").set(auth).send({ title: "t", description: "d", category: "other" });
     expect(blocked.status).toBe(403);
     expect(blocked.body.code).toBe("EMAIL_NOT_VERIFIED");
