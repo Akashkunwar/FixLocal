@@ -9,13 +9,25 @@ import { initConfigInvalidation } from "./utils/matchWeights";
 import { ensureUploadDirs } from "./services/files";
 import { startWorkers, stopWorkers } from "./workers";
 import { createApp } from "./app";
+import { initErrorReporter, reportError } from "./services/errorReporter";
 
 process.on("unhandledRejection", (reason) => {
   logger.error({ err: reason }, "unhandled promise rejection");
+  reportError(reason, { where: "unhandledRejection" });
+});
+process.on("uncaughtException", (err) => {
+  // State may be corrupt: log, report, and let the orchestrator restart the process.
+  logger.fatal({ err }, "uncaught exception");
+  reportError(err, { where: "uncaughtException" });
+  setTimeout(() => process.exit(1), 500).unref();
 });
 
 async function start() {
   const cfg = config();
+  initErrorReporter();
+  if (cfg.isProd && cfg.mailProvider === "console") {
+    logger.warn("MAIL_PROVIDER=console in production: verification and password-reset emails are NOT delivered");
+  }
   await AppDataSource.initialize();
   const pending = await AppDataSource.showMigrations();
   if (pending) {

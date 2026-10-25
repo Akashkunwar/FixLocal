@@ -38,14 +38,36 @@ const schema = z
     TRUST_PROXY: bool(false),
     RATE_LIMIT_ENABLED: bool(true),
     SEED_RESET: bool(false),
+    MAIL_PROVIDER: z.enum(["console", "smtp"]).default("console"),
+    SMTP_URL: z.string().optional(),
+    MAIL_FROM: z.string().default("FixLocal <no-reply@fixlocal.local>"),
+    ALLOW_CONSOLE_MAIL: bool(false),
   })
   .superRefine((env, ctx) => {
+    if (env.MAIL_PROVIDER === "smtp" && !env.SMTP_URL) {
+      ctx.addIssue({ code: "custom", path: ["SMTP_URL"], message: "SMTP_URL is required when MAIL_PROVIDER=smtp" });
+    }
     if (env.NODE_ENV === "production") {
       if (env.JWT_SECRET.length < 32 || WEAK_SECRETS.has(env.JWT_SECRET)) {
         ctx.addIssue({
           code: "custom",
           path: ["JWT_SECRET"],
           message: "JWT_SECRET must be a random string of at least 32 characters in production",
+        });
+      }
+      if (env.MAIL_PROVIDER === "console" && !env.ALLOW_CONSOLE_MAIL) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["MAIL_PROVIDER"],
+          message:
+            "Set MAIL_PROVIDER=smtp with SMTP_URL so verification and password-reset emails are delivered (or ALLOW_CONSOLE_MAIL=true for a private test deployment)",
+        });
+      }
+      if (env.APP_URL.startsWith("https://") && !env.COOKIE_SECURE) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["COOKIE_SECURE"],
+          message: "COOKIE_SECURE must be true when the app is served over HTTPS",
         });
       }
       if (!env.FILE_URL_SECRET || env.FILE_URL_SECRET.length < 32) {
@@ -80,6 +102,9 @@ export type AppConfig = {
   trustProxy: boolean;
   rateLimitEnabled: boolean;
   seedReset: boolean;
+  mailProvider: "console" | "smtp";
+  smtpUrl: string | null;
+  mailFrom: string;
 };
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -111,6 +136,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     trustProxy: e.TRUST_PROXY,
     rateLimitEnabled: e.RATE_LIMIT_ENABLED,
     seedReset: e.SEED_RESET,
+    mailProvider: e.MAIL_PROVIDER,
+    smtpUrl: e.SMTP_URL || null,
+    mailFrom: e.MAIL_FROM,
   };
 }
 

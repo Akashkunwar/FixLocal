@@ -44,6 +44,12 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       TRUST_PROXY: "true"
       LOG_LEVEL: info
+      # Email: smtp in real deployments (SMTP_URL=smtps://user:pass@smtp.example.com:465).
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-console}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-FixLocal <no-reply@fixlocal.local>}
+      ALLOW_CONSOLE_MAIL: ${ALLOW_CONSOLE_MAIL:-false}
+      ERROR_WEBHOOK_URL: ${ERROR_WEBHOOK_URL:-}
     volumes:
       - uploads:/app/uploads
     depends_on:
