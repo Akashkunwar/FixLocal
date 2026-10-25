@@ -56,7 +56,7 @@ export async function mailLink(request: APIRequestContext, to: string, kind: "ve
 
 export async function registerViaApi(request: APIRequestContext, role: Role, name: string) {
   const email = uniqueEmail(role === "HOMEOWNER" ? "client" : "pro");
-  const res = await request.post("/api/auth/register", { data: { email, password: PASSWORD, role, name } });
+  const res = await request.post("/api/auth/register", { data: { email, password: PASSWORD, role, name, acceptTerms: true } });
   expect(res.status(), await res.text()).toBe(201);
   const body = await res.json();
   const path = await mailLink(request, email, "verify-email");

@@ -60,7 +60,7 @@ describe("C-1 crash resistance", () => {
     const email = `race-${Date.now()}@test.fixlocal`;
     const results = await Promise.all(
       Array.from({ length: 5 }, () =>
-        api().post("/api/auth/register").send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER" })
+        api().post("/api/auth/register").send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true })
       )
     );
     const statuses = results.map((r) => r.status).sort();

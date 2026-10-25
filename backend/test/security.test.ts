@@ -65,7 +65,7 @@ describe("rate limiting (H-7)", () => {
       for (let i = 0; i < 11; i++) {
         const res = await api()
           .post("/api/auth/register")
-          .send({ email: uniqueEmail("rl"), password: "Long-enough-pass-9", role: "HOMEOWNER" });
+          .send({ email: uniqueEmail("rl"), password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true });
         statuses.push(res.status);
       }
       expect(statuses.filter((s) => s === 201)).toHaveLength(10);

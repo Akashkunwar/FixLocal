@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { isBlockedBetween } from "../utils/blocks";
 import { In } from "typeorm";
 import { AppDataSource } from "../data-source";
 import { Job, JobStatus } from "../entities/Job";
@@ -63,6 +64,9 @@ type InviteResult = { invite: JobInvite; notificationId: string | null; softSkip
 /** Shared by single and bulk invites. Throws HttpError with a specific code on refusal. */
 async function invitePro(ctx: JobContext, opts: InviteOptions): Promise<InviteResult> {
   const job = ctx.job;
+  if (await isBlockedBetween(job.homeownerId, opts.tradespersonId)) {
+    throw forbidden("You can't invite this professional", "BLOCKED");
+  }
   const profile = await AppDataSource.getRepository(TradespersonProfile).findOne({
     where: { userId: opts.tradespersonId },
     relations: ["user"],

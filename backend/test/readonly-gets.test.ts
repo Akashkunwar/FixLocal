@@ -14,6 +14,7 @@ const ROUTES_DIR = path.join(__dirname, "../src/routes");
 const MOUNTS: Record<string, string> = {
   "admin.ts": "/api/admin",
   "auth.ts": "/api/auth",
+  "blocks.ts": "/api/blocks",
   "bids.ts": "/api/bids",
   "disputes.ts": "/api/disputes",
   "favorites.ts": "/api/favorites",
@@ -73,6 +74,7 @@ describe("GET routes are read-only (M-3)", () => {
     await api().post("/api/favorites").set(owner.auth).send({ targetType: "pro", targetId: worker.user.id }).expect(201);
     await api().post(`/api/messages/${workJob.id}`).set(worker.auth).send({ body: "Unread by the client" }).expect(201);
     await api().post("/api/reports").set(owner.auth).send({ targetType: "user", targetId: bidder.user.id, reason: "Spam messages" }).expect(201);
+    await api().post("/api/blocks").set(owner.auth).send({ userId: invitee.user.id }).expect(201);
     const gallery = await api().post("/api/profile/gallery").set(worker.auth).attach("photos", await png(), { filename: "g.png", contentType: "image/png" });
     const fileName = String(gallery.body.profile.galleryUrls[0]).split("/").pop()!.split("?")[0];
 
@@ -126,6 +128,8 @@ describe("GET routes are read-only (M-3)", () => {
       ["/api/profile/counter-analytics", "/api/profile/counter-analytics", bidder],
       ["/api/profile/user/:userId", `/api/profile/user/${worker.user.id}`, owner],
       ["/api/profile", "/api/profile", worker],
+      ["/api/blocks", "/api/blocks", owner],
+      ["/api/auth/me/export", "/api/auth/me/export", owner],
       ["/api/reviews/pending", "/api/reviews/pending", done.worker],
       ["/api/reviews/pro/:userId", `/api/reviews/pro/${done.worker.user.id}`, owner],
       ["/api/reviews/client/:userId", `/api/reviews/client/${done.owner.user.id}`, done.worker],

@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { isBlockedBetween } from "../utils/blocks";
 import { In, Not } from "typeorm";
 import { AppDataSource } from "../data-source";
 import { Bid, BidStatus } from "../entities/Bid";
@@ -84,6 +85,9 @@ export async function placeBid(req: Request, res: Response) {
   const ctx = await loadJobContext(req.valid.params.id);
   if (!req.user!.proVerified) {
     throw forbidden("Your professional account must be verified before you can bid", "NOT_VERIFIED");
+  }
+  if (await isBlockedBetween(ctx.job.homeownerId, req.user!.id)) {
+    throw forbidden("You can't bid on this job", "BLOCKED");
   }
   const b = req.valid.body;
   if (b.proposedVisitStart && b.proposedVisitEnd && b.proposedVisitEnd <= b.proposedVisitStart) {

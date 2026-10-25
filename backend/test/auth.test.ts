@@ -19,7 +19,7 @@ describe("registration and login", () => {
     const email = uniqueEmail("Reg").toUpperCase();
     const res = await api()
       .post("/api/auth/register")
-      .send({ email: `  ${email} `, password: "Long-enough-pass-9", role: "HOMEOWNER", name: "Asha" });
+      .send({ email: `  ${email} `, password: "Long-enough-pass-9", role: "HOMEOWNER", name: "Asha", acceptTerms: true });
     expect(res.status).toBe(201);
     expect(res.body.user.email).toBe(email.toLowerCase());
     expect(res.body.user.emailVerified).toBe(false);
@@ -37,7 +37,10 @@ describe("registration and login", () => {
       { email: uniqueEmail(), password: "password123", role: "HOMEOWNER" },
       { email: uniqueEmail(), password: "Long-enough-pass-9", role: "ADMIN" },
       { email: uniqueEmail(), password: "Long-enough-pass-9", role: "HOMEOWNER", phone: "<script>" },
-    ];
+    ].map((c) => ({ ...c, acceptTerms: true }));
+    // Consent to the Terms / Privacy Policy is required.
+    cases.push({ email: uniqueEmail(), password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: false });
+    cases.push({ email: uniqueEmail(), password: "Long-enough-pass-9", role: "HOMEOWNER" } as (typeof cases)[number]);
     for (const body of cases) {
       const res = await api().post("/api/auth/register").send(body);
       expect(res.status, JSON.stringify(body)).toBe(400);
@@ -46,10 +49,10 @@ describe("registration and login", () => {
 
   it("treats an email that differs only by case/whitespace as taken", async () => {
     const email = uniqueEmail("dupe");
-    await api().post("/api/auth/register").send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER" }).expect(201);
+    await api().post("/api/auth/register").send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true }).expect(201);
     const res = await api()
       .post("/api/auth/register")
-      .send({ email: ` ${email.toUpperCase()} `, password: "Long-enough-pass-9", role: "HOMEOWNER" });
+      .send({ email: ` ${email.toUpperCase()} `, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true });
     expect(res.status).toBe(409);
     expect(res.body.code).toBe("EMAIL_TAKEN");
   });
@@ -179,7 +182,7 @@ describe("sessions (H-3)", () => {
 describe("email verification and password reset", () => {
   it("unverified clients can't post jobs until they verify", async () => {
     const email = uniqueEmail("verify");
-    const reg = await api().post("/api/auth/register").send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER" });
+    const reg = await api().post("/api/auth/register").send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true });
     const auth = { Authorization: `Bearer ${reg.body.token}` };
     const blocked = await api().post("/api/jobs").set(auth).send({ title: "t", description: "d", category: "other" });
     expect(blocked.status).toBe(403);

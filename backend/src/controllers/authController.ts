@@ -1,4 +1,6 @@
 import type { Request, Response } from "express";
+import { EMAIL_PREF_KEY } from "../utils/notifications";
+import { TERMS_VERSION } from "../domain/legal";
 import { In, IsNull, MoreThan } from "typeorm";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
@@ -25,7 +27,7 @@ import {
 import { invalidateAuthState } from "../auth/authState";
 import { badRequest, conflict, forbidden, unauthorized } from "../http/errors";
 import { toSelfUser } from "../serializers";
-import { appLink, mailer } from "../services/mailer";
+import { appLink, sendMail } from "../services/mailer";
 import { writeAudit } from "../utils/audit";
 import { isNotificationType } from "../domain/notificationTypes";
 import { deleteUploadByRef, discardFiles, fileRef, storeUploads } from "../services/files";
@@ -72,13 +74,13 @@ async function sendEmailToken(user: User, type: EmailTokenType) {
   await repo.update({ userId: user.id, type, usedAt: IsNull() }, { usedAt: new Date() });
   await repo.save(repo.create({ userId: user.id, type, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + ttlMs) }));
   if (type === "verify") {
-    await mailer().send({
+    await sendMail({
       to: user.email,
       subject: "Verify your FixLocal email",
       text: `Hi ${user.name || "there"},\n\nConfirm your email to start using FixLocal:\n${appLink(`/verify-email?token=${raw}`)}\n\nThis link expires in 48 hours.`,
     });
   } else {
-    await mailer().send({
+    await sendMail({
       to: user.email,
       subject: "Reset your FixLocal password",
       text: `Someone asked to reset the password for this account.\n\nChoose a new password here:\n${appLink(`/reset-password?token=${raw}`)}\n\nThis link expires in 1 hour. If this wasn't you, you can ignore this email.`,
@@ -115,6 +117,8 @@ export async function register(req: Request, res: Response) {
         phone: phone || undefined,
         isSuspended: false,
         emailVerifiedAt: autoVerify ? new Date() : null,
+        termsAcceptedAt: new Date(),
+        termsVersion: TERMS_VERSION,
       })
     );
     if (role === UserRole.TRADESPERSON) {
@@ -212,6 +216,9 @@ export async function updateMe(req: Request, res: Response) {
       if (isNotificationType(key)) merged[key] = value;
     }
     user.notificationPrefs = merged;
+  }
+  if (body.emailNotifications !== undefined) {
+    user.notificationPrefs = { ...(user.notificationPrefs || {}), [EMAIL_PREF_KEY]: body.emailNotifications };
   }
   if (body.quoteViewNudgeHours !== undefined) user.quoteViewNudgeHours = body.quoteViewNudgeHours;
   await users().save(user);
@@ -382,4 +389,76 @@ export async function replaceTemplates(req: Request, res: Response) {
     }
   });
   return res.json({ kind, items });
+}
+
+/** Existing users accept the current Terms / Privacy Policy (shown after an update). */
+export async function acceptTerms(req: Request, res: Response) {
+  await users().update({ id: req.user!.id }, { termsAcceptedAt: new Date(), termsVersion: TERMS_VERSION });
+  const user = await users().findOneOrFail({ where: { id: req.user!.id } });
+  return res.json({ user: toSelfUser(user) });
+}
+
+/**
+ * Download everything FixLocal holds about the signed-in user as JSON (DPDP Act 2023 "right to
+ * access"). Secrets (password hash, token hashes) are never included; other people's personal
+ * details are reduced to ids.
+ */
+export async function exportMyData(req: Request, res: Response) {
+  const id = req.user!.id;
+  const q = <T = Record<string, unknown>>(sql: string) => AppDataSource.query(sql, [id]) as Promise<T[]>;
+  const [account] = await q(
+    `SELECT "id", "email", "role", "name", "phone", "avatarUrl", "timezone", "isSuspended", "emailVerifiedAt",
+            "termsAcceptedAt", "termsVersion", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
+       FROM "users" WHERE "id" = $1`
+  );
+  const [
+    profile, jobs, bids, messages, reviewsWritten, reviewsReceived, notifications, favorites, blocks, reports,
+    disputes, ledger, uploads, templates,
+  ] = await Promise.all([
+    q(`SELECT * FROM "tradesperson_profiles" WHERE "userId" = $1`),
+    q(`SELECT "id", "title", "description", "category", "status", "budgetMin", "budgetMax", "address", "area", "city",
+              "pincode", "lat", "lng", "paymentStatus", "photoUrls", "createdAt", "completedAt"
+         FROM "jobs" WHERE "homeownerId" = $1 ORDER BY "createdAt"`),
+    q(`SELECT "id", "jobId", "amount", "message", "etaDays", "quoteAmount", "quoteNotes", "quoteHistory", "status", "createdAt"
+         FROM "bids" WHERE "tradespersonId" = $1 ORDER BY "createdAt"`),
+    q(`SELECT "id", "jobId", "threadTradespersonId", "body", "attachmentUrls", "quote", "createdAt"
+         FROM "messages" WHERE "senderId" = $1 ORDER BY "createdAt"`),
+    q(`SELECT "id", "jobId", "direction", "rating", "comment", "revieweeId", "createdAt" FROM "reviews" WHERE "reviewerId" = $1`),
+    q(`SELECT "id", "jobId", "direction", "rating", "comment", "createdAt" FROM "reviews" WHERE "revieweeId" = $1`),
+    q(`SELECT "id", "type", "title", "body", "link", "read", "createdAt" FROM "notifications" WHERE "userId" = $1
+         ORDER BY "createdAt" DESC LIMIT 1000`),
+    q(`SELECT "targetType", "targetId", "notes", "tags", "createdAt" FROM "favorites" WHERE "userId" = $1`),
+    q(`SELECT "blockedId", "createdAt" FROM "user_blocks" WHERE "blockerId" = $1`),
+    q(`SELECT "id", "targetType", "targetId", "reason", "status", "createdAt" FROM "reports" WHERE "reporterId" = $1`),
+    q(`SELECT "id", "jobId", "reason", "status", "resolution", "resolutionNotes", "createdAt", "resolvedAt"
+         FROM "disputes" WHERE "raisedByUserId" = $1`),
+    q(`SELECT "id", "jobId", "milestoneId", "type", "amount", "note", "createdAt",
+              CASE WHEN "payeeUserId" = $1 THEN 'received' ELSE 'paid' END AS "direction"
+         FROM "ledger_entries" WHERE "payeeUserId" = $1 OR "payerUserId" = $1 ORDER BY "createdAt"`),
+    q(`SELECT "name", "kind", "jobId", "mime", "size", "originalName", "createdAt" FROM "uploads" WHERE "ownerUserId" = $1`),
+    q(`SELECT "kind", "position", "data", "createdAt" FROM "user_templates" WHERE "userId" = $1`),
+  ]);
+  const body = {
+    exportedAt: new Date().toISOString(),
+    format: "fixlocal-export-v1",
+    note: "Payments on FixLocal are simulated; ledger amounts are not real money movements.",
+    account,
+    professionalProfile: profile[0] ?? null,
+    jobsPosted: jobs,
+    bids,
+    messagesSent: messages,
+    reviewsWritten,
+    reviewsReceived,
+    notifications,
+    favorites,
+    blockedUsers: blocks,
+    reportsFiled: reports,
+    disputesRaised: disputes,
+    escrowLedger: ledger,
+    files: uploads,
+    templates,
+  };
+  res.setHeader("Content-Disposition", `attachment; filename="fixlocal-data-${new Date().toISOString().slice(0, 10)}.json"`);
+  res.setHeader("Cache-Control", "no-store");
+  return res.json(body);
 }

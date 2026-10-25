@@ -21,6 +21,8 @@ router.post("/reset-password", limiter("passwordReset"), validate({ body: s.rese
 router.post("/change-password", requireAuth, limiter("login"), validate({ body: s.changePasswordBody }), auth.changePassword);
 
 router.get("/me", requireAuth, auth.me);
+router.get("/me/export", requireAuth, limiter("exports"), auth.exportMyData);
+router.post("/accept-terms", requireAuth, auth.acceptTerms);
 router.patch("/me", requireAuth, validate({ body: s.updateMeBody }), auth.updateMe);
 router.delete("/me", requireAuth, validate({ body: s.deleteAccountBody }), auth.deleteAccount);
 router.post("/me/avatar", requireAuth, limiter("uploads"), uploadSingleImage, auth.uploadAvatar);

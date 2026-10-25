@@ -4,7 +4,7 @@ import { RedisStore } from "rate-limit-redis";
 import { config } from "../config";
 import { redisClient } from "../utils/cache";
 
-type LimitName = "login" | "loginHourly" | "register" | "refresh" | "passwordReset" | "messages" | "invites" | "uploads" | "reports";
+type LimitName = "login" | "loginHourly" | "register" | "refresh" | "passwordReset" | "messages" | "invites" | "uploads" | "reports" | "jobPosts" | "bids" | "blocks" | "exports";
 
 const LIMITS: Record<LimitName, { windowMs: number; limit: number }> = {
   login: { windowMs: 60_000, limit: 5 },
@@ -16,6 +16,10 @@ const LIMITS: Record<LimitName, { windowMs: number; limit: number }> = {
   invites: { windowMs: 3_600_000, limit: 30 },
   uploads: { windowMs: 600_000, limit: 20 },
   reports: { windowMs: 3_600_000, limit: 20 },
+  jobPosts: { windowMs: 3_600_000, limit: 20 },
+  bids: { windowMs: 3_600_000, limit: 60 },
+  blocks: { windowMs: 3_600_000, limit: 30 },
+  exports: { windowMs: 3_600_000, limit: 5 },
 };
 
 const ip = (req: Request) => ipKeyGenerator(req.ip || "unknown");
@@ -27,6 +31,10 @@ const KEYS: Partial<Record<LimitName, (req: Request) => string>> = {
   invites: (req) => req.user?.id || ip(req),
   uploads: (req) => req.user?.id || ip(req),
   reports: (req) => req.user?.id || ip(req),
+  jobPosts: (req) => req.user?.id || ip(req),
+  bids: (req) => req.user?.id || ip(req),
+  blocks: (req) => req.user?.id || ip(req),
+  exports: (req) => req.user?.id || ip(req),
 };
 
 function store(name: LimitName): Store | undefined {

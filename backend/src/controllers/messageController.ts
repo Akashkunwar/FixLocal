@@ -15,6 +15,7 @@ import { viewer } from "./jobController";
 import { filesOf } from "../middleware/upload";
 import { discardFiles, fileRef, storeUploads } from "../services/files";
 import { badRequest, forbidden } from "../http/errors";
+import { isBlockedBetween } from "../utils/blocks";
 
 /** Which pro's thread the request refers to. Pros always use their own. */
 function threadProId(req: Request, ctx: JobContext): string {
@@ -29,7 +30,8 @@ function threadProId(req: Request, ctx: JobContext): string {
 async function resolveThread(req: Request, need: "read" | "write") {
   const ctx = await loadJobContext(req.valid.params.jobId);
   const proId = threadProId(req, ctx);
-  const access = await threadAccess(ctx, viewer(req), proId);
+  let access = await threadAccess(ctx, viewer(req), proId);
+  if (access === "write" && (await isBlockedBetween(ctx.job.homeownerId, proId))) access = "read";
   if (access === "none" || (need === "write" && access !== "write")) {
     throw forbidden(need === "write" ? "You can't send messages in this conversation" : "You don't have access to this conversation");
   }
