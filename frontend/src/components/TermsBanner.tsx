@@ -25,7 +25,7 @@ export function TermsBanner() {
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2">
         <span>
           We’ve published our <Link to="/terms">Terms of Service</Link> and <Link to="/privacy">Privacy Policy</Link>.
-          Please review and accept them to keep using FixLocal.
+          Please review and accept them.
         </span>
         <button type="button" className="btn-primary btn-sm" onClick={accept} disabled={state === "saving"}>
           {state === "saving" ? "Saving…" : state === "error" ? "Try again" : "I accept"}

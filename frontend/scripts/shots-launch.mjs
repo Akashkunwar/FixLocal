@@ -87,6 +87,9 @@ for (const vp of [
     await page.goto(`${WEB}/register`);
     const box = page.getByRole("checkbox", { name: /agree to the Terms/ });
     await box.waitFor();
+    await page.getByLabel("Full name").fill("Meera Iyer");
+    await page.getByLabel("Email").fill("meera@example.com");
+    await page.getByLabel("Password").fill("a-long-password-1");
     await page.getByRole("button", { name: "Create account" }).click();
     await page.getByText(/Please accept the Terms/).waitFor();
     await shot("register-terms-consent");
