@@ -94,7 +94,7 @@ test("a professional withdraws a bid", async ({ page, request }) => {
   // Changed their mind: the bid form comes back and the new bid replaces the withdrawn one.
   await expect(page.getByRole("heading", { name: "Bid again" })).toBeVisible();
   await expect(page.getByTestId("rebid-note")).toContainText("1,700");
-  await page.getByLabel("Amount (₹)").fill("1500");
+  await page.locator("#bid-amount").fill("1500");
   await page.locator("#bid-form").getByRole("button", { name: /bid/i }).click();
   await expect(page.getByText("Bid re-submitted")).toBeVisible();
   const after = await apiCall<{ bids: { id: string; status: string; amount: number }[] }>(request, client, "get", `/api/jobs/${job.id}/bids`);
