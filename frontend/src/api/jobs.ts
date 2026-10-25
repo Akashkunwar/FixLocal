@@ -58,6 +58,8 @@ export type Job = {
   /** When the job confirms itself (and releases the rest of the escrow) if the client doesn't respond. */
   autoConfirmAt?: string | null;
   completedAt?: string | null;
+  cancelledBy?: "client" | "professional" | null;
+  cancellationReason?: string | null;
   createdAt: string;
   unavailable?: boolean;
 };
@@ -403,6 +405,14 @@ export function createJob(form: FormData) {
 
 export function cancelJob(id: string) {
   return api<{ job: Job }>(`/api/jobs/${id}/cancel`, { method: "POST" });
+}
+
+/** Client or hired pro calls off the booking before work starts; held escrow is refunded. */
+export function cancelBooking(id: string, reason?: string) {
+  return api<{ job: Job; refunded: number }>(`/api/jobs/${id}/cancel-booking`, {
+    method: "POST",
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
 }
 
 type CompletionResult = {

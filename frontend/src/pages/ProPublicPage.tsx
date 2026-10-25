@@ -24,6 +24,7 @@ import {
 import { normalizeCaseStudies } from "../lib/caseStudies";
 import { useToast } from "../components/Toast";
 import { useAuth } from "../auth/AuthContext";
+import { BlockButton } from "../components/BlockButton";
 import { Heart, Send } from "lucide-react";
 import {
   DAY_KEYS,
@@ -143,6 +144,7 @@ export function ProPublicPage() {
           >
             <Heart className="h-4 w-4" /> Save
           </button>
+          {user?.role === "HOMEOWNER" && <BlockButton userId={profile.userId} name={profile.name} />}
         </div>
       }
     >

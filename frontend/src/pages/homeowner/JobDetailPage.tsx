@@ -8,6 +8,8 @@ import { ReviewPanel } from "./job/ReviewPanel";
 import { DisputeForm } from "./job/DisputeForm";
 import { JobConversations } from "../../components/JobConversations";
 import { ReportButton } from "../../components/ReportButton";
+import { BlockButton } from "../../components/BlockButton";
+import { CancelBookingButton, CancellationNote } from "../../components/CancelBookingButton";
 import { PaymentPanel } from "../../components/PaymentPanel";
 import { CompletionPhotosPanel } from "../../components/CompletionPhotosPanel";
 import { SchedulePanel } from "../../components/SchedulePanel";
@@ -208,7 +210,16 @@ export function JobDetailPage() {
               </div>
             )}
             <div className="flex flex-wrap gap-2 pt-2">
-              {liveWork && (
+              {job.status === "awarded" && (
+                <p className="w-full text-sm text-slate-600" data-testid="awaiting-start">
+                  You can confirm completion once the professional starts work.
+                </p>
+              )}
+              {job.status === "awarded" && <CancelBookingButton jobId={job.id} side="client" onDone={() => load()} />}
+              {job.status === "cancelled" && (
+                <CancellationNote cancelledBy={job.cancelledBy} reason={job.cancellationReason} />
+              )}
+              {(job.status === "in_progress" || job.status === "pending_confirmation") && (
                 <button
                   type="button"
                   className={
@@ -449,6 +460,12 @@ export function JobDetailPage() {
                 bids.find((b) => b.id === job.acceptedBidId)?.tradespersonId
               }
               label="Report this professional"
+            />
+          )}
+          {job.acceptedBidId && (
+            <BlockButton
+              userId={bids.find((b) => b.id === job.acceptedBidId)?.tradespersonId}
+              name={bids.find((b) => b.id === job.acceptedBidId)?.tradesperson?.name}
             />
           )}
         </aside>

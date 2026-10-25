@@ -23,6 +23,7 @@ type ProfileUpdate = {
   phone?: string | null;
   timezone?: string;
   notificationPrefs?: Record<string, boolean>;
+  emailNotifications?: boolean;
   quoteViewNudgeHours?: number | null;
   inviteTemplates?: TextTemplate[];
   counterTemplates?: TextTemplate[];

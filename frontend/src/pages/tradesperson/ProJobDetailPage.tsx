@@ -34,6 +34,8 @@ import { categoryLabel, fmtDate, fmtDateTime, money } from "../../lib/format";
 import { addFavorite, createReview, getJobReview, type JobReview } from "../../api/extras";
 import { ApiError } from "../../api/client";
 import { ReportButton } from "../../components/ReportButton";
+import { BlockButton } from "../../components/BlockButton";
+import { CancelBookingButton, CancellationNote } from "../../components/CancelBookingButton";
 import { StarRating } from "../../components/ui/StarRating";
 import { Heart } from "lucide-react";
 import { mergeCounterTemplates } from "../../lib/counterTemplates";
@@ -524,6 +526,12 @@ export function ProJobDetailPage() {
                 <button type="button" className="btn-primary" onClick={onStart}>
                   Start work
                 </button>
+              )}
+              {isAwardedToMe && job.status === "awarded" && (
+                <CancelBookingButton jobId={job.id} side="professional" onDone={() => load()} />
+              )}
+              {isAwardedToMe && job.status === "cancelled" && (
+                <CancellationNote cancelledBy={job.cancelledBy} reason={job.cancellationReason} />
               )}
               {isAwardedToMe && job.status === "in_progress" && (
                 <button type="button" className="btn-primary" onClick={onComplete}>
@@ -1134,6 +1142,7 @@ export function ProJobDetailPage() {
             <p className="mt-1 text-xs text-slate-400">Up to {job.maxBids} bids are accepted on this job.</p>
           </div>
           <ReportButton targetType="job" targetId={job.id} label="Report this job" />
+          <BlockButton userId={job.homeownerId} name="this client" />
         </aside>
       </div>
     </Shell>
