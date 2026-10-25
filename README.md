@@ -145,11 +145,11 @@ Frontend settings ([`frontend/.env.example`](frontend/.env.example)):
 
 | Command | What it covers |
 | --- | --- |
-| `cd backend && npm test` | 179 API tests on a throwaway database (`fixlocal_test`, Redis DB 15): every audit finding's repro, escrow timing (stage gates, dispute freeze, auto-confirm after a dispute), an 840-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), and a sweep proving no GET request changes any table |
+| `cd backend && npm test` | 186 API tests on a throwaway database (`fixlocal_test`, Redis DB 15; only DB connection settings are read from `backend/.env`): every audit finding's repro, escrow timing (stage gates, dispute freeze, auto-confirm after a dispute), an 840-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), and a sweep proving no GET request changes any table |
 | `cd backend && npm run test:coverage` | The same with a coverage report |
 | `cd backend && npm run test:tz` | Date logic under three server time zones (UTC, IST, US Pacific) |
 | `cd frontend && npm test` | UI unit tests: bid comparison (highlights, sorting, budget fit), token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary |
-| `cd frontend && npm run test:e2e` | 30 Playwright tests in a real browser against a real API |
+| `cd frontend && npm run test:e2e` | 31 Playwright tests in a real browser against a real API |
 | `npm run lint` / `npm run typecheck` | In both packages; lint fails on any warning |
 
 The end-to-end suite starts its own API on port **3101** with a fresh `fixlocal_e2e` database (Redis DB 14), and a Vite server on port **5174**. It never touches the development database or the servers on 3001/5173. The first run needs `npx playwright install chromium`.
