@@ -9,6 +9,7 @@ export type JobAction =
   | "confirm"
   | "auto_confirm"
   | "cancel"
+  | "cancel_booking"
   | "force_cancel"
   | "dispute"
   | "resolve_cancel"
@@ -21,9 +22,12 @@ export const TRANSITIONS: Record<JobAction, { from: JobStatus[]; to: JobStatus }
   award: { from: [S.OPEN], to: S.AWARDED },
   start: { from: [S.AWARDED], to: S.IN_PROGRESS },
   mark_done: { from: [S.IN_PROGRESS], to: S.PENDING_CONFIRMATION },
-  confirm: { from: [S.AWARDED, S.IN_PROGRESS, S.PENDING_CONFIRMATION], to: S.COMPLETED },
+  // Work has to have started before the client can sign it off (and release the remaining escrow).
+  confirm: { from: [S.IN_PROGRESS, S.PENDING_CONFIRMATION], to: S.COMPLETED },
   auto_confirm: { from: [S.PENDING_CONFIRMATION], to: S.COMPLETED },
   cancel: { from: [S.OPEN], to: S.CANCELLED },
+  // Either side can call off a hire before work starts; unreleased escrow goes back to the client.
+  cancel_booking: { from: [S.AWARDED], to: S.CANCELLED },
   force_cancel: {
     from: [S.OPEN, S.BIDDING_CLOSED, S.AWARDED, S.IN_PROGRESS, S.PENDING_CONFIRMATION, S.DISPUTED],
     to: S.CANCELLED,
@@ -44,9 +48,10 @@ const MESSAGES: Record<JobAction, string> = {
   award: "Bids can only be accepted while the job is open",
   start: "Work can only be started on an awarded job",
   mark_done: "Only work in progress can be marked done",
-  confirm: "This job can't be marked complete in its current status",
+  confirm: "Work has to be started before the job can be marked complete",
   auto_confirm: "Job is not awaiting confirmation",
   cancel: "Only open jobs can be cancelled",
+  cancel_booking: "A booking can only be called off before work starts",
   force_cancel: "Job is already closed",
   dispute: "Disputes can only be opened on awarded, in-progress, awaiting-confirmation or completed jobs",
   resolve_cancel: "Job is not in dispute",

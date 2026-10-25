@@ -63,6 +63,13 @@ export class User {
   @Column({ type: "jsonb", nullable: true })
   notificationPrefs?: Record<string, boolean> | null;
 
+  /** When the user accepted the Terms of Service / Privacy Policy, and which version. */
+  @Column({ type: "timestamptz", nullable: true })
+  termsAcceptedAt?: Date | null;
+
+  @Column({ type: "varchar", length: 16, nullable: true })
+  termsVersion?: string | null;
+
   /** Hours before "viewed but no reply" nudge (null = env/default 4). */
   @Column({ type: "int", nullable: true })
   quoteViewNudgeHours?: number | null;

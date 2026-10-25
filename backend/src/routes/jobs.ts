@@ -35,6 +35,7 @@ router.post(
   "/",
   requireRole(HOMEOWNER),
   requireVerifiedEmail,
+  limiter("jobPosts"),
   limiter("uploads"),
   optionalMultipart(uploadJobPhotos),
   validate({ body: js.createJobBody }),
@@ -78,6 +79,7 @@ router.post(
   "/:id/bids",
   requireRole(PRO),
   requireVerifiedEmail,
+  limiter("bids"),
   params,
   optionalMultipart(uploadQuoteAttachment),
   validate({ params: js.jobIdParams, body: placeBidBody }),
@@ -85,6 +87,12 @@ router.post(
 );
 
 router.post("/:id/start", requireRole(PRO), params, status.startJob);
+router.post(
+  "/:id/cancel-booking",
+  requireRole(HOMEOWNER, PRO),
+  validate({ params: js.jobIdParams, body: js.cancelBookingBody }),
+  status.cancelBooking
+);
 router.post("/:id/mark-done", requireRole(PRO), params, status.markDone);
 router.post("/:id/confirm", requireRole(HOMEOWNER, ADMIN), params, idempotent, status.confirmComplete);
 router.post("/:id/complete", params, idempotent, status.completeJob);

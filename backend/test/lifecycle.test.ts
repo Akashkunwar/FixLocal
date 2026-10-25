@@ -45,10 +45,18 @@ describe("work lifecycle (H-6)", () => {
     expect((await api().post(`/api/jobs/${job.id}/confirm`).set(worker.auth)).status).toBe(403);
   });
 
-  it("a client can confirm straight from awarded (releases everything)", async () => {
-    const { owner, job } = await awardedJob();
-    const res = await api().post(`/api/jobs/${job.id}/confirm`).set(owner.auth);
-    expect(res.status).toBe(200);
+  it("a job can't be completed (releasing all escrow) before work has started", async () => {
+    const { owner, worker, job } = await awardedJob();
+    const early = await api().post(`/api/jobs/${job.id}/confirm`).set(owner.auth);
+    expect(early.status).toBe(409);
+    expect(early.body.code).toBe("INVALID_STATUS");
+    expect((await api().post(`/api/jobs/${job.id}/complete`).set(owner.auth)).status).toBe(409);
+    const row = await jobRow(job.id);
+    expect(row.status).toBe("awarded");
+    expect(row.paymentStatus).not.toBe("released");
+    // Once the pro has started, the client may sign off (even before "mark done").
+    await api().post(`/api/jobs/${job.id}/start`).set(worker.auth).expect(200);
+    await api().post(`/api/jobs/${job.id}/confirm`).set(owner.auth).expect(200);
     expect((await jobRow(job.id)).paymentStatus).toBe("released");
   });
 

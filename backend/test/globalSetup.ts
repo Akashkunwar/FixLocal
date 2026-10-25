@@ -1,7 +1,6 @@
 import { DataSource } from "typeorm";
 import fs from "fs";
-import { Baseline1790000000001 } from "../src/migrations/1790000000001-Baseline";
-import { AuditHardening1790000000002 } from "../src/migrations/1790000000002-AuditHardening";
+import { ALL_MIGRATIONS } from "../src/db/migrationList";
 
 /** Fresh schema for the whole run: drop everything, then apply every migration. */
 export default async function setup() {
@@ -24,7 +23,7 @@ export default async function setup() {
   const ds = new DataSource({
     ...connection,
     database: dbName,
-    migrations: [Baseline1790000000001, AuditHardening1790000000002],
+    migrations: ALL_MIGRATIONS,
   });
   await ds.initialize();
   if (!/test/.test(ds.options.database as string)) {

@@ -180,11 +180,19 @@ export const ACTIONS: Action[] = [
     expect: rule((s, a) => (a === "awardedPro" ? (s === "in_progress" ? 200 : 409) : 403)),
   },
   {
+    name: "cancel booking before work starts",
+    method: "post",
+    path: (id) => `/api/jobs/${id}/cancel-booking`,
+    body: { reason: "Matrix cancel" },
+    mutates: true,
+    expect: rule((s, a) => (a === "owner" || a === "awardedPro" ? (s === "awarded" ? 200 : 409) : 403)),
+  },
+  {
     name: "confirm completion",
     method: "post",
     path: (id) => `/api/jobs/${id}/confirm`,
     mutates: true,
-    expect: rule((s, a) => (a === "owner" || a === "admin" ? (liveWork(s) ? 200 : 409) : 403)),
+    expect: rule((s, a) => (a === "owner" || a === "admin" ? (s === "in_progress" || s === "pending_confirmation" ? 200 : 409) : 403)),
   },
   {
     name: "open dispute",

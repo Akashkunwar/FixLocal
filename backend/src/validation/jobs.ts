@@ -215,3 +215,5 @@ export const analyticsOwnerQuery = z.object({
 });
 
 export const suggestedQuery = z.object({ limit: limit(10) });
+
+export const cancelBookingBody = z.object({ reason: z.string().trim().max(500).optional() }).strict();

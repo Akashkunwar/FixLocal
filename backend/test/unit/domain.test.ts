@@ -19,9 +19,10 @@ describe("job state machine", () => {
     award: [JobStatus.OPEN],
     start: [JobStatus.AWARDED],
     mark_done: [JobStatus.IN_PROGRESS],
-    confirm: [JobStatus.AWARDED, JobStatus.IN_PROGRESS, JobStatus.PENDING_CONFIRMATION],
+    confirm: [JobStatus.IN_PROGRESS, JobStatus.PENDING_CONFIRMATION],
     auto_confirm: [JobStatus.PENDING_CONFIRMATION],
     cancel: [JobStatus.OPEN],
+    cancel_booking: [JobStatus.AWARDED],
     dispute: [JobStatus.AWARDED, JobStatus.IN_PROGRESS, JobStatus.PENDING_CONFIRMATION, JobStatus.COMPLETED],
     resolve_cancel: [JobStatus.DISPUTED],
     resolve_complete: [JobStatus.DISPUTED],
@@ -164,7 +165,10 @@ describe("configuration (M-9)", () => {
     expect(() => loadConfig({ ...base, NODE_ENV: "production" })).toThrow(/JWT_SECRET/);
     expect(() => loadConfig({ ...base, NODE_ENV: "production", JWT_SECRET: "change-me-in-production" })).toThrow();
     expect(() => loadConfig({ NODE_ENV: "production", JWT_SECRET: "y".repeat(40) })).toThrow(/FILE_URL_SECRET/);
-    expect(loadConfig({ ...base, NODE_ENV: "production", JWT_SECRET: "y".repeat(40) }).isProd).toBe(true);
+    expect(() => loadConfig({ ...base, NODE_ENV: "production", JWT_SECRET: "y".repeat(40) })).toThrow(/MAIL_PROVIDER/);
+    expect(
+      loadConfig({ ...base, NODE_ENV: "production", JWT_SECRET: "y".repeat(40), MAIL_PROVIDER: "smtp", SMTP_URL: "smtp://u:p@mail.test:587" }).isProd,
+    ).toBe(true);
   });
   it("requires a secret at all", () => {
     expect(() => loadConfig({ NODE_ENV: "development" })).toThrow(/JWT_SECRET/);

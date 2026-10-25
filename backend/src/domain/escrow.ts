@@ -5,6 +5,7 @@ import { Job, JobStatus, PaymentStatus } from "../entities/Job";
 import { LedgerEntry, LedgerType } from "../entities/LedgerEntry";
 import { MilestoneStatus, PaymentMilestone } from "../entities/PaymentMilestone";
 import { badRequest, conflict, notFound } from "../http/errors";
+import { paymentProvider } from "../services/payments";
 
 export const MILESTONE_TEMPLATE = [
   { label: "Deposit", percent: 30 },
@@ -91,19 +92,34 @@ async function ledger(
   payeeUserId: string | null
 ) {
   if (!entries.length) return;
-  await manager.insert(
-    LedgerEntry,
-    entries.map((e) => ({
+  const provider = paymentProvider();
+  const rows = [];
+  for (const e of entries) {
+    const amount = round2(e.amount);
+    // Milestone + movement type is unique (a milestone is held, then released or refunded once).
+    const { reference } = await provider.record({
+      type: e.type,
+      jobId: job.id,
+      milestoneId: e.milestoneId ?? null,
+      amount,
+      currency: "INR",
+      payerUserId: job.homeownerId,
+      payeeUserId,
+      idempotencyKey: `${job.id}:${e.milestoneId ?? "job"}:${e.type}`,
+    });
+    rows.push({
       jobId: job.id,
       milestoneId: e.milestoneId ?? null,
       type: e.type,
-      amount: round2(e.amount),
+      amount,
       payerUserId: job.homeownerId,
       payeeUserId,
       actorUserId,
       note: e.note ?? null,
-    }))
-  );
+      providerRef: reference,
+    });
+  }
+  await manager.insert(LedgerEntry, rows);
 }
 
 /** Called inside the accept transaction. Unique (jobId, sequence) blocks double escrow. */
