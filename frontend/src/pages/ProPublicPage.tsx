@@ -227,14 +227,14 @@ export function ProPublicPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
+        <div className="min-w-0 lg:col-span-2 space-y-6">
           <section className="card p-6">
             <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-100 text-lg font-bold text-brand-800">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand-100 text-lg font-bold text-brand-800">
                 {initials(profile.name, profile.email)}
               </div>
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <StarRating value={Math.round(Number(profile.averageRating))} readonly />
                   <span className="text-sm text-slate-500">({profile.reviewCount})</span>
                   <Badge status={profile.verificationStatus} />

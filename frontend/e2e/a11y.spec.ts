@@ -19,6 +19,17 @@ async function audit(page: Page, name: string) {
     impact: v.impact,
     nodes: v.nodes.slice(0, 5).map((n) => `${n.target.join(" ")} :: ${n.failureSummary?.split("\n").slice(1, 2).join("")}`),
   }));
+  // WCAG 1.4.10 Reflow: nothing may force sideways scrolling (checked at every size, matters at 390 px).
+  const overflow = await page.evaluate(() => {
+    const width = document.documentElement.clientWidth;
+    if (document.documentElement.scrollWidth <= width + 1) return null;
+    const wide = [...document.querySelectorAll("body *")]
+      .filter((el) => el.getBoundingClientRect().right > width + 1 && !el.closest(".leaflet-container"))
+      .slice(-3)
+      .map((el) => `${el.tagName.toLowerCase()}.${String(el.className).split(" ").slice(0, 4).join(".")}`);
+    return { scrollWidth: document.documentElement.scrollWidth, width, wide };
+  });
+  if (overflow) summary.push({ page: name, rule: "reflow (horizontal scroll)", impact: "serious", nodes: overflow.wide });
   if (summary.length) console.log(JSON.stringify(summary, null, 2));
   return summary;
 }
