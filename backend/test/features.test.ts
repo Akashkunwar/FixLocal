@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { VerificationStatus } from "../src/entities/TradespersonProfile";
 import { alertMatchesJob } from "../src/utils/jobAlerts";
 import { AppDataSource } from "../src/data-source";
+import { consoleMailer } from "../src/services/mailer";
+import { sendJobAlertDigests } from "../src/utils/jobAlertDigest";
+import { istTimeOn } from "../src/domain/time";
 import { acceptBid, admin, api, awardedJob, client, createJob, placeBid, pro, rows } from "./helpers";
 
 const alertsOf = async (userId: string) =>
@@ -55,10 +58,10 @@ describe("job alerts for professionals", () => {
     const created = await api()
       .post("/api/job-alerts")
       .set(p.auth)
-      .send({ name: "Plumbing near me", categories: ["plumbing"], lat: 12.9784, lng: 77.6408, radiusKm: 5 });
+      .send({ name: "Plumbing near me", frequency: "instant", categories: ["plumbing"], lat: 12.9784, lng: 77.6408, radiusKm: 5 });
     expect(created.status).toBe(201);
     // A second, overlapping alert must not double-notify.
-    await api().post("/api/job-alerts").set(p.auth).send({ name: "Anything in Bengaluru", city: "Bengaluru" }).expect(201);
+    await api().post("/api/job-alerts").set(p.auth).send({ name: "Anything in Bengaluru", frequency: "instant", city: "Bengaluru" }).expect(201);
 
     const j = await createJob(c, { title: "Bathroom tap leaking" });
     await createJob(c, { title: "Rewire the hall", category: "electrical", lat: 12.9784, lng: 77.6408 });
@@ -83,7 +86,7 @@ describe("job alerts for professionals", () => {
     const blocked = await pro();
     const other = await pro();
     for (const p of [pending, blocked]) {
-      await api().post("/api/job-alerts").set(p.auth).send({ name: "All", city: "Bengaluru" }).expect(201);
+      await api().post("/api/job-alerts").set(p.auth).send({ name: "All", frequency: "instant", city: "Bengaluru" }).expect(201);
     }
     await api().post("/api/blocks").set(c.auth).send({ userId: blocked.user.id }).expect(201);
     await createJob(c, { title: "Silent job" });
@@ -95,6 +98,43 @@ describe("job alerts for professionals", () => {
     expect((await api().delete(`/api/job-alerts/${mine.id}`).set(other.auth)).status).toBe(404);
     expect((await api().get("/api/job-alerts").set(c.auth)).status).toBe(403);
     expect((await api().delete(`/api/job-alerts/${mine.id}`).set(blocked.auth)).status).toBe(200);
+  });
+
+  it("daily alerts wait for one 8 AM IST digest that is never sent twice", async () => {
+    const p = await pro();
+    const instant = await pro();
+    const c = await client();
+    const created = await api().post("/api/job-alerts").set(p.auth).send({ name: "Daily Bengaluru", city: "Bengaluru" });
+    expect(created.body.alert.frequency).toBe("daily");
+    await api().post("/api/job-alerts").set(instant.auth).send({ name: "Now", frequency: "instant", city: "Bengaluru" }).expect(201);
+    await createJob(c, { title: "Digest job one" });
+    await createJob(c, { title: "Digest job two" });
+    expect(await alertsOf(p.user.id)).toHaveLength(0);
+    expect(await alertsOf(instant.user.id)).toHaveLength(2);
+
+    const at8 = new Date(istTimeOn(new Date(), 8).getTime() + 5 * 60_000);
+    expect(await sendJobAlertDigests(new Date(at8.getTime() - 3600_000))).toBe(0); // 7:05 IST: too early
+    const runs = await Promise.all([sendJobAlertDigests(at8), sendJobAlertDigests(at8), sendJobAlertDigests(new Date(at8.getTime() + 3600_000))]);
+    expect(runs.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(1);
+    const digest = await alertsOf(p.user.id);
+    expect(digest).toHaveLength(1);
+    expect(digest[0].title).toBe("New jobs match your alerts");
+    expect(digest[0].body).toMatch(/^2 jobs from the last 24 hours/);
+    const mails = consoleMailer.outbox.filter((m) => m.to === p.user.email && m.subject.includes("matched your alerts"));
+    expect(mails).toHaveLength(1);
+    expect(mails[0].text).toContain("Digest job one");
+    expect(mails[0].text).toContain("Digest job two");
+    expect(await sendJobAlertDigests(new Date(at8.getTime() + 2 * 3600_000))).toBe(0);
+
+    // Next IST day, in Hindi: only the new job, and the email is in Hindi.
+    await api().patch("/api/auth/me").set(p.auth).send({ language: "hi" }).expect(200);
+    const j3 = await createJob(c, { title: "Digest job three" });
+    const day2 = new Date(at8.getTime() + 24 * 3600_000);
+    await AppDataSource.query(`UPDATE "job_alert_matches" SET "createdAt" = $1 WHERE "jobId" = $2`, [new Date(day2.getTime() - 3600_000), j3.id]);
+    expect(await sendJobAlertDigests(day2)).toBe(1);
+    const hi = consoleMailer.outbox.find((m) => m.to === p.user.email && m.text.includes("Digest job three"));
+    expect(hi?.subject).toContain("नए काम");
+    expect(hi?.text).not.toContain("Digest job one");
   });
 
   it("validates input and caps alerts per pro", async () => {

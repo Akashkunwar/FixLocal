@@ -12,11 +12,17 @@ import {
   listJobAlerts,
   previewJobAlert,
   updateJobAlert,
+  type AlertFrequency,
   type AlertPreview,
   type JobAlert,
 } from "../../api/features";
 import { CATEGORIES, categoryLabel, fmtDate } from "../../lib/format";
 import { RADII, criteriaOf, describeAlert, type AlertDraft as Draft } from "../../lib/jobAlerts";
+
+const FREQUENCIES: { value: AlertFrequency; label: string; hint: string }[] = [
+  { value: "daily", label: "Daily digest", hint: "One summary around 8 AM with every match from the last 24 hours." },
+  { value: "instant", label: "Instant", hint: "A notification as soon as each matching job is posted." },
+];
 
 export function JobAlertsPage() {
   const [params] = useSearchParams();
@@ -27,6 +33,7 @@ export function JobAlertsPage() {
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<AlertPreview | null>(null);
+  const [frequency, setFrequency] = useState<AlertFrequency>("daily");
   const [draft, setDraft] = useState<Draft>(() => ({
     name: "",
     categories: params.get("category") ? [params.get("category")!] : [],
@@ -78,14 +85,27 @@ export function JobAlertsPage() {
       const name =
         draft.name.trim() ||
         `${draft.categories.length ? draft.categories.map(categoryLabel).join(", ") : "All jobs"}${draft.city ? ` in ${draft.city}` : ""}`.slice(0, 80);
-      const { alert } = await createJobAlert({ ...criteria, name });
+      const { alert } = await createJobAlert({ ...criteria, name, frequency });
       setAlerts((a) => [alert, ...a]);
       setDraft((d) => ({ ...d, name: "" }));
-      success("Job alert saved. We'll notify you when a matching job is posted.");
+      success(
+        frequency === "daily"
+          ? "Job alert saved. Matching jobs arrive in one summary each morning."
+          : "Job alert saved. We'll notify you as soon as a matching job is posted."
+      );
     } catch (err) {
       error((err as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function onFrequency(a: JobAlert, next: AlertFrequency) {
+    try {
+      const { alert } = await updateJobAlert(a.id, { frequency: next });
+      setAlerts((list) => list.map((x) => (x.id === a.id ? alert : x)));
+    } catch (err) {
+      error((err as Error).message);
     }
   }
 
@@ -201,6 +221,26 @@ export function JobAlertsPage() {
             </div>
           </div>
 
+          <fieldset>
+            <legend className="label">How often</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {FREQUENCIES.map((f) => (
+                <label
+                  key={f.value}
+                  className={`flex min-h-[44px] cursor-pointer gap-2 rounded-xl border p-3 text-sm ${
+                    frequency === f.value ? "border-brand-500 bg-brand-50" : "border-slate-200"
+                  }`}
+                >
+                  <input type="radio" name="alert-frequency" value={f.value} checked={frequency === f.value} onChange={() => setFrequency(f.value)} className="mt-0.5" />
+                  <span>
+                    <span className="block font-semibold text-slate-900">{f.label}</span>
+                    <span className="block text-slate-600">{f.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
           <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700" aria-live="polite">
             {preview == null ? (
               "Checking open jobs…"
@@ -246,6 +286,18 @@ export function JobAlertsPage() {
                         {a.active ? "Active" : "Paused"} · {a.matchCount} match{a.matchCount === 1 ? "" : "es"}
                         {a.lastMatchedAt ? ` · last ${fmtDate(a.lastMatchedAt)}` : ""}
                       </p>
+                      <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                        <span>Delivery</span>
+                        <select
+                          className="input !w-auto !py-1 text-xs"
+                          value={a.frequency}
+                          onChange={(e) => onFrequency(a, e.target.value as AlertFrequency)}
+                          aria-label={`How often for ${a.name}`}
+                        >
+                          <option value="daily">Daily digest</option>
+                          <option value="instant">Instant</option>
+                        </select>
+                      </label>
                     </div>
                     <div className="flex shrink-0 gap-1">
                       <button type="button" className="btn-ghost btn-sm" onClick={() => onToggle(a)} aria-label={`${a.active ? "Pause" : "Resume"} ${a.name}`}>

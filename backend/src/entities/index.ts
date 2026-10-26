@@ -21,6 +21,8 @@ export { Report } from "./Report";
 export { UserTemplate, TEMPLATE_KINDS } from "./UserTemplate";
 export { UserBlock } from "./UserBlock";
 export { JobAlert } from "./JobAlert";
+export { JobAlertDigest } from "./JobAlertDigest";
+export { JobAlertMatch } from "./JobAlertMatch";
 
 import { User } from "./User";
 import { TradespersonProfile } from "./TradespersonProfile";
@@ -45,6 +47,8 @@ import { Report } from "./Report";
 import { UserTemplate } from "./UserTemplate";
 import { UserBlock } from "./UserBlock";
 import { JobAlert } from "./JobAlert";
+import { JobAlertDigest } from "./JobAlertDigest";
+import { JobAlertMatch } from "./JobAlertMatch";
 
 export const ALL_ENTITIES = [
   User,
@@ -70,4 +74,6 @@ export const ALL_ENTITIES = [
   UserTemplate,
   UserBlock,
   JobAlert,
+  JobAlertMatch,
+  JobAlertDigest,
 ];

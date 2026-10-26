@@ -1,6 +1,7 @@
 import { AppDataSource } from "../data-source";
 import { Job, JobStatus } from "../entities/Job";
 import { JobAlert } from "../entities/JobAlert";
+import { JobAlertMatch } from "../entities/JobAlertMatch";
 import { NotificationType } from "../entities/Notification";
 import { normalizeText, containsPhrase } from "../domain/categories";
 import { haversineKm } from "./geo";
@@ -66,14 +67,21 @@ export async function notifyJobAlerts(job: Job): Promise<number> {
     )
     .getMany();
 
+  // Per pro: an instant alert wins (notify now); otherwise the job waits for the daily digest.
   const firstMatchPerPro = new Map<string, JobAlert>();
+  const digestPerPro = new Map<string, JobAlert>();
   const matchedAlertIds: string[] = [];
   for (const a of candidates) {
     if (!alertMatchesJob(a, job)) continue;
     matchedAlertIds.push(a.id);
-    if (!firstMatchPerPro.has(a.userId)) firstMatchPerPro.set(a.userId, a);
+    if (a.frequency === "instant") {
+      if (!firstMatchPerPro.has(a.userId)) firstMatchPerPro.set(a.userId, a);
+    } else if (!digestPerPro.has(a.userId)) {
+      digestPerPro.set(a.userId, a);
+    }
   }
-  if (!firstMatchPerPro.size) return 0;
+  for (const id of firstMatchPerPro.keys()) digestPerPro.delete(id);
+  if (!matchedAlertIds.length) return 0;
 
   if (matchedAlertIds.length) {
     await AppDataSource.getRepository(JobAlert)
@@ -83,6 +91,16 @@ export async function notifyJobAlerts(job: Job): Promise<number> {
       .whereInIds(matchedAlertIds)
       .execute();
   }
+
+  if (digestPerPro.size) {
+    await AppDataSource.createQueryBuilder()
+      .insert()
+      .into(JobAlertMatch)
+      .values([...digestPerPro.values()].map((a) => ({ userId: a.userId, jobId: job.id, alertName: a.name })))
+      .orIgnore()
+      .execute();
+  }
+  if (!firstMatchPerPro.size) return 0;
 
   const where = [job.area, job.city].filter(Boolean).join(", ");
   const sent = await createNotifications(

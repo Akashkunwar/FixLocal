@@ -19,6 +19,7 @@ export function toJobAlert(a: JobAlert) {
     minBudget: a.minBudget ?? null,
     siteType: a.siteType ?? null,
     active: a.active,
+    frequency: a.frequency,
     matchCount: a.matchCount,
     lastMatchedAt: a.lastMatchedAt ?? null,
     createdAt: a.createdAt,

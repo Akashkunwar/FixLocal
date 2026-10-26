@@ -43,6 +43,7 @@ export function toSelfUser(user: User) {
     emailVerified: !!user.emailVerifiedAt,
     termsAccepted: user.termsVersion === TERMS_VERSION,
     timezone: user.timezone,
+    language: user.language === "hi" ? "hi" : "en",
     notificationPrefs: mergedNotificationPrefs(user.notificationPrefs),
     emailNotifications: user.notificationPrefs?.email !== false,
     quoteViewNudgeHours:

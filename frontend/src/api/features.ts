@@ -12,10 +12,13 @@ export type JobAlertCriteria = {
   siteType: "residential" | "office" | null;
 };
 
+export type AlertFrequency = "instant" | "daily";
+
 export type JobAlert = JobAlertCriteria & {
   id: string;
   name: string;
   active: boolean;
+  frequency: AlertFrequency;
   matchCount: number;
   lastMatchedAt: string | null;
   createdAt: string;
@@ -30,11 +33,11 @@ export function listJobAlerts() {
   return api<{ alerts: JobAlert[]; max: number }>("/api/job-alerts");
 }
 
-export function createJobAlert(body: JobAlertCriteria & { name: string }) {
+export function createJobAlert(body: JobAlertCriteria & { name: string; frequency: AlertFrequency }) {
   return api<{ alert: JobAlert }>("/api/job-alerts", { method: "POST", body: JSON.stringify(body) });
 }
 
-export function updateJobAlert(id: string, body: Partial<JobAlertCriteria & { name: string; active: boolean }>) {
+export function updateJobAlert(id: string, body: Partial<JobAlertCriteria & { name: string; active: boolean; frequency: AlertFrequency }>) {
   return api<{ alert: JobAlert }>(`/api/job-alerts/${id}`, { method: "PATCH", body: JSON.stringify(body) });
 }
 

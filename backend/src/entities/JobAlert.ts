@@ -1,6 +1,9 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { User } from "./User";
 
+export const JOB_ALERT_FREQUENCIES = ["instant", "daily"] as const;
+export type JobAlertFrequency = (typeof JOB_ALERT_FREQUENCIES)[number];
+
 /**
  * A professional's standing search: "tell me when a job like this is posted".
  * Matched against every new open job (see utils/jobAlerts.ts).
@@ -51,6 +54,10 @@ export class JobAlert {
 
   @Column({ type: "boolean", default: true })
   active!: boolean;
+
+  /** "instant": notify as each matching job is posted. "daily": one digest at about 8 AM IST. */
+  @Column({ type: "varchar", length: 8, default: "daily" })
+  frequency!: JobAlertFrequency;
 
   @Column({ type: "int", default: 0 })
   matchCount!: number;

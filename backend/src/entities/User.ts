@@ -67,6 +67,10 @@ export class User {
   notificationPrefs?: Record<string, boolean> | null;
 
   /** When the user accepted the Terms of Service / Privacy Policy, and which version. */
+  /** Interface and email language ("en" or "hi"); synced across the user's devices. */
+  @Column({ type: "varchar", length: 5, default: "en" })
+  language!: string;
+
   @Column({ type: "timestamptz", nullable: true })
   termsAcceptedAt?: Date | null;
 

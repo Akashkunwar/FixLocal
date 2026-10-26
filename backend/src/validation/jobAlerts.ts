@@ -1,3 +1,4 @@
+import { JOB_ALERT_FREQUENCIES } from "../entities/JobAlert";
 import { z } from "zod";
 import { JobCategory } from "../entities/Job";
 import { enumOf, latitude, longitude, nullableText, optionalInt, requiredText } from "./common";
@@ -20,7 +21,7 @@ const pinNeedsRadius = (v: { lat?: number | null; lng?: number | null; radiusKm?
 const pinMessage = { message: "A radius needs a map location (lat and lng)", path: ["radiusKm"] };
 
 export const jobAlertBody = z
-  .object({ name: requiredText(80), active: z.boolean().default(true), ...criteria })
+  .object({ name: requiredText(80), active: z.boolean().default(true), frequency: z.enum(JOB_ALERT_FREQUENCIES).default("daily"), ...criteria })
   .strict()
   .refine(pinNeedsRadius, pinMessage);
 
@@ -28,6 +29,7 @@ export const updateJobAlertBody = z
   .object({
     name: requiredText(80).optional(),
     active: z.boolean().optional(),
+    frequency: z.enum(JOB_ALERT_FREQUENCIES).optional(),
     ...criteria,
   })
   .strict();

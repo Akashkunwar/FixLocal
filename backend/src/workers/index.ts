@@ -14,6 +14,8 @@ import { transitionJob } from "../domain/jobStateMachine";
 import { releaseRemaining } from "../domain/escrow";
 import { viewedNoReplyState } from "../controllers/bidController";
 import { logger } from "../logger";
+import { sendJobAlertDigests } from "../utils/jobAlertDigest";
+import { JobAlertDigest } from "../entities/JobAlertDigest";
 import { HttpError } from "../http/errors";
 
 const LOCK_KEY = 7_140_291;
@@ -122,6 +124,7 @@ export async function cleanupExpired(now = new Date()) {
   await AppDataSource.getRepository(IdempotencyKey).delete({ createdAt: LessThan(new Date(now.getTime() - day)) });
   await AppDataSource.getRepository(RefreshToken).delete({ expiresAt: LessThan(new Date(now.getTime() - 7 * day)) });
   await AppDataSource.getRepository(EmailToken).delete({ expiresAt: LessThan(new Date(now.getTime() - 7 * day)) });
+  await AppDataSource.getRepository(JobAlertDigest).delete({ createdAt: LessThan(new Date(now.getTime() - 60 * day)) });
 }
 
 /** Only one API instance runs the jobs at a time (session-level advisory lock on a dedicated connection). */
@@ -134,8 +137,9 @@ export async function runWorkersOnce(now = new Date()) {
     try {
       const autoConfirmed = await autoConfirmJobs(now);
       const nudges = await sendQuoteViewNudges(now);
+      const digests = await sendJobAlertDigests(now);
       await cleanupExpired(now);
-      return { skipped: false, autoConfirmed, nudges };
+      return { skipped: false, autoConfirmed, nudges, digests };
     } finally {
       await runner.query(`SELECT pg_advisory_unlock($1)`, [LOCK_KEY]);
     }

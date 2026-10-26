@@ -15,9 +15,12 @@ test("a pro saves a job alert and is notified when a matching job is posted", as
   await page.getByLabel("City").fill("Bengaluru");
   await page.getByLabel("Name (optional)").fill("E2E electrical alert");
   await expect(page.getByText(/open jobs? from the last 30 days match right now/)).toBeVisible();
+  await expect(page.getByRole("radio", { name: /Daily digest/ })).toBeChecked();
+  await page.getByRole("radio", { name: /Instant/ }).check();
   await page.getByRole("button", { name: "Save alert" }).click();
   const card = page.getByRole("listitem").filter({ hasText: "E2E electrical alert" });
   await expect(card).toContainText("Electrical · Bengaluru");
+  await expect(card.getByLabel("How often for E2E electrical alert")).toHaveValue("instant");
 
   const title = `E2E alert job ${Date.now().toString(36)}`;
   const job = await postJob(request, client, { title, category: "electrical" });
@@ -26,6 +29,15 @@ test("a pro saves a job alert and is notified when a matching job is posted", as
   const hits = notifications.filter((n) => n.type === "job_alert" && n.title.includes(title));
   expect(hits).toHaveLength(1);
   expect(hits[0].link).toBe(`/professional/jobs/${job.id}`);
+
+  // Switch to the daily digest: new matches wait for the morning summary instead.
+  await card.getByLabel("How often for E2E electrical alert").selectOption("daily");
+  await page.reload();
+  await expect(page.getByRole("listitem").filter({ hasText: "E2E electrical alert" }).getByLabel("How often for E2E electrical alert")).toHaveValue("daily");
+  const quiet = `E2E digest job ${Date.now().toString(36)}`;
+  await postJob(request, client, { title: quiet, category: "electrical" });
+  const after = await apiCall<{ notifications: Notif[] }>(request, pro, "get", "/api/notifications");
+  expect(after.notifications.some((n) => n.title.includes(quiet))).toBe(false);
 
   // Pause, then delete (keeps the shared e2e data quiet for other specs).
   await card.getByRole("button", { name: "Pause E2E electrical alert" }).click();

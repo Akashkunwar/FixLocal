@@ -86,3 +86,22 @@ export function localDatesAhead(days: number, tz?: string | null, now = new Date
   }
   return out;
 }
+
+/** India has no daylight saving: IST is always UTC+5:30. */
+const IST_OFFSET_MIN = 330;
+
+/** Calendar date, hour and minute in IST for an instant. */
+export function istParts(date: Date) {
+  const shifted = new Date(date.getTime() + IST_OFFSET_MIN * 60_000);
+  return {
+    date: shifted.toISOString().slice(0, 10),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
+  };
+}
+
+/** The instant of hh:00 IST on the IST calendar day of `date`. */
+export function istTimeOn(date: Date, hour: number): Date {
+  const { date: day } = istParts(date);
+  return new Date(Date.parse(`${day}T00:00:00Z`) + (hour * 60 - IST_OFFSET_MIN) * 60_000);
+}

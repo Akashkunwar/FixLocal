@@ -1,3 +1,6 @@
+import { JobAlertMatch } from "../entities/JobAlertMatch";
+import { JobAlertDigest } from "../entities/JobAlertDigest";
+import { asLang, emails } from "../domain/i18n";
 import type { Request, Response } from "express";
 import { EMAIL_PREF_KEY } from "../utils/notifications";
 import { TERMS_VERSION } from "../domain/legal";
@@ -77,19 +80,12 @@ async function sendEmailToken(user: User, type: EmailTokenType) {
     repo.create({ userId: user.id, type, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + ttlMs) })
   );
   // Mail goes out in the background so response time doesn't reveal whether an account exists.
-  if (type === "verify") {
-    void sendMail({
-      to: user.email,
-      subject: "Verify your FixLocal email",
-      text: `Hi ${user.name || "there"},\n\nConfirm your email to start using FixLocal:\n${appLink(`/verify-email?token=${raw}`)}\n\nThis link expires in 48 hours.`,
-    });
-  } else {
-    void sendMail({
-      to: user.email,
-      subject: "Reset your FixLocal password",
-      text: `Someone asked to reset the password for this account.\n\nChoose a new password here:\n${appLink(`/reset-password?token=${raw}`)}\n\nThis link expires in 1 hour. If this wasn't you, you can ignore this email.`,
-    });
-  }
+  const lang = asLang(user.language);
+  const mail =
+    type === "verify"
+      ? emails.verify(lang, { name: user.name, link: appLink(`/verify-email?token=${raw}`) })
+      : emails.reset(lang, { link: appLink(`/reset-password?token=${raw}`) });
+  void sendMail({ to: user.email, ...mail });
   return raw;
 }
 
@@ -120,18 +116,18 @@ async function notifyExistingOwner(existing: User) {
   }
   void sendMail({
     to: existing.email,
-    subject: "Someone tried to sign up with your email",
-    text:
-      `Hi ${existing.name || "there"},\n\nSomeone just tried to create a FixLocal account with this email address, ` +
-      `but you already have one.\n\nIf it was you, log in here:\n${appLink("/login")}\n\n` +
-      `Forgot your password? Reset it here:\n${appLink("/forgot-password")}\n\nIf it wasn't you, you can ignore this email; nothing has changed.`,
+    ...emails.existingAccount(asLang(existing.language), {
+      name: existing.name,
+      login: appLink("/login"),
+      forgot: appLink("/forgot-password"),
+    }),
   });
 }
 
 const isUniqueViolation = (err: unknown) => (err as { code?: string } | null)?.code === "23505";
 
 export async function register(req: Request, res: Response) {
-  const { email, password, role, name, phone, referralCode } = req.valid.body;
+  const { email, password, role, name, phone, referralCode, language } = req.valid.body;
   // Hash first in every case so new and existing addresses take the same time.
   const passwordHash = await hashPassword(password);
   const referrer = referralCode
@@ -172,6 +168,7 @@ export async function register(req: Request, res: Response) {
           termsAcceptedAt: new Date(),
           termsVersion: TERMS_VERSION,
           referredById: referrer && !referrer.deletedAt ? referrer.id : null,
+          language: language ?? "en",
         })
       );
       if (role === UserRole.TRADESPERSON) {
@@ -276,6 +273,7 @@ export async function updateMe(req: Request, res: Response) {
     user.notificationPrefs = { ...(user.notificationPrefs || {}), [EMAIL_PREF_KEY]: body.emailNotifications };
   }
   if (body.quoteViewNudgeHours !== undefined) user.quoteViewNudgeHours = body.quoteViewNudgeHours;
+  if (body.language !== undefined) user.language = body.language;
   await users().save(user);
   return res.json({ user: toSelfUser(user) });
 }
@@ -396,6 +394,8 @@ export async function deleteAccount(req: Request, res: Response) {
     await m.query(`UPDATE "users" SET "phone" = NULL, "avatarUrl" = NULL WHERE "id" = $1`, [user.id]);
     await m.delete(UserTemplate, { userId: user.id });
     await m.delete(JobAlert, { userId: user.id });
+    await m.delete(JobAlertMatch, { userId: user.id });
+    await m.delete(JobAlertDigest, { userId: user.id });
     await m.query(`UPDATE "jobs" SET "status" = 'cancelled' WHERE "homeownerId" = $1 AND "status" = 'open'`, [user.id]);
     await m.query(`UPDATE "bids" SET "status" = 'withdrawn' WHERE "tradespersonId" = $1 AND "status" = 'active'`, [
       user.id,
@@ -480,7 +480,7 @@ export async function exportMyData(req: Request, res: Response) {
   const q = <T = Record<string, unknown>>(sql: string) => AppDataSource.query(sql, [id]) as Promise<T[]>;
   const [account] = await q(
     `SELECT "id", "email", "role", "name", "phone", "avatarUrl", "timezone", "isSuspended", "emailVerifiedAt",
-            "termsAcceptedAt", "termsVersion", "referralCode", "referredById", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
+            "termsAcceptedAt", "termsVersion", "language", "referralCode", "referredById", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
        FROM "users" WHERE "id" = $1`
   );
   const [
@@ -526,7 +526,7 @@ export async function exportMyData(req: Request, res: Response) {
       `SELECT "name", "kind", "jobId", "mime", "size", "originalName", "createdAt" FROM "uploads" WHERE "ownerUserId" = $1`
     ),
     q(`SELECT "kind", "position", "data", "createdAt" FROM "user_templates" WHERE "userId" = $1`),
-    q(`SELECT "name", "categories", "city", "area", "lat", "lng", "radiusKm", "minBudget", "siteType", "active",
+    q(`SELECT "name", "categories", "city", "area", "lat", "lng", "radiusKm", "minBudget", "siteType", "active", "frequency",
               "matchCount", "lastMatchedAt", "createdAt" FROM "job_alerts" WHERE "userId" = $1`),
   ]);
   const body = {
