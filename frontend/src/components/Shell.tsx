@@ -1,3 +1,4 @@
+import { LanguageToggle, useI18n } from "../lib/i18n";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { dashboardPath } from "../api/client";
@@ -101,6 +102,7 @@ export function Shell({
   children: React.ReactNode;
 }) {
   const { user, logout } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   useEffect(() => setPageMeta(title, description), [title, description]);
 
@@ -151,20 +153,21 @@ export function Shell({
                     )
                   }
                 >
-                  {l.label}
+                  {t(l.label)}
                 </NavLink>
               ))}
             </nav>
           )}
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {user?.role !== "ADMIN" && <LanguageToggle />}
             {!user && (
               <>
                 <Link to="/login" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-700 no-underline hover:bg-slate-100">
-                  Log in
+                  {t("Log in")}
                 </Link>
                 <Link to="/register" className="btn-primary btn-sm no-underline">
-                  Sign up
+                  {t("Sign up")}
                 </Link>
               </>
             )}
@@ -188,10 +191,10 @@ export function Shell({
                   type="button"
                   className="btn-ghost btn-sm touch-target"
                   onClick={onLogout}
-                  aria-label="Log out"
+                  aria-label={t("Log out")}
                 >
                   <LogOut className="h-4 w-4" />
-                  <span className="hidden sm:inline">Log out</span>
+                  <span className="hidden sm:inline">{t("Log out")}</span>
                 </button>
               </>
             )}
@@ -245,7 +248,7 @@ export function Shell({
                 }
               >
                 {l.icon && <l.icon className="h-5 w-5" aria-hidden />}
-                <span className="whitespace-nowrap">{l.short ?? l.label}</span>
+                <span className="whitespace-nowrap">{t(l.short ?? l.label)}</span>
               </NavLink>
             ))}
           </div>

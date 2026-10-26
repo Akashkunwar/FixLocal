@@ -4,6 +4,7 @@ import { Shell } from "../components/Shell";
 import { TemplateEditor } from "../components/TemplateEditor";
 import { PrivacySettings } from "../components/PrivacySettings";
 import { InviteFriends } from "../components/InviteFriends";
+import { LanguageSettings } from "../components/LanguageSettings";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/Toast";
 import { changePassword, deleteAccount, logoutEverywhere } from "../api/client";
@@ -414,6 +415,8 @@ export function SettingsPage() {
             </button>
           </div>
         </form>
+
+        {user.role !== "ADMIN" && <LanguageSettings />}
 
         {(user.role === "HOMEOWNER" || user.role === "TRADESPERSON") && <InviteFriends />}
 

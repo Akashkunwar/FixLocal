@@ -1,3 +1,4 @@
+import { LanguageToggle, useI18n } from "../lib/i18n";
 import { InstallAppBanner } from "../components/InstallAppBanner";
 import { useEffect } from "react";
 import { Link, Navigate } from "react-router-dom";
@@ -22,6 +23,7 @@ const STEPS = [
 
 export function LandingPage() {
   const { user, loading } = useAuth();
+  const { t } = useI18n();
   useEffect(() => setPageMeta(null), []);
   if (!loading && user) return <Navigate to={dashboardPath(user.role)} replace />;
 
@@ -41,8 +43,9 @@ export function LandingPage() {
           <span className="font-display text-xl font-semibold">FixLocal</span>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/login" className="btn-ghost btn-sm no-underline">Log in</Link>
-          <Link to="/register" className="btn-primary btn-sm no-underline">Get started</Link>
+          <LanguageToggle />
+          <Link to="/login" className="btn-ghost btn-sm no-underline">{t("Log in")}</Link>
+          <Link to="/register" className="btn-primary btn-sm no-underline">{t("Get started")}</Link>
         </div>
       </header>
 
@@ -51,40 +54,41 @@ export function LandingPage() {
         <div className="relative mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:py-24">
           <div>
             <p className="mb-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-brand-800 ring-1 ring-brand-200 shadow-xs">
-              <BadgeCheck className="h-3.5 w-3.5" /> Admin-verified local professionals
+              <BadgeCheck className="h-3.5 w-3.5" /> {t("Admin-verified local professionals")}
             </p>
             <h1 className="font-display text-4xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl sm:leading-none">
-              Post work.<br />
-              <span className="text-brand-700">Get bids</span> from local pros.
+              {t("Post work.")}<br />
+              <span className="text-brand-700">{t("Get bids")}</span> {t("from local pros.")}
             </h1>
             <p className="mt-4 max-w-lg text-lg text-slate-600">
-              FixLocal is a general work marketplace — blue-collar, technical, office, and home services.
-              Clients post jobs; professionals bid; everyone tracks progress in one place.
+              {t(
+                "FixLocal is a general work marketplace — blue-collar, technical, office, and home services. Clients post jobs; professionals bid; everyone tracks progress in one place."
+              )}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/register?role=client" className="btn-primary no-underline">
-                Post as a client <ArrowRight className="h-4 w-4" />
+                {t("Post as a client")} <ArrowRight className="h-4 w-4" />
               </Link>
               <Link to="/register?role=professional" className="btn-secondary no-underline">
-                Join as a professional
+                {t("Join as a professional")}
               </Link>
             </div>
             <div className="mt-10 flex flex-wrap gap-6 text-sm text-slate-600">
-              <span className="flex items-center gap-2"><Shield className="h-4 w-4 text-brand-600" /> Verified professionals</span>
-              <span className="flex items-center gap-2"><Star className="h-4 w-4 text-amber-500" /> Ratings & reviews</span>
-              <span className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-brand-600" /> In-job messaging</span>
-              <span className="flex items-center gap-2"><Briefcase className="h-4 w-4 text-brand-600" /> Office to on-site</span>
+              <span className="flex items-center gap-2"><Shield className="h-4 w-4 text-brand-600" /> {t("Verified professionals")}</span>
+              <span className="flex items-center gap-2"><Star className="h-4 w-4 text-amber-500" /> {t("Ratings & reviews")}</span>
+              <span className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-brand-600" /> {t("In-job messaging")}</span>
+              <span className="flex items-center gap-2"><Briefcase className="h-4 w-4 text-brand-600" /> {t("Office to on-site")}</span>
             </div>
           </div>
           <div className="card relative p-6 shadow-lift">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">How it works</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{t("How it works")}</p>
             <ol className="mt-4 space-y-4">
               {STEPS.map((s) => (
                 <li key={s.n} className="flex gap-4">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-700 text-sm font-bold text-white">{s.n}</span>
                   <div>
-                    <p className="font-semibold text-slate-900">{s.t}</p>
-                    <p className="text-sm text-slate-500">{s.d}</p>
+                    <p className="font-semibold text-slate-900">{t(s.t)}</p>
+                    <p className="text-sm text-slate-500">{t(s.d)}</p>
                   </div>
                 </li>
               ))}
@@ -101,9 +105,9 @@ export function LandingPage() {
       </section>
 
       <section className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-        <h2 className="font-display text-2xl font-semibold text-slate-900">Work categories</h2>
+        <h2 className="font-display text-2xl font-semibold text-slate-900">{t("Work categories")}</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Tap a group hub for specialties, posting tips, and find-pros / browse-jobs shortcuts.
+          {t("Tap a group hub for specialties, posting tips, and find-pros / browse-jobs shortcuts.")}
         </p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {leadCats.map((c) => (
@@ -112,7 +116,7 @@ export function LandingPage() {
                 <span className="text-2xl">{c.emoji}</span>
                 <div>
                   <p className="font-semibold text-slate-900">{c.group}</p>
-                  <p className="text-xs text-slate-500">Open hub · specialties & next steps</p>
+                  <p className="text-xs text-slate-500">{t("Open hub · specialties & next steps")}</p>
                 </div>
               </Link>
               <div className="flex flex-wrap gap-2">
@@ -120,19 +124,19 @@ export function LandingPage() {
                   to={leadGroupHubPath(c.group)}
                   className="btn-primary btn-sm no-underline text-xs"
                 >
-                  View hub
+                  {t("View hub")}
                 </Link>
                 <Link
                   to={clientPath(`pros?category=${encodeURIComponent(c.value)}`)}
                   className="btn-secondary btn-sm no-underline text-xs"
                 >
-                  Find pros
+                  {t("Find pros")}
                 </Link>
                 <Link
                   to={`/professional?category=${encodeURIComponent(c.value)}`}
                   className="btn-ghost btn-sm no-underline text-xs"
                 >
-                  Browse jobs
+                  {t("Browse jobs")}
                 </Link>
               </div>
             </div>

@@ -1,3 +1,4 @@
+import { useI18n } from "../lib/i18n";
 import { FormEvent, useEffect, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -37,6 +38,7 @@ function readReferral(fromUrl: string | null): string {
 export function RegisterPage() {
   const { user, register, loading } = useAuth();
   const [params] = useSearchParams();
+  const { t } = useI18n();
   // Invite links (?ref=CODE) survive a detour to /login and back within the tab.
   const [referral] = useState(() => readReferral(params.get("ref")));
   const { error } = useToast();
@@ -144,13 +146,13 @@ export function RegisterPage() {
           <span className="font-display text-lg font-semibold">FixLocal</span>
         </div>
         <div>
-          <h1 className="font-display text-2xl font-semibold">Create your account</h1>
+          <h1 className="font-display text-2xl font-semibold">{t("Create your account")}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Clients post work. Professionals bid after admin verification.
+            {t("Clients post work. Professionals bid after admin verification.")}
           </p>
           {referral && (
             <p className="mt-3 rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-900" role="status">
-              <Gift className="mr-1 inline h-4 w-4" aria-hidden /> A friend invited you to FixLocal. Welcome!
+              <Gift className="mr-1 inline h-4 w-4" aria-hidden /> {t("A friend invited you to FixLocal. Welcome!")}
             </p>
           )}
         </div>
@@ -185,7 +187,7 @@ export function RegisterPage() {
           <input id="name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
         </div>
         <div>
-          <label className="label" htmlFor="email">Email</label>
+          <label className="label" htmlFor="email">{t("Email")}</label>
           <input id="email" className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div>
@@ -193,7 +195,7 @@ export function RegisterPage() {
           <input id="phone" className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div>
-          <label className="label" htmlFor="password">Password</label>
+          <label className="label" htmlFor="password">{t("Password")}</label>
           <input id="password" className="input" type="password" required minLength={10} maxLength={128} aria-describedby="password-hint" value={password} onChange={(e) => setPassword(e.target.value)} />
           <p id="password-hint" className="mt-1 text-xs text-slate-500">At least 10 characters. Avoid common passwords.</p>
         </div>

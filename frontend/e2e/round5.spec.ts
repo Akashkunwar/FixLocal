@@ -164,3 +164,32 @@ test("pro profile can be shared on WhatsApp or copied", async ({ page, request, 
   await expect(page.getByText("Link copied")).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(new RegExp(`/pros/${pro.id}$`));
 });
+
+test("Hindi toggle translates the core pages, persists, and stays accessible", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /View in Hindi/ }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "hi");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("काम पोस्ट करें।");
+  await expect(page.getByRole("link", { name: "लॉग इन" })).toBeVisible();
+  for (const path of ["/", "/login", "/register"]) {
+    await page.goto(path);
+    await expect(page.locator("html")).toHaveAttribute("lang", "hi");
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+      expect(axe.violations.map((v) => `${path}@${width}: ${v.id}`)).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    }
+  }
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "फिर से स्वागत है" })).toBeVisible();
+  await page.getByLabel("ईमेल").fill(SEEDED.client);
+  await page.getByLabel("पासवर्ड", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "साइन इन" }).click();
+  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "मेरे काम" })).toBeVisible();
+
+  await page.goto("/settings");
+  await page.getByRole("radio", { name: "English" }).check();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-IN");
+  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "My jobs" })).toBeVisible();
+});

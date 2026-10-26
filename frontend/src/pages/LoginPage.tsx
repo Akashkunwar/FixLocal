@@ -1,3 +1,4 @@
+import { useI18n } from "../lib/i18n";
 import { FormEvent, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -9,6 +10,7 @@ import { useToast } from "../components/Toast";
 
 export function LoginPage() {
   const { user, login, loading } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -56,15 +58,15 @@ export function LoginPage() {
           <h2 className="font-display text-3xl font-semibold leading-snug">
             Your neighborhood&apos;s trusted work marketplace.
           </h2>
-          <p className="mt-3 text-brand-100">Verified professionals. Transparent bids. Clear timelines.</p>
+          <p className="mt-3 text-brand-100">{t("Verified professionals. Transparent bids. Clear timelines.")}</p>
         </div>
-        <p className="text-sm text-brand-200">Local services, handled with care.</p>
+        <p className="text-sm text-brand-200">{t("Local services, handled with care.")}</p>
       </div>
       <div className="flex items-center justify-center p-6">
         <form onSubmit={onSubmit} className="card w-full max-w-md p-8 space-y-4">
           <div>
-            <h1 className="font-display text-2xl font-semibold text-slate-900">Welcome back</h1>
-            <p className="mt-1 text-sm text-slate-500">Log in to manage jobs, bids, and messages.</p>
+            <h1 className="font-display text-2xl font-semibold text-slate-900">{t("Welcome back")}</h1>
+            <p className="mt-1 text-sm text-slate-500">{t("Log in to manage jobs, bids, and messages.")}</p>
           </div>
           {params.get("reset") === "1" && !err && (
             <div className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 ring-1 ring-emerald-200" role="status">
@@ -96,21 +98,21 @@ export function LoginPage() {
             </div>
           )}
           <div>
-            <label className="label" htmlFor="email">Email</label>
+            <label className="label" htmlFor="email">{t("Email")}</label>
             <input id="email" className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div>
-            <label className="label" htmlFor="password">Password</label>
+            <label className="label" htmlFor="password">{t("Password")}</label>
             <input id="password" className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <button type="submit" className="btn-primary w-full" disabled={busy}>
-            {busy ? "Signing in…" : "Sign in"}
+            {busy ? t("Signing in…") : t("Sign in")}
           </button>
           <p className="text-center text-sm text-slate-500">
-            <Link to="/forgot-password">Forgot your password?</Link>
+            <Link to="/forgot-password">{t("Forgot your password?")}</Link>
           </p>
           <p className="text-center text-sm text-slate-500">
-            New here? <Link to="/register">Create an account</Link>
+            {t("New here?")} <Link to="/register">{t("Create an account")}</Link>
           </p>
           {demoMode && (
             <div className="space-y-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
