@@ -67,6 +67,29 @@ export class User {
   notificationPrefs?: Record<string, boolean> | null;
 
   /** When the user accepted the Terms of Service / Privacy Policy, and which version. */
+  /** Set when the user proves they own `phone` with a one-time code; cleared if the number changes. */
+  @Column({ type: "timestamptz", nullable: true })
+  phoneVerifiedAt?: Date | null;
+
+  /** Opted in to SMS / WhatsApp for key events (needs a verified phone). */
+  @Column({ type: "boolean", default: false })
+  smsOptIn!: boolean;
+
+  @Column({ type: "boolean", default: false })
+  whatsappOptIn!: boolean;
+
+  @Column({ type: "varchar", length: 64, nullable: true, select: false })
+  phoneCodeHash?: string | null;
+
+  @Column({ type: "timestamptz", nullable: true, select: false })
+  phoneCodeExpiresAt?: Date | null;
+
+  @Column({ type: "timestamptz", nullable: true, select: false })
+  phoneCodeSentAt?: Date | null;
+
+  @Column({ type: "int", default: 0, select: false })
+  phoneCodeAttempts!: number;
+
   /** Keyed hash of the sign-up IP + browser, compared only to spot self-referrals. Never exported. */
   @Column({ type: "varchar", length: 64, nullable: true, select: false })
   signupDeviceHash?: string | null;

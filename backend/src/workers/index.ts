@@ -16,6 +16,7 @@ import { releaseRemaining } from "../domain/escrow";
 import { viewedNoReplyState } from "../controllers/bidController";
 import { logger } from "../logger";
 import { sendJobAlertDigests } from "../utils/jobAlertDigest";
+import { flushOutbound } from "../utils/outbound";
 import { JobAlertDigest } from "../entities/JobAlertDigest";
 import { HttpError } from "../http/errors";
 
@@ -73,6 +74,7 @@ export async function autoConfirmJobs(now = new Date()) {
                   body: `"${job.title}" was confirmed automatically${total ? ` and ₹${total.toFixed(0)} was released` : ""}.`,
                   link: `/professional/jobs/${job.id}`,
                   meta: { jobId: job.id, autoConfirmed: true },
+                  text: total > 0,
                 },
               ]
             : []),
@@ -128,6 +130,9 @@ export async function cleanupExpired(now = new Date()) {
   await AppDataSource.getRepository(RefreshToken).delete({ expiresAt: LessThan(new Date(now.getTime() - 7 * day)) });
   await AppDataSource.getRepository(EmailToken).delete({ expiresAt: LessThan(new Date(now.getTime() - 7 * day)) });
   await AppDataSource.getRepository(JobAlertDigest).delete({ createdAt: LessThan(new Date(now.getTime() - 60 * day)) });
+  await AppDataSource.query(`DELETE FROM "outbound_messages" WHERE "status" IN ('sent', 'failed', 'skipped') AND "createdAt" < $1`, [
+    new Date(now.getTime() - 30 * day),
+  ]);
 }
 
 /** Only one API instance runs the jobs at a time (session-level advisory lock on a dedicated connection). */
@@ -141,8 +146,9 @@ export async function runWorkersOnce(now = new Date()) {
       const autoConfirmed = await autoConfirmJobs(now);
       const nudges = await sendQuoteViewNudges(now);
       const digests = await sendJobAlertDigests(now);
+      const texts = await flushOutbound(now);
       await cleanupExpired(now);
-      return { skipped: false, autoConfirmed, nudges, digests };
+      return { skipped: false, autoConfirmed, nudges, digests, texts };
     } finally {
       await runner.query(`SELECT pg_advisory_unlock($1)`, [LOCK_KEY]);
     }

@@ -1,3 +1,5 @@
+import { OutboundMessage } from "../entities/OutboundMessage";
+import { toE164 } from "../services/messaging";
 import { CreditEntry } from "../entities/CreditEntry";
 import crypto from "node:crypto";
 import { JobAlertMatch } from "../entities/JobAlertMatch";
@@ -268,7 +270,15 @@ export async function updateMe(req: Request, res: Response) {
   if (!user) throw unauthorized("Account not found");
   const body = req.valid.body;
   if (body.name !== undefined) user.name = body.name || undefined;
-  if (body.phone !== undefined) user.phone = body.phone || undefined;
+  if (body.phone !== undefined) {
+    // A different number has to be verified again before texts go to it.
+    if (toE164(body.phone) !== toE164(user.phone)) {
+      user.phoneVerifiedAt = null;
+      user.smsOptIn = false;
+      user.whatsappOptIn = false;
+    }
+    user.phone = body.phone || undefined;
+  }
   if (body.timezone !== undefined) user.timezone = body.timezone;
   if (body.notificationPrefs !== undefined) {
     const merged: Record<string, boolean> = { ...(user.notificationPrefs || {}) };
@@ -282,6 +292,14 @@ export async function updateMe(req: Request, res: Response) {
   }
   if (body.quoteViewNudgeHours !== undefined) user.quoteViewNudgeHours = body.quoteViewNudgeHours;
   if (body.language !== undefined) user.language = body.language;
+  for (const key of ["smsOptIn", "whatsappOptIn"] as const) {
+    if (body[key] === undefined) continue;
+    if (body[key] && !config().messaging.enabled) throw conflict("Text messages aren't switched on yet", "MESSAGING_OFF");
+    if (body[key] && (!user.phoneVerifiedAt || !toE164(user.phone))) {
+      throw badRequest("Verify your mobile number first", "PHONE_NOT_VERIFIED");
+    }
+    user[key] = body[key];
+  }
   await users().save(user);
   return res.json({ user: toSelfUser(user) });
 }
@@ -399,7 +417,11 @@ export async function deleteAccount(req: Request, res: Response) {
         tokenVersion: user.tokenVersion + 1,
       }
     );
-    await m.query(`UPDATE "users" SET "phone" = NULL, "avatarUrl" = NULL WHERE "id" = $1`, [user.id]);
+    await m.query(
+      `UPDATE "users" SET "phone" = NULL, "avatarUrl" = NULL, "phoneVerifiedAt" = NULL, "smsOptIn" = false, "whatsappOptIn" = false,
+              "phoneCodeHash" = NULL, "phoneCodeExpiresAt" = NULL, "signupDeviceHash" = NULL WHERE "id" = $1`,
+      [user.id]
+    );
     await m.delete(UserTemplate, { userId: user.id });
     await m.delete(JobAlert, { userId: user.id });
     await m.delete(JobAlertMatch, { userId: user.id });
@@ -407,6 +429,7 @@ export async function deleteAccount(req: Request, res: Response) {
     // Credit is personal: it goes with the account. Reward decisions stay (ids only) so a deleted
     // account can't be used to collect the same referral twice.
     await m.delete(CreditEntry, { userId: user.id });
+    await m.delete(OutboundMessage, { userId: user.id });
     await m.query(`UPDATE "jobs" SET "status" = 'cancelled' WHERE "homeownerId" = $1 AND "status" = 'open'`, [user.id]);
     await m.query(`UPDATE "bids" SET "status" = 'withdrawn' WHERE "tradespersonId" = $1 AND "status" = 'active'`, [
       user.id,
@@ -491,7 +514,7 @@ export async function exportMyData(req: Request, res: Response) {
   const q = <T = Record<string, unknown>>(sql: string) => AppDataSource.query(sql, [id]) as Promise<T[]>;
   const [account] = await q(
     `SELECT "id", "email", "role", "name", "phone", "avatarUrl", "timezone", "isSuspended", "emailVerifiedAt",
-            "termsAcceptedAt", "termsVersion", "language", "referralCode", "referredById", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
+            "termsAcceptedAt", "termsVersion", "language", "phoneVerifiedAt", "smsOptIn", "whatsappOptIn", "referralCode", "referredById", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
        FROM "users" WHERE "id" = $1`
   );
   const [
@@ -509,6 +532,7 @@ export async function exportMyData(req: Request, res: Response) {
     ledger,
     uploads,
     templates,
+    textMessages,
     credits,
     referralRewards,
     jobAlerts,
@@ -539,6 +563,7 @@ export async function exportMyData(req: Request, res: Response) {
       `SELECT "name", "kind", "jobId", "mime", "size", "originalName", "createdAt" FROM "uploads" WHERE "ownerUserId" = $1`
     ),
     q(`SELECT "kind", "position", "data", "createdAt" FROM "user_templates" WHERE "userId" = $1`),
+    q(`SELECT "channel", "body", "status", "createdAt", "sentAt" FROM "outbound_messages" WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 500`),
     q(`SELECT "kind", "amount", "jobId", "note", "createdAt" FROM "credit_entries" WHERE "userId" = $1 ORDER BY "createdAt"`),
     q(`SELECT CASE WHEN "referrerId" = $1 THEN 'you_invited' ELSE 'you_were_invited' END AS "role", "status", "reason",
               "referrerAmount", "referredAmount", "jobId", "createdAt", "reversedAt"
@@ -565,6 +590,7 @@ export async function exportMyData(req: Request, res: Response) {
     escrowLedger: ledger,
     files: uploads,
     templates,
+    textMessages,
     credits: { note: "FixLocal credit is simulated, like escrow.", entries: credits },
     referralRewards,
     jobAlerts,

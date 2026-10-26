@@ -1,3 +1,4 @@
+import * as messaging from "../controllers/messagingController";
 import { Router } from "express";
 import * as auth from "../controllers/authController";
 import { requireAuth } from "../middleware/auth";
@@ -43,6 +44,9 @@ router.get("/me", requireAuth, auth.me);
 router.get("/me/export", requireAuth, limiter("exports"), auth.exportMyData);
 router.post("/accept-terms", requireAuth, auth.acceptTerms);
 router.patch("/me", requireAuth, validate({ body: s.updateMeBody }), auth.updateMe);
+router.get("/me/messaging", requireAuth, messaging.getMessagingSettings);
+router.post("/me/phone/send-code", requireAuth, limiter("passwordReset"), validate({ body: s.phoneCodeBody }), messaging.sendPhoneCode);
+router.post("/me/phone/verify", requireAuth, limiter("passwordReset"), validate({ body: s.verifyPhoneBody }), messaging.verifyPhoneCode);
 router.delete("/me", requireAuth, validate({ body: s.deleteAccountBody }), auth.deleteAccount);
 router.post("/me/avatar", requireAuth, limiter("uploads"), uploadSingleImage, auth.uploadAvatar);
 router.get("/me/templates", requireAuth, auth.listTemplates);

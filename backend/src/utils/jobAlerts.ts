@@ -111,6 +111,7 @@ export async function notifyJobAlerts(job: Job): Promise<number> {
       body: `${job.category.replace(/_/g, " ")}${where ? ` in ${where}` : ""}${budgetText(job)}. Matches your alert "${a.name}".`,
       link: `/professional/jobs/${job.id}`,
       meta: { jobId: job.id, alertId: a.id },
+      text: true,
     }))
   );
   return sent.size;

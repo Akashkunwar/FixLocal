@@ -83,6 +83,7 @@ export async function confirmComplete(req: Request, res: Response) {
         : `"${ctx.job.title}" was confirmed complete. Great work!`,
       link: `/professional/jobs/${ctx.job.id}`,
       meta: { jobId: ctx.job.id, status: JobStatus.COMPLETED, autoReleased },
+      text: !!autoReleased,
     });
   }
   const job = await jobRepo().findOneOrFail({ where: { id: ctx.job.id } });

@@ -47,7 +47,14 @@ export const updateMeBody = z.object({
   emailNotifications: z.boolean().optional(),
   quoteViewNudgeHours: z.preprocess((v) => (v === "" ? null : v), optionalInt(1, 168).nullable()),
   language: z.enum(["en", "hi"]).optional(),
+  smsOptIn: z.boolean().optional(),
+  whatsappOptIn: z.boolean().optional(),
 });
+
+export const phoneCodeBody = z.object({
+  phone: z.string().trim().max(20).regex(/^[+0-9 ()-]*$/, "Enter a valid phone number").optional(),
+});
+export const verifyPhoneBody = z.object({ code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code") });
 
 export const changePasswordBody = z.object({
   currentPassword: existingPassword,

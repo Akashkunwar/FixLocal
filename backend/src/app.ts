@@ -28,6 +28,7 @@ import seoRoutes from "./routes/seo";
 import jobAlertRoutes from "./routes/jobAlerts";
 import referralRoutes from "./routes/referrals";
 import creditRoutes from "./routes/credits";
+import { logSms, logWhatsApp } from "./services/messaging";
 import { consoleMailer } from "./services/mailer";
 
 export function createApp(): Express {
@@ -117,7 +118,7 @@ export function createApp(): Express {
 
   if (!cfg.isProd && process.env.DEV_OUTBOX === "true") {
     app.get("/api/dev/outbox", (_req, res) => {
-      res.json({ emails: consoleMailer.outbox });
+      res.json({ emails: consoleMailer.outbox, texts: [...logSms.outbox, ...logWhatsApp.outbox] });
     });
   }
 

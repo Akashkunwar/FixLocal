@@ -7,6 +7,7 @@ import { toNotification } from "../serializers";
 import { logger } from "../logger";
 import { appLink, sendMail } from "../services/mailer";
 import { asLang, emails } from "../domain/i18n";
+import { queueTexts } from "./outbound";
 
 /** Notification types that also go out by email (when the user hasn't turned email off). */
 export const EMAIL_NOTIFICATION_TYPES: ReadonlySet<string> = new Set([
@@ -81,6 +82,14 @@ export async function createNotifications(
   // One multi-row INSERT is atomic on its own; skip TypeORM's extra BEGIN/COMMIT round trips.
   const saved = await manager.save(rows, { transaction: false });
   const inputFor = new Map(inputs.map((i) => [i.userId, i]));
+  const texts = saved.filter((n) => inputFor.get(n.userId)?.text);
+  if (texts.length) {
+    try {
+      await queueTexts(texts, manager);
+    } catch (err) {
+      logger.warn({ err }, "queueing text messages failed");
+    }
+  }
   for (const n of saved) {
     out.set(n.userId, n);
     const u = byId.get(n.userId);
