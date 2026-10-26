@@ -178,7 +178,7 @@ export function TextAlertsCard() {
             <legend className="text-sm font-medium text-slate-900">{t("Send texts by")}</legend>
             {CHANNELS.map((c) => (
               <label key={c.key} className="flex min-h-[44px] items-center justify-between gap-3 rounded-lg border border-slate-200 px-3">
-                <span className="text-sm text-slate-800">{c.label}</span>
+                <span className="text-sm text-slate-800">{t(c.label)}</span>
                 <input type="checkbox" className="h-5 w-5" checked={s[c.key]} onChange={(e) => onToggle(c.key, e.target.checked)} />
               </label>
             ))}

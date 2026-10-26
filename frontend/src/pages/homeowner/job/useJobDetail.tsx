@@ -320,7 +320,7 @@ export function useJobDetail() {
     if (!target || !bids.length) return;
     if (!bids.some((b) => b.id === target)) return;
     setHighlightBidId(target);
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       const el = document.getElementById(`bid-${target}`);
       el?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 120);
@@ -330,7 +330,7 @@ export function useJobDetail() {
       6000,
     );
     return () => {
-      window.clearTimeout(t);
+      window.clearTimeout(timer);
       window.clearTimeout(clear);
     };
   }, [bids, searchParams]);
@@ -362,7 +362,7 @@ export function useJobDetail() {
           ? new Date(i.cooldownUntil).getTime()
           : 0,
       )
-      .filter((t) => t > now)
+      .filter((at) => at > now)
       .sort((a, b) => a - b)[0];
     if (!next) return;
     const tmr = window.setTimeout(
@@ -708,10 +708,10 @@ export function useJobDetail() {
     for (const b of bids) {
       const hist = Array.isArray(b.counterHistory) ? b.counterHistory : [];
       for (const h of hist) {
-        const t = new Date(h.requestedAt).getTime();
-        if (!Number.isFinite(t)) continue;
+        const ms = new Date(h.requestedAt).getTime();
+        if (!Number.isFinite(ms)) continue;
         points.push({
-          t,
+          t: ms,
           amount: Number(h.suggestedAmount) || 0,
           label: b.tradesperson?.name || "Pro",
           status: h.status,
@@ -719,19 +719,19 @@ export function useJobDetail() {
         });
       }
       if (b.counterOffer) {
-        const t = new Date(b.counterOffer.requestedAt).getTime();
-        if (Number.isFinite(t)) {
+        const ms = new Date(b.counterOffer.requestedAt).getTime();
+        if (Number.isFinite(ms)) {
           // Avoid dup if still pending and already in history oddly
           const dup = points.some(
             (p) =>
               p.bidId === b.id &&
-              Math.abs(p.t - t) < 1000 &&
+              Math.abs(p.t - ms) < 1000 &&
               Math.abs(p.amount - Number(b.counterOffer!.suggestedAmount)) <
                 0.5,
           );
           if (!dup) {
             points.push({
-              t,
+              t: ms,
               amount: Number(b.counterOffer.suggestedAmount) || 0,
               label: b.tradesperson?.name || "Pro",
               status: b.counterOffer.status,

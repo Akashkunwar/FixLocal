@@ -20,6 +20,7 @@ import {
   type BidHighlight,
 } from "../../../lib/bidCompare";
 import type { JobDetailState } from "./useJobDetail";
+import { t } from "../../../lib/i18n";
 
 const HIGHLIGHT_STYLE: Record<BidHighlight, string> = {
   best_value: "bg-sky-600 text-white",
@@ -33,12 +34,12 @@ export function HighlightChips({ tags }: { tags: BidHighlight[] }) {
   if (!tags.length) return null;
   return (
     <>
-      {tags.map((t) => (
+      {tags.map((tag) => (
         <span
-          key={t}
-          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${HIGHLIGHT_STYLE[t]}`}
+          key={tag}
+          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${HIGHLIGHT_STYLE[tag]}`}
         >
-          {HIGHLIGHT_LABEL[t]}
+          {t(HIGHLIGHT_LABEL[tag])}
         </span>
       ))}
     </>
@@ -136,14 +137,14 @@ export function BidCard({
                 >
                   {b.tradesperson?.name ||
                     b.tradesperson?.email ||
-                    "Professional"}
+                    t("Professional")}
                 </Link>
                 {p?.verificationStatus === "verified" && (
                   <span
                     className="inline-flex items-center gap-0.5 text-[11px] font-medium text-emerald-700"
-                    title="ID and licence checked by FixLocal"
+                    title={t("ID and licence checked by FixLocal")}
                   >
-                    <BadgeCheck className="h-3.5 w-3.5" aria-hidden /> Verified
+                    <BadgeCheck className="h-3.5 w-3.5" aria-hidden /> {t("Verified")}
                   </span>
                 )}
                 <HighlightChips tags={highlights} />
@@ -153,7 +154,7 @@ export function BidCard({
                     className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-800 ring-1 ring-sky-200"
                     onClick={onExplainValue}
                   >
-                    Why value?
+                    {t("Why value?")}
                   </button>
                 )}
               </div>
@@ -169,19 +170,19 @@ export function BidCard({
                       {p.averageRating.toFixed(1)}
                     </span>
                     <span>
-                      ({p.reviewCount} review{p.reviewCount === 1 ? "" : "s"})
+                      ({p.reviewCount} {t("review")}{p.reviewCount === 1 ? "" : "s"})
                     </span>
                   </Fact>
                 ) : (
-                  <span className="text-slate-500">No reviews yet</span>
+                  <span className="text-slate-500">{t("No reviews yet")}</span>
                 )}
                 {p?.completedJobs != null && (
                   <Fact>
-                    {p.completedJobs} job{p.completedJobs === 1 ? "" : "s"} done
+                    {p.completedJobs} {t("job")}{p.completedJobs === 1 ? "" : "s"} {t("done")}
                   </Fact>
                 )}
                 {p?.yearsExperience != null && (
-                  <Fact>{p.yearsExperience} yrs exp.</Fact>
+                  <Fact>{p.yearsExperience} {t("yrs exp.")}</Fact>
                 )}
                 {(b.distanceKm != null || p?.city) && (
                   <Fact>
@@ -196,8 +197,7 @@ export function BidCard({
               {b.matchScore != null &&
                 Number.isFinite(Number(b.matchScore)) && (
                   <p className="mt-1 text-[11px] text-slate-500">
-                    Match score {(b.rankedScore ?? b.matchScore).toFixed(0)} for
-                    this job
+                    {t("Match score")}{" "}{(b.rankedScore ?? b.matchScore).toFixed(0)} {t("for this job")}
                     {b.heatBoost ? ` · +${b.heatBoost} availability` : ""}
                   </p>
                 )}
@@ -205,7 +205,7 @@ export function BidCard({
           </div>
 
           {skills.length > 0 && (
-            <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Skills">
+            <ul className="mt-3 flex flex-wrap gap-1.5" aria-label={t("Skills")}>
               {skills.map((sk) => (
                 <li
                   key={sk}
@@ -227,7 +227,7 @@ export function BidCard({
           {(hasQuote || b.quoteNotes || b.quoteAttachmentUrl) && (
             <div className="mt-3 rounded-xl bg-amber-50 p-3 ring-1 ring-amber-200">
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                Quote / estimate
+                {t("Quote / estimate")}
                 {b.quoteHistory && b.quoteHistory.length > 0
                   ? ` · ${b.quoteHistory.length} revision${b.quoteHistory.length === 1 ? "" : "s"}`
                   : ""}
@@ -249,7 +249,7 @@ export function BidCard({
                   rel="noreferrer"
                   className="mt-1 inline-block text-xs font-medium text-brand-700 underline"
                 >
-                  Open quote attachment
+                  {t("Open quote attachment")}
                 </a>
               )}
             </div>
@@ -266,7 +266,7 @@ export function BidCard({
                 <span className="line-clamp-2">{p.latestReview.comment}</span>
               </blockquote>
               <figcaption className="mt-1 text-[11px] text-slate-500">
-                Latest review · {p.latestReview.rating}★
+                {t("Latest review ·")}{" "}{p.latestReview.rating}★
               </figcaption>
             </figure>
           )}
@@ -274,12 +274,12 @@ export function BidCard({
             <p className="mt-3 line-clamp-2 text-sm text-slate-500">{p.bio}</p>
           )}
           {p?.galleryPreview && p.galleryPreview.length > 0 && (
-            <div className="mt-3 flex gap-2" aria-label="Recent work">
+            <div className="mt-3 flex gap-2" aria-label={t("Recent work")}>
               {p.galleryPreview.map((u) => (
                 <Link
                   key={u}
                   to={`/pros/${b.tradespersonId}`}
-                  aria-label="See portfolio"
+                  aria-label={t("See portfolio")}
                 >
                   <img
                     src={mediaUrl(u)}
@@ -302,7 +302,7 @@ export function BidCard({
           {hasQuote &&
             Math.abs(Number(b.quoteAmount) - Number(b.amount)) >= 1 && (
               <p className="text-[11px] text-slate-500">
-                Quote · original bid {money(b.amount)}
+                {t("Quote · original bid")}{" "}{money(b.amount)}
               </p>
             )}
           {fit && (
@@ -316,7 +316,7 @@ export function BidCard({
               }`}
             >
               {fit.kind === "within"
-                ? "Within your budget"
+                ? t("Within your budget")
                 : fit.kind === "over"
                   ? `${money(fit.by)} over budget`
                   : `${money(fit.by)} under budget`}
@@ -326,13 +326,13 @@ export function BidCard({
             {b.etaDays != null && (
               <Fact>
                 <Clock className="h-3.5 w-3.5" aria-hidden />
-                Done in {b.etaDays} day{b.etaDays === 1 ? "" : "s"}
+                {t("Done in")}{" "}{b.etaDays} {t("day")}{b.etaDays === 1 ? "" : "s"}
               </Fact>
             )}
             {b.proposedVisitStart && (
               <Fact>
                 <CalendarClock className="h-3.5 w-3.5" aria-hidden />
-                Visit {fmtDateTime(b.proposedVisitStart)}
+                {t("Visit")}{" "}{fmtDateTime(b.proposedVisitStart)}
               </Fact>
             )}
           </div>
@@ -343,7 +343,7 @@ export function BidCard({
                 className="btn-primary btn-sm flex-1 touch-target"
                 onClick={() => onAccept(b.id)}
               >
-                Accept &amp; hire
+                {t("Accept & hire")}
                 <span className="hidden sm:inline"> · {money(price)}</span>
               </button>
               <button
@@ -362,18 +362,18 @@ export function BidCard({
                   setCounterNotes("");
                 }}
               >
-                Request revise
+                {t("Request revise")}
               </button>
             </div>
           )}
           {canAct && (
             <p className="text-[11px] text-slate-500">
-              {money(price)} goes into escrow; you release it in 3 steps.
+              {money(price)} {t("goes into escrow; you release it in 3 steps.")}
             </p>
           )}
           {b.counterOffer && (
             <p className="text-[11px] text-slate-600">
-              Your counter {money(b.counterOffer.suggestedAmount)}
+              {t("Your counter")}{" "}{money(b.counterOffer.suggestedAmount)}
               <span className="text-slate-500"> · {b.counterOffer.status}</span>
             </p>
           )}
@@ -383,7 +383,7 @@ export function BidCard({
               Number(b.quoteAmount) - Number(b.counterOffer.suggestedAmount),
             ) >= 1 && (
               <p className="mt-1 max-w-48 text-[10px] text-amber-800">
-                Soft escrow preview: hold {money(b.quoteAmount)} (counter was{" "}
+                {t("Soft escrow preview: hold")}{" "}{money(b.quoteAmount)} {t("(counter was")}{" "}
                 {money(b.counterOffer.suggestedAmount)})
               </p>
             )}
@@ -393,13 +393,13 @@ export function BidCard({
       {hasHistory && (
         <details className="mt-3 rounded-xl ring-1 ring-slate-100">
           <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">
-            Quote history &amp; payment split
+            {t("Quote history & payment split")}
           </summary>
           <div className="px-3 pb-3">
             {b.quoteHistory && b.quoteHistory.length > 0 && (
               <div className="mt-2 border-t border-amber-200/80 pt-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                  Revision diff
+                  {t("Revision diff")}
                 </p>
                 <ul className="mt-1 space-y-1.5">
                   {(() => {
@@ -454,7 +454,7 @@ export function BidCard({
                             )}
                             {cur.kind === "current" ? (
                               <span className="rounded-sm bg-amber-100 px-1 text-[9px] uppercase text-amber-900">
-                                latest
+                                {t("latest")}
                               </span>
                             ) : null}
                             {prev.at && (
@@ -466,11 +466,11 @@ export function BidCard({
                           {notesChanged && (
                             <div className="mt-0.5 space-y-0.5 text-slate-500">
                               <p className="truncate">
-                                <span className="text-slate-500">was:</span>{" "}
+                                <span className="text-slate-500">{t("was:")}</span>{" "}
                                 {prev.notes ? `“${prev.notes}”` : "—"}
                               </p>
                               <p className="truncate">
-                                <span className="text-slate-500">now:</span>{" "}
+                                <span className="text-slate-500">{t("now:")}</span>{" "}
                                 {cur.notes ? `“${cur.notes}”` : "—"}
                               </p>
                             </div>
@@ -486,7 +486,7 @@ export function BidCard({
             {Array.isArray(b.counterHistory) && b.counterHistory.length > 0 && (
               <details className="mt-1 max-w-56 text-left">
                 <summary className="cursor-pointer text-[10px] text-slate-500">
-                  Counter history ({b.counterHistory.length})
+                  {t("Counter history (")}{b.counterHistory.length})
                 </summary>
                 <ul className="mt-1 space-y-0.5 text-[10px] text-slate-600">
                   {[...b.counterHistory]
@@ -524,14 +524,14 @@ export function BidCard({
                   <div className="mt-3 rounded-xl bg-emerald-50/60 p-3 ring-1 ring-emerald-100">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-xs font-semibold text-emerald-950">
-                        Escrow what-if{" "}
+                        {t("Escrow what-if")}{" "}
                         <span className="font-normal text-emerald-800">
-                          (simulated · {money(hold)})
+                          {t("(simulated ·")}{" "}{money(hold)})
                         </span>
                       </p>
                       {job.status === "open" && b.status === "active" && (
                         <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                          <span>Try ₹</span>
+                          <span>{t("Try ₹")}</span>
                           <input
                             className="input h-7 w-24 py-0 text-xs"
                             type="number"
@@ -555,7 +555,7 @@ export function BidCard({
                           className="rounded-lg bg-white/80 px-2 py-1.5 text-center ring-1 ring-emerald-100"
                         >
                           <p className="text-[10px] uppercase tracking-wide text-slate-500">
-                            {m.label}
+                            {t(m.label)}
                           </p>
                           <p className="text-sm font-bold text-slate-900">
                             {money(m.amount)}
@@ -582,7 +582,7 @@ export function BidCard({
               return (
                 <div className="mt-3 rounded-xl bg-violet-50/50 p-2.5 ring-1 ring-violet-100">
                   <p className="text-[11px] font-semibold text-slate-800">
-                    This bid · counter sparkline
+                    {t("This bid · counter sparkline")}
                   </p>
                   <CounterAmountSparkline points={points} />
                 </div>
@@ -596,7 +596,7 @@ export function BidCard({
               return (
                 <div className="mt-3 rounded-xl bg-violet-50/50 p-2.5 ring-1 ring-violet-100">
                   <p className="text-[11px] font-semibold text-slate-800">
-                    This bid · counter sparkline
+                    {t("This bid · counter sparkline")}
                   </p>
                   <CounterAmountSparkline points={points} />
                 </div>
@@ -610,10 +610,10 @@ export function BidCard({
         b.status === "active" && (
           <div className="mt-3 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
             <p className="text-xs font-semibold text-slate-800">
-              Counter-offer / request revise
+              {t("Counter-offer / request revise")}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500">
-              Suggest an amount and notes. The pro is notified (simulated).
+              {t("Suggest an amount and notes. The pro is notified (simulated).")}
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {(() => {
@@ -643,7 +643,7 @@ export function BidCard({
                     className="btn-ghost btn-sm text-[11px]"
                     onClick={() => setCounterAmount(String(p.value))}
                   >
-                    Suggested {p.label} · ₹{p.value}
+                    {t("Suggested")}{" "}{t(p.label)} · ₹{p.value}
                   </button>
                 ));
               })()}
@@ -656,7 +656,7 @@ export function BidCard({
                     setCounterAmount(String(peerBestValueCounterHint.suggested))
                   }
                 >
-                  Peer best-value · ₹{peerBestValueCounterHint.suggested}
+                  {t("Peer best-value · ₹")}{peerBestValueCounterHint.suggested}
                   {peerBestValueCounterHint.isBestPeer
                     ? ` (${peerBestValueCounterHint.peerName})`
                     : ""}
@@ -665,12 +665,11 @@ export function BidCard({
             </div>
             {peerBestValueCounterHint && (
               <p className="mt-1.5 text-[10px] text-sky-800">
-                Soft hint from clean peer best-value holds
+                {t("Soft hint from clean peer best-value holds")}
                 {peerBestValueCounterHint.isBestPeer
                   ? ` — ${peerBestValueCounterHint.peerName}`
                   : ""}{" "}
-                (avg top peers ₹{peerBestValueCounterHint.avgHold}). Simulated
-                only.
+                {t("(avg top peers ₹")}{peerBestValueCounterHint.avgHold}{t("). Simulated only.")}
               </p>
             )}
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -685,7 +684,7 @@ export function BidCard({
                   title={tpl.body}
                   onClick={() => setCounterNotes(tpl.body)}
                 >
-                  {tpl.label}
+                  {t(tpl.label)}
                 </button>
               ))}
             </div>
@@ -694,13 +693,13 @@ export function BidCard({
                 className="input w-36"
                 type="number"
                 min={1}
-                placeholder="Suggested ₹"
+                placeholder={t("Suggested ₹")}
                 value={counterAmount}
                 onChange={(e) => setCounterAmount(e.target.value)}
               />
               <input
                 className="input min-w-[180px] flex-1"
-                placeholder="Notes (optional)"
+                placeholder={t("Notes (optional)")}
                 value={counterNotes}
                 onChange={(e) => setCounterNotes(e.target.value)}
               />
@@ -710,14 +709,14 @@ export function BidCard({
                 disabled={counterBusy}
                 onClick={() => onCounterOffer(b.id)}
               >
-                {counterBusy ? "Sending…" : "Send to pro"}
+                {counterBusy ? t("Sending…") : t("Send to pro")}
               </button>
               <button
                 type="button"
                 className="btn-ghost btn-sm"
                 onClick={() => setCounterBidId(null)}
               >
-                Cancel
+                {t("Cancel")}
               </button>
             </div>
           </div>

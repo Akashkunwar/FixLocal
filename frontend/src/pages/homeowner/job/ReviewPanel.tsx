@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { createReview, type JobReview } from "../../../api/extras";
 import { StarRating } from "../../../components/ui/StarRating";
 import { useToast } from "../../../components/Toast";
+import { t } from "../../../lib/i18n";
 
 /** The client's review of the professional, plus the professional's rating of the client. */
 export function ReviewPanel({
@@ -26,8 +27,8 @@ export function ReviewPanel({
   // Notification / dashboard prompts deep-link to #review.
   useEffect(() => {
     if (window.location.hash !== "#review") return;
-    const t = window.setTimeout(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+    return () => window.clearTimeout(timer);
   }, []);
 
   async function onSubmit(e: FormEvent) {
@@ -53,17 +54,17 @@ export function ReviewPanel({
       className={`card scroll-mt-24 p-6 ${review ? "" : "ring-2 ring-brand-200"}`}
     >
       <h2 id="review-heading" className="text-lg font-semibold">
-        {review ? "Your review" : `How did it go${proName ? ` with ${proName}` : ""}?`}
+        {review ? t("Your review") : `How did it go${proName ? ` with ${proName}` : ""}?`}
       </h2>
       {!review && (
         <p className="mb-3 mt-1 text-sm text-slate-600">
-          A quick rating helps other clients choose — and helps good pros get more work.
+          {t("A quick rating helps other clients choose — and helps good pros get more work.")}
         </p>
       )}
       {review && <div className="mb-3" />}
       {proReview && (
         <p className="mb-3 text-sm text-slate-600">
-          The professional rated working with you {proReview.rating}/5
+          {t("The professional rated working with you")}{" "}{proReview.rating}/5
           {proReview.comment ? `: “${proReview.comment}”` : "."}
         </p>
       )}
@@ -79,14 +80,14 @@ export function ReviewPanel({
           <StarRating value={rating} onChange={setRating} />
           <textarea
             className="input"
-            aria-label="Review comment"
+            aria-label={t("Review comment")}
             maxLength={2000}
-            placeholder="How was the experience?"
+            placeholder={t("How was the experience?")}
             value={comment}
             onChange={(e) => setComment(e.target.value)}
           />
           <button type="submit" className="btn-primary" disabled={busy}>
-            {busy ? "Saving…" : "Submit review"}
+            {busy ? t("Saving…") : t("Submit review")}
           </button>
         </form>
       )}

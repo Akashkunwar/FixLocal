@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import type { JobInvite } from "../../../api/jobs";
 import { Countdown } from "../../../components/Countdown";
 import { fmtDateTime } from "../../../lib/format";
+import { t } from "../../../lib/i18n";
 
 const REASON_LABEL: Record<string, string> = {
   busy: "Busy / fully booked",
@@ -24,9 +25,9 @@ export function InviteHistoryList({
 }) {
   return (
     <>
-      <h3 className="text-sm font-semibold text-slate-900">Invite history</h3>
+      <h3 className="text-sm font-semibold text-slate-900">{t("Invite history")}</h3>
       <p className="text-xs text-slate-500 mb-2">
-        Who was invited, when, and pending vs declined
+        {t("Who was invited, when, and pending vs declined")}
         {quota ? ` · ${quota.used}/${quota.limit} used` : ""}
       </p>
       <ul className="space-y-2">
@@ -43,7 +44,7 @@ export function InviteHistoryList({
             >
               <div className="min-w-0">
                 <p className="font-medium text-slate-900">
-                  {inv.tradespersonName || "Pro"}{" "}
+                  {inv.tradespersonName || t("Pro")}{" "}
                   <span
                     className={
                       inv.status === "declined"
@@ -55,17 +56,17 @@ export function InviteHistoryList({
                   </span>
                   {inv.opened && (
                     <span className="ml-1 text-[10px] uppercase tracking-wide text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded-full">
-                      opened
+                      {t("opened")}
                     </span>
                   )}
                   {inv.bidAfterInvite && (
                     <span className="ml-1 text-[10px] uppercase tracking-wide text-violet-800 bg-violet-50 px-1.5 py-0.5 rounded-full">
-                      bid
+                      {t("bid")}
                     </span>
                   )}
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  Invited by {inv.invitedByName || "you"} ·{" "}
+                  {t("Invited by")}{" "}{inv.invitedByName || "you"} ·{" "}
                   {fmtDateTime(inv.invitedAt)}
                   {inv.declinedAt
                     ? ` · declined ${fmtDateTime(inv.declinedAt)}`
@@ -85,7 +86,7 @@ export function InviteHistoryList({
                 )}
                 {coolMs > 0 && (
                   <p className="text-[11px] font-medium text-amber-800 mt-0.5">
-                    Re-invite in <Countdown until={inv.cooldownUntil!} />
+                    {t("Re-invite in")}{" "}<Countdown until={inv.cooldownUntil!} />
                   </p>
                 )}
               </div>
@@ -93,7 +94,7 @@ export function InviteHistoryList({
                 to={`/pros/${inv.tradespersonId}`}
                 className="text-xs text-brand-700 no-underline hover:underline"
               >
-                Profile
+                {t("Profile")}
               </Link>
             </li>
           );

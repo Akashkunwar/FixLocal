@@ -180,7 +180,7 @@ export async function register(
   email: string,
   password: string,
   role: "HOMEOWNER" | "TRADESPERSON",
-  extras?: { name?: string; phone?: string; referralCode?: string }
+  extras?: { name?: string; phone?: string; referralCode?: string; language?: "en" | "hi" }
 ) {
   // Sign-up never starts a session: the same "check your inbox" answer comes back whether or not
   // the address already has an account. The user confirms their email, then logs in.

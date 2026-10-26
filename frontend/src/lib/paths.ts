@@ -1,3 +1,4 @@
+import { t } from "./t";
 /** Public URL prefixes. Internal roles stay HOMEOWNER / TRADESPERSON. */
 export const CLIENT_ROOT = "/client";
 export const PRO_ROOT = "/professional";
@@ -34,7 +35,7 @@ export const SITE_TYPES: { value: SiteType; label: string; hint: string }[] = [
 ];
 
 export function siteTypeLabel(v?: string | null) {
-  if (v === "residential") return "Residential";
-  if (v === "office") return "Office / facilities";
+  if (v === "residential") return t("Residential");
+  if (v === "office") return t("Office / facilities");
   return null;
 }

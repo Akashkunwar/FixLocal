@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { listChatThreads, type ChatThread } from "../api/extras";
 import { JobChat } from "./JobChat";
+import { t } from "../lib/i18n";
 
 type Props = {
   jobId: string;
@@ -26,10 +27,10 @@ export function JobConversations({ jobId, initialProId, hiredProId }: Props) {
         })
         .catch(() => !cancelled && setThreads([]));
     void load();
-    const t = window.setInterval(load, 60_000);
+    const timer = window.setInterval(load, 60_000);
     return () => {
       cancelled = true;
-      window.clearInterval(t);
+      window.clearInterval(timer);
     };
   }, [jobId, hiredProId]);
 
@@ -37,33 +38,33 @@ export function JobConversations({ jobId, initialProId, hiredProId }: Props) {
   if (!threads.length) {
     return (
       <div className="card p-4 text-sm text-slate-500">
-        Messages open once a professional bids. Each professional gets a private conversation with you.
+        {t("Messages open once a professional bids. Each professional gets a private conversation with you.")}
       </div>
     );
   }
 
-  const current = threads.find((t) => t.tradespersonId === selected) || threads[0];
+  const current = threads.find((th) => th.tradespersonId === selected) || threads[0];
   return (
     <section className="space-y-2">
       {threads.length > 1 && (
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Conversations">
-          {threads.map((t) => (
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label={t("Conversations")}>
+          {threads.map((th) => (
             <button
-              key={t.tradespersonId}
+              key={th.tradespersonId}
               type="button"
               role="tab"
-              aria-selected={t.tradespersonId === current.tradespersonId}
-              onClick={() => setSelected(t.tradespersonId)}
+              aria-selected={th.tradespersonId === current.tradespersonId}
+              onClick={() => setSelected(th.tradespersonId)}
               className={clsx(
                 "rounded-full px-3 py-1.5 text-xs font-semibold ring-1",
-                t.tradespersonId === current.tradespersonId
+                th.tradespersonId === current.tradespersonId
                   ? "bg-brand-700 text-white ring-brand-700"
                   : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50"
               )}
             >
-              {t.name || "Professional"}
-              {t.hired ? " · hired" : ""}
-              {t.unread > 0 && t.tradespersonId !== current.tradespersonId ? ` · ${t.unread} new` : ""}
+              {th.name || t("Professional")}
+              {th.hired ? t(" · hired") : ""}
+              {th.unread > 0 && th.tradespersonId !== current.tradespersonId ? ` · ${th.unread} new` : ""}
             </button>
           ))}
         </div>

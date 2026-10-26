@@ -13,9 +13,10 @@ import { ToastProvider } from "./components/Toast";
 import App from "./App";
 import "./styles.css";
 import { listenForInstallPrompt } from "./lib/install";
-import { I18nProvider } from "./lib/i18n";
+import { I18nProvider, prepareLanguage } from "./lib/i18n";
 
-createRoot(document.getElementById("root")!).render(
+void prepareLanguage().then(() =>
+  createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
@@ -27,6 +28,7 @@ createRoot(document.getElementById("root")!).render(
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>
+  )
 );
 
 listenForInstallPrompt();

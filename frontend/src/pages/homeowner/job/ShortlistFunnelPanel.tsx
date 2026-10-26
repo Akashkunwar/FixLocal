@@ -1,4 +1,5 @@
 import type { ShortlistInviteAnalytics } from "../../../api/jobs";
+import { t } from "../../../lib/i18n";
 
 /** Rank → invite → bid conversion for pros on the client's shortlist. */
 export function ShortlistFunnelPanel({
@@ -9,9 +10,9 @@ export function ShortlistFunnelPanel({
   return (
     <section className="card p-5 space-y-3">
       <div>
-        <h2 className="text-lg font-semibold">Shortlist invite funnel</h2>
+        <h2 className="text-lg font-semibold">{t("Shortlist invite funnel")}</h2>
         <p className="text-xs text-slate-500">
-          Rank → invite → bid conversion for pros on your shortlist
+          {t("Rank → invite → bid conversion for pros on your shortlist")}
           {funnel.avgRankBid != null
             ? ` · avg rank of bidders #${funnel.avgRankBid}`
             : ""}
@@ -24,7 +25,7 @@ export function ShortlistFunnelPanel({
             className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200"
           >
             <p className="text-[10px] uppercase tracking-wide text-slate-500">
-              {s.label}
+              {t(s.label)}
             </p>
             <p className="text-xl font-bold text-slate-900">{s.count}</p>
             <p className="text-[11px] text-slate-500">
@@ -41,11 +42,11 @@ export function ShortlistFunnelPanel({
               className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-2.5 py-1.5 text-xs ring-1 ring-slate-100"
             >
               <span className="font-medium text-slate-800">
-                Rank #{r.rank}
+                {t("Rank #")}{r.rank}
                 {r.names?.length ? ` · ${r.names.slice(0, 2).join(", ")}` : ""}
               </span>
               <span className="text-slate-500">
-                invited {r.invited} · bid {r.bidAfter}
+                {t("invited")}{" "}{r.invited} {t("· bid")}{" "}{r.bidAfter}
               </span>
             </li>
           ))}

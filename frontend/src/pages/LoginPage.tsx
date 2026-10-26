@@ -56,7 +56,7 @@ export function LoginPage() {
         </div>
         <div>
           <h2 className="font-display text-3xl font-semibold leading-snug">
-            Your neighborhood&apos;s trusted work marketplace.
+            {t("Your neighborhood's trusted work marketplace.")}
           </h2>
           <p className="mt-3 text-brand-100">{t("Verified professionals. Transparent bids. Clear timelines.")}</p>
         </div>
@@ -70,7 +70,7 @@ export function LoginPage() {
           </div>
           {params.get("reset") === "1" && !err && (
             <div className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 ring-1 ring-emerald-200" role="status">
-              Password updated. Sign in with your new password.
+              {t("Password updated. Sign in with your new password.")}
             </div>
           )}
           {err && (

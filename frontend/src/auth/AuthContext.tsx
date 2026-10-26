@@ -41,7 +41,7 @@ type AuthState = {
     email: string,
     password: string,
     role: "HOMEOWNER" | "TRADESPERSON",
-    extras?: { name?: string; phone?: string; referralCode?: string }
+    extras?: { name?: string; phone?: string; referralCode?: string; language?: "en" | "hi" }
   ) => Promise<string>;
   updateProfile: (body: ProfileUpdate) => Promise<User>;
   refreshUser: () => Promise<void>;
@@ -134,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (email: string, password: string, role: "HOMEOWNER" | "TRADESPERSON", extras?: { name?: string; phone?: string; referralCode?: string }) => {
+    async (email: string, password: string, role: "HOMEOWNER" | "TRADESPERSON", extras?: { name?: string; phone?: string; referralCode?: string; language?: "en" | "hi" }) => {
       setError(null);
       const r = await apiRegister(email, password, role, extras);
       return r.message;

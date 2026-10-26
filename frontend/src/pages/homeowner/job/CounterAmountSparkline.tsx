@@ -1,3 +1,4 @@
+import { t } from "../../../lib/i18n";
 /** Tiny inline chart of suggested counter amounts over time. */
 export function CounterAmountSparkline({
   points,
@@ -33,7 +34,7 @@ export function CounterAmountSparkline({
         viewBox={`0 0 ${w} ${h}`}
         className="h-12 w-full max-w-md"
         role="img"
-        aria-label="Counter amount sparkline"
+        aria-label={t("Counter amount sparkline")}
       >
         <polyline
           fill="none"
@@ -57,13 +58,13 @@ export function CounterAmountSparkline({
             }
           >
             <title>
-              {c.label}: ₹{Math.round(c.amount)} · {c.status}
+              {t(c.label)}: ₹{Math.round(c.amount)} · {c.status}
             </title>
           </circle>
         ))}
       </svg>
       <p className="text-[10px] text-slate-500">
-        ₹{Math.round(minA)} → ₹{Math.round(maxA)} · {points.length} counters
+        ₹{Math.round(minA)} → ₹{Math.round(maxA)} · {points.length} {t("counters")}
       </p>
     </div>
   );

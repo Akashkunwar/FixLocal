@@ -1,3 +1,4 @@
+import { t } from "./t";
 export function money(v: string | number | null | undefined) {
   if (v === null || v === undefined || v === "") return "—";
   const n = Number(v);
@@ -56,7 +57,8 @@ export const CATEGORIES = [
 export type CategoryValue = (typeof CATEGORIES)[number]["value"];
 
 export function categoryLabel(c: string) {
-  return CATEGORIES.find((x) => x.value === c)?.label || c;
+  const label = CATEGORIES.find((x) => x.value === c)?.label;
+  return label ? t(label) : c;
 }
 
 export function categoryEmoji(c: string) {
@@ -78,11 +80,11 @@ export function categoryGroups() {
 export function roleLabel(role?: string | null) {
   switch ((role || "").toUpperCase()) {
     case "HOMEOWNER":
-      return "Client";
+      return t("Client");
     case "TRADESPERSON":
-      return "Professional";
+      return t("Professional");
     case "ADMIN":
-      return "Admin";
+      return t("Admin");
     default:
       return role || "—";
   }

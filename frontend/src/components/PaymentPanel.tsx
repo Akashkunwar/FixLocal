@@ -12,6 +12,7 @@ import { money, fmtDate } from "../lib/format";
 import { useToast } from "./Toast";
 import { Download, IndianRupee, Printer } from "lucide-react";
 import { downloadMilestoneInvoice, printMilestoneInvoice } from "../lib/invoice";
+import { t } from "../lib/i18n";
 
 export function PaymentPanel({
   job,
@@ -63,10 +64,10 @@ export function PaymentPanel({
     return (
       <section className="card p-4 sm:p-5">
         <h2 className="font-semibold flex items-center gap-2">
-          <IndianRupee className="h-4 w-4 text-brand-700" /> Simulated escrow
+          <IndianRupee className="h-4 w-4 text-brand-700" /> {t("Simulated escrow")}
         </h2>
         <p className="mt-2 text-sm text-slate-500">
-          Escrow opens when you accept a bid. If the bid has a structured quote, escrow uses the <strong>quote</strong> amount; otherwise the bid amount. Funds are simulated only — no real charges.
+          {t("Escrow opens when you accept a bid. If the bid has a structured quote, escrow uses the")}{" "}<strong>{t("quote")}</strong> {t("amount; otherwise the bid amount. Funds are simulated only — no real charges.")}
         </p>
       </section>
     );
@@ -75,7 +76,7 @@ export function PaymentPanel({
   if (loading || !data) {
     return (
       <section className="card p-4 sm:p-5">
-        <Spinner label="Loading escrow…" />
+        <Spinner label={t("Loading escrow…")} />
       </section>
     );
   }
@@ -89,21 +90,21 @@ export function PaymentPanel({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="font-semibold flex items-center gap-2">
-            <IndianRupee className="h-4 w-4 text-brand-700" /> Simulated escrow
+            <IndianRupee className="h-4 w-4 text-brand-700" /> {t("Simulated escrow")}
           </h2>
-          <p className="mt-1 text-xs text-slate-500">Demo payments only — no Stripe / bank transfer.</p>
+          <p className="mt-1 text-xs text-slate-500">{t("Demo payments only — no Stripe / bank transfer.")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge status={data.paymentStatus} />
           {!!data.credit?.appliedToPayment && (
         <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-900">
-          FixLocal credit used: <strong>{money(data.credit.appliedToPayment)}</strong>. You funded{" "}
-          {money(Math.max(0, (data.escrowAmount ?? 0) - data.credit.appliedToPayment))} of this escrow; FixLocal covered the rest (simulated).
+          {t("FixLocal credit used:")}{" "}<strong>{money(data.credit.appliedToPayment)}</strong>{t(". You funded")}{" "}
+          {money(Math.max(0, (data.escrowAmount ?? 0) - data.credit.appliedToPayment))} {t("of this escrow; FixLocal covered the rest (simulated).")}
         </p>
       )}
       {!!data.credit?.addedToPayout && (
         <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-900">
-          Your FixLocal credit of <strong>{money(data.credit.addedToPayout)}</strong> was added to a payout on this job (simulated).
+          {t("Your FixLocal credit of")}{" "}<strong>{money(data.credit.addedToPayout)}</strong> {t("was added to a payout on this job (simulated).")}
         </p>
       )}
 
@@ -116,11 +117,11 @@ export function PaymentPanel({
               }
               title={
                 data.escrowSource === "quote"
-                  ? "Escrow funded from the accepted structured quote"
-                  : "Escrow funded from the accepted bid amount"
+                  ? t("Escrow funded from the accepted structured quote")
+                  : t("Escrow funded from the accepted bid amount")
               }
             >
-              From {data.escrowSource}
+              {t("From")}{" "}{data.escrowSource}
             </span>
           )}
           {data.milestones.length > 0 && (
@@ -133,10 +134,10 @@ export function PaymentPanel({
                     success("Pop-up blocked — the escrow summary was downloaded instead");
                   }
                 }}
-                title="Print or save as PDF"
+                title={t("Print or save as PDF")}
               >
                 <Printer className="h-3.5 w-3.5" />
-                <span className="hidden xs:inline sm:inline">Print</span>
+                <span className="hidden xs:inline sm:inline">{t("Print")}</span>
               </button>
               <button
                 type="button"
@@ -145,10 +146,10 @@ export function PaymentPanel({
                   downloadMilestoneInvoice(job, data);
                   success("Escrow summary downloaded");
                 }}
-                title="Download HTML summary"
+                title={t("Download HTML summary")}
               >
                 <Download className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Download</span>
+                <span className="hidden sm:inline">{t("Download")}</span>
               </button>
             </>
           )}
@@ -157,19 +158,19 @@ export function PaymentPanel({
 
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="rounded-xl bg-slate-50 p-2.5 sm:p-3 ring-1 ring-slate-100">
-          <p className="text-[10px] uppercase tracking-wide text-slate-500">Escrow</p>
+          <p className="text-[10px] uppercase tracking-wide text-slate-500">{t("Escrow")}</p>
           <p className="mt-1 text-sm sm:text-base font-semibold text-slate-900">
             {money(data.escrowAmount)}
           </p>
         </div>
         <div className="rounded-xl bg-emerald-50 p-2.5 sm:p-3 ring-1 ring-emerald-100">
-          <p className="text-[10px] uppercase tracking-wide text-emerald-700">Released</p>
+          <p className="text-[10px] uppercase tracking-wide text-emerald-700">{t("Released")}</p>
           <p className="mt-1 text-sm sm:text-base font-semibold text-emerald-900">
             {money(data.releasedTotal)}
           </p>
         </div>
         <div className="rounded-xl bg-amber-50 p-2.5 sm:p-3 ring-1 ring-amber-100">
-          <p className="text-[10px] uppercase tracking-wide text-amber-800">Held</p>
+          <p className="text-[10px] uppercase tracking-wide text-amber-800">{t("Held")}</p>
           <p className="mt-1 text-sm sm:text-base font-semibold text-amber-950">
             {money(data.remainingHeld)}
           </p>
@@ -178,18 +179,18 @@ export function PaymentPanel({
 
       {data.escrowSource && (
         <p className="text-xs text-slate-500">
-          Escrow source:{" "}
+          {t("Escrow source:")}{" "}
           <strong className="text-slate-700">
-            {data.escrowSource === "quote" ? "structured quote" : "bid amount"}
+            {data.escrowSource === "quote" ? t("structured quote") : t("bid amount")}
           </strong>{" "}
-          (simulated)
+          {t("(simulated)")}
         </p>
       )}
 
       {(data.parties?.homeowner || data.parties?.tradesperson) && (
         <div className="grid gap-2 sm:grid-cols-2 text-xs text-slate-600">
           <div className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-            <p className="text-[10px] uppercase tracking-wide text-slate-500">Client</p>
+            <p className="text-[10px] uppercase tracking-wide text-slate-500">{t("Client")}</p>
             <p className="font-medium text-slate-800">
               {data.parties?.homeowner?.name || "—"}
             </p>
@@ -198,7 +199,7 @@ export function PaymentPanel({
             )}
           </div>
           <div className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-            <p className="text-[10px] uppercase tracking-wide text-slate-500">Professional</p>
+            <p className="text-[10px] uppercase tracking-wide text-slate-500">{t("Professional")}</p>
             <p className="font-medium text-slate-800">
               {data.parties?.tradesperson?.name || "—"}
             </p>
@@ -211,12 +212,12 @@ export function PaymentPanel({
 
       {data.auditNotes && data.auditNotes.length > 0 && (
         <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-600">
-          <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Audit notes</p>
+          <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">{t("Audit notes")}</p>
           <p className="line-clamp-2">
             {data.auditNotes[0].snippet || data.auditNotes[0].summary}
           </p>
           <p className="mt-0.5 text-[10px] text-slate-500">
-            Included on printable invoice
+            {t("Included on printable invoice")}
             {data.auditNotes.length > 1 ? ` · +${data.auditNotes.length - 1} more` : ""}
           </p>
         </div>
@@ -232,7 +233,7 @@ export function PaymentPanel({
             >
               <div>
                 <p className="text-sm font-medium text-slate-900">
-                  {m.sequence}. {m.label}{" "}
+                  {m.sequence}. {t(m.label)}{" "}
                   <span className="text-slate-500 font-normal">({m.percent}%)</span>
                 </p>
                 <p className="text-xs text-slate-500">
@@ -254,7 +255,7 @@ export function PaymentPanel({
                     disabled={busyId === m.id}
                     onClick={() => onRelease(m)}
                   >
-                    {busyId === m.id ? "…" : "Release"}
+                    {busyId === m.id ? "…" : t("Release")}
                   </button>
                 )}
               </div>

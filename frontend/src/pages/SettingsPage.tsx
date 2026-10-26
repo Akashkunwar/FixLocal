@@ -16,6 +16,7 @@ import { DEFAULT_COUNTER_STARTERS, mergeCounterTemplates } from "../lib/counterT
 import { DEFAULT_HOMEOWNER_COUNTER_NOTES, mergeHomeownerCounterNotes } from "../lib/homeownerCounterNotes";
 import { DEFAULT_INTRO_STARTERS, mergeIntroTemplates } from "../lib/introTemplates";
 import { deleteNamedJobTemplate, mergeNamedJobTemplates } from "../lib/namedJobTemplates";
+import { t } from "../lib/i18n";
 
 function supportedZones(): string[] {
   try {
@@ -155,27 +156,27 @@ export function SettingsPage() {
   }
 
   return (
-    <Shell title="Settings" subtitle="Account, security and notification preferences">
+    <Shell title={t("Settings")} subtitle={t("Account, security and notification preferences")}>
       <div className="max-w-lg space-y-6">
         <form onSubmit={onSubmit} className="card space-y-4 p-5 sm:p-6">
           <div>
             <label className="label" htmlFor="settings-email">
-              Email
+              {t("Email")}
             </label>
             <input id="settings-email" className="input bg-slate-50" value={user.email} disabled />
             <p className="mt-1 text-xs text-slate-500">
-              {user.emailVerified === false ? "Not verified yet — check your inbox." : "Verified"}
+              {user.emailVerified === false ? t("Not verified yet — check your inbox.") : t("Verified")}
             </p>
           </div>
           <div>
             <label className="label" htmlFor="name">
-              Display name
+              {t("Display name")}
             </label>
             <input id="name" className="input" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div>
             <label className="label" htmlFor="phone">
-              Phone
+              {t("Phone")}
             </label>
             <input
               id="phone"
@@ -188,7 +189,7 @@ export function SettingsPage() {
           </div>
           <div>
             <label className="label" htmlFor="timezone">
-              Time zone
+              {t("Time zone")}
             </label>
             <select id="timezone" className="input" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
               {zones.map((z) => (
@@ -197,30 +198,30 @@ export function SettingsPage() {
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-slate-500">Used for availability and schedule times.</p>
+            <p className="mt-1 text-xs text-slate-500">{t("Used for availability and schedule times.")}</p>
           </div>
           <button type="submit" className="btn-primary w-full sm:w-auto" disabled={busy}>
-            {busy ? "Saving…" : "Save profile"}
+            {busy ? t("Saving…") : t("Save profile")}
           </button>
         </form>
 
         <section className="card space-y-4 p-5 sm:p-6">
           <div>
-            <h2 className="font-semibold text-slate-900">Notification preferences</h2>
-            <p className="mt-1 text-sm text-slate-500">Choose which in-app alerts you want. Saved to your account.</p>
+            <h2 className="font-semibold text-slate-900">{t("Notification preferences")}</h2>
+            <p className="mt-1 text-sm text-slate-500">{t("Choose which in-app alerts you want. Saved to your account.")}</p>
           </div>
           <ul className="divide-y divide-slate-100">
             {NOTIF_PREF_META.map((item) => (
               <li key={item.key} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900">{item.label}</p>
-                  <p className="text-xs text-slate-500">{item.hint}</p>
+                  <p className="text-sm font-medium text-slate-900">{t(item.label)}</p>
+                  <p className="text-xs text-slate-500">{t(item.hint)}</p>
                 </div>
                 <button
                   type="button"
                   role="switch"
                   aria-checked={prefs[item.key]}
-                  aria-label={item.label}
+                  aria-label={t(item.label)}
                   onClick={() => setPrefs((p) => ({ ...p, [item.key as NotifPrefKey]: !p[item.key] }))}
                   className={`relative h-7 w-12 shrink-0 rounded-full transition ${
                     prefs[item.key] ? "bg-brand-600" : "bg-slate-200"
@@ -236,32 +237,32 @@ export function SettingsPage() {
             ))}
           </ul>
           <button type="button" className="btn-primary w-full sm:w-auto" disabled={prefsBusy} onClick={savePrefs}>
-            {prefsBusy ? "Saving…" : "Save preferences"}
+            {prefsBusy ? t("Saving…") : t("Save preferences")}
           </button>
         </section>
 
         {isClient && (
           <TemplateEditor
-            title="Invite message templates"
-            description="Quick notes you can add when inviting a professional to a job."
+            title={t("Invite message templates")}
+            description={t("Quick notes you can add when inviting a professional to a job.")}
             noun="invite"
             idPrefix="tpl"
             value={mergeInviteTemplates(user.inviteTemplates)}
             defaults={DEFAULT_INVITE_STARTERS}
-            placeholder="Message body for inviting a pro…"
+            placeholder={t("Message body for inviting a pro…")}
             onSave={(items) => updateProfile({ inviteTemplates: items })}
           />
         )}
 
         {isClient && (
           <TemplateEditor
-            title="Counter-offer note templates"
-            description="Notes you can send when asking a professional to revise a quote."
+            title={t("Counter-offer note templates")}
+            description={t("Notes you can send when asking a professional to revise a quote.")}
             noun="note"
             idPrefix="ho-ctr"
             value={mergeHomeownerCounterNotes(user.homeownerCounterTemplates)}
             defaults={DEFAULT_HOMEOWNER_COUNTER_NOTES}
-            placeholder="Note shown when you request a revised quote…"
+            placeholder={t("Note shown when you request a revised quote…")}
             onSave={(items) => updateProfile({ homeownerCounterTemplates: items })}
           />
         )}
@@ -269,14 +270,14 @@ export function SettingsPage() {
         {isClient && (
           <section className="card space-y-4 p-5 sm:p-6">
             <div>
-              <h2 className="font-semibold text-slate-900">Named job templates</h2>
+              <h2 className="font-semibold text-slate-900">{t("Named job templates")}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Jobs you saved by name. Apply them when posting a new job.
+                {t("Jobs you saved by name. Apply them when posting a new job.")}
               </p>
             </div>
             {namedJobs.length === 0 ? (
               <p className="text-sm text-slate-500">
-                No saved templates yet. On a completed job, use <span className="font-medium">Save as template</span>.
+                {t("No saved templates yet. On a completed job, use")}{" "}<span className="font-medium">{t("Save as template")}</span>.
               </p>
             ) : (
               <ul className="space-y-2">
@@ -305,7 +306,7 @@ export function SettingsPage() {
                         }
                       }}
                     >
-                      Remove
+                      {t("Remove")}
                     </button>
                   </li>
                 ))}
@@ -316,26 +317,26 @@ export function SettingsPage() {
 
         {isPro && (
           <TemplateEditor
-            title="Counter-offer reply templates"
-            description="Replies you can use when a client asks you to revise a quote."
+            title={t("Counter-offer reply templates")}
+            description={t("Replies you can use when a client asks you to revise a quote.")}
             noun="reply"
             idPrefix="ctr"
             value={mergeCounterTemplates(user.counterTemplates)}
             defaults={DEFAULT_COUNTER_STARTERS}
-            placeholder="Reply to a client's counter-offer…"
+            placeholder={t("Reply to a client's counter-offer…")}
             onSave={(items) => updateProfile({ counterTemplates: items })}
           />
         )}
 
         {isPro && (
           <TemplateEditor
-            title="Intro / first-message templates"
-            description="Openers you can send in the job chat once you're hired."
+            title={t("Intro / first-message templates")}
+            description={t("Openers you can send in the job chat once you're hired.")}
             noun="intro"
             idPrefix="intro"
             value={mergeIntroTemplates(user.introTemplates)}
             defaults={DEFAULT_INTRO_STARTERS}
-            placeholder="First message to a client…"
+            placeholder={t("First message to a client…")}
             onSave={(items) => updateProfile({ introTemplates: items })}
           />
         )}
@@ -343,15 +344,15 @@ export function SettingsPage() {
         {isPro && (
           <section className="card space-y-4 p-5 sm:p-6">
             <div>
-              <h2 className="font-semibold text-slate-900">Viewed-but-no-reply nudge</h2>
+              <h2 className="font-semibold text-slate-900">{t("Viewed-but-no-reply nudge")}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Hours after a client views your revised quote before you get a reminder (default 4).
+                {t("Hours after a client views your revised quote before you get a reminder (default 4).")}
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-3">
               <div>
                 <label className="label" htmlFor="nudgeHours">
-                  Nudge after (hours)
+                  {t("Nudge after (hours)")}
                 </label>
                 <input
                   id="nudgeHours"
@@ -364,7 +365,7 @@ export function SettingsPage() {
                 />
               </div>
               <button type="button" className="btn-primary" disabled={nudgeBusy} onClick={saveNudge}>
-                {nudgeBusy ? "Saving…" : "Save nudge hours"}
+                {nudgeBusy ? t("Saving…") : t("Save nudge hours")}
               </button>
             </div>
           </section>
@@ -373,13 +374,13 @@ export function SettingsPage() {
         <form onSubmit={onChangePassword} className="card space-y-4 p-5 sm:p-6" aria-labelledby="pw-title">
           <div>
             <h2 id="pw-title" className="font-semibold text-slate-900">
-              Password
+              {t("Password")}
             </h2>
-            <p className="mt-1 text-sm text-slate-500">Changing it signs you out on your other devices.</p>
+            <p className="mt-1 text-sm text-slate-500">{t("Changing it signs you out on your other devices.")}</p>
           </div>
           <div>
             <label className="label" htmlFor="current-password">
-              Current password
+              {t("Current password")}
             </label>
             <input
               id="current-password"
@@ -393,7 +394,7 @@ export function SettingsPage() {
           </div>
           <div>
             <label className="label" htmlFor="settings-new-password">
-              New password
+              {t("New password")}
             </label>
             <input
               id="settings-new-password"
@@ -406,14 +407,14 @@ export function SettingsPage() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
             />
-            <p className="mt-1 text-xs text-slate-500">At least 10 characters.</p>
+            <p className="mt-1 text-xs text-slate-500">{t("At least 10 characters.")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="submit" className="btn-primary" disabled={pwBusy}>
-              {pwBusy ? "Saving…" : "Change password"}
+              {pwBusy ? t("Saving…") : t("Change password")}
             </button>
             <button type="button" className="btn-secondary" onClick={onLogoutEverywhere}>
-              Sign out on all devices
+              {t("Sign out on all devices")}
             </button>
           </div>
         </form>
@@ -439,16 +440,15 @@ export function SettingsPage() {
           >
             <div>
               <h2 id="delete-title" className="font-semibold text-rose-800">
-                Delete account
+                {t("Delete account")}
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Removes your profile, contact details, photos and saved templates. Finished jobs and reviews stay
-                on record without your name. You can't do this while a job is in progress.
+                {t("Removes your profile, contact details, photos and saved templates. Finished jobs and reviews stay on record without your name. You can't do this while a job is in progress.")}
               </p>
             </div>
             <div>
               <label className="label" htmlFor="delete-password">
-                Confirm with your password
+                {t("Confirm with your password")}
               </label>
               <input
                 id="delete-password"
@@ -461,7 +461,7 @@ export function SettingsPage() {
               />
             </div>
             <button type="submit" className="btn-danger" disabled={deleteBusy}>
-              {deleteBusy ? "Deleting…" : "Delete my account"}
+              {deleteBusy ? t("Deleting…") : t("Delete my account")}
             </button>
           </form>
         )}

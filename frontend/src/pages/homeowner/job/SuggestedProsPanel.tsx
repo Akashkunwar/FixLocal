@@ -6,6 +6,7 @@ import { InviteHistoryList } from "./InviteHistoryList";
 import { Send, Users, Info, BarChart3 } from "lucide-react";
 import { upsertTextTemplate } from "../../../lib/textTemplates";
 import type { JobDetailState } from "./useJobDetail";
+import { t } from "../../../lib/i18n";
 
 export function SuggestedProsPanel({
   s,
@@ -59,14 +60,13 @@ export function SuggestedProsPanel({
               <>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <h2 className="text-lg font-semibold">Suggested pros</h2>
+                    <h2 className="text-lg font-semibold">{t("Suggested pros")}</h2>
                     <p className="text-xs text-slate-500 mb-1">
-                      Ranked by skills ∩ category, rating, response time, and
-                      distance (max 100). Invite sends an in-app notification.
+                      {t("Ranked by skills ∩ category, rating, response time, and distance (max 100). Invite sends an in-app notification.")}
                       {inviteQuota && (
                         <>
                           {" "}
-                          · {inviteQuota.used}/{inviteQuota.limit} invites used
+                          · {inviteQuota.used}/{inviteQuota.limit} {t("invites used")}
                         </>
                       )}
                     </p>
@@ -83,7 +83,7 @@ export function SuggestedProsPanel({
                     }}
                   >
                     <Users className="h-3.5 w-3.5" />
-                    {bulkMode ? "Cancel multi" : "Invite multiple"}
+                    {bulkMode ? t("Cancel multi") : t("Invite multiple")}
                   </button>
                 </div>
                 <ul className="space-y-3">
@@ -120,7 +120,7 @@ export function SuggestedProsPanel({
                               to={`/pros/${p.userId}`}
                               className="font-semibold text-slate-900 no-underline hover:text-brand-700"
                             >
-                              {p.name || "Verified pro"}
+                              {p.name || t("Verified pro")}
                             </Link>
                             <p className="mt-0.5 text-xs text-slate-500">
                               {[p.city, p.skills].filter(Boolean).join(" · ") ||
@@ -129,12 +129,12 @@ export function SuggestedProsPanel({
                             <p className="mt-1 text-[11px] text-slate-500">
                               ★ {p.averageRating.toFixed(1)} ({p.reviewCount})
                               {p.breakdown.distanceKm != null && (
-                                <> · ~{p.breakdown.distanceKm} km</>
+                                <> · ~{p.breakdown.distanceKm} {t("km")}</>
                               )}
                               {p.breakdown.avgResponseHours != null && (
                                 <>
                                   {" "}
-                                  · ~{p.breakdown.avgResponseHours}h response
+                                  · ~{p.breakdown.avgResponseHours}{t("h response")}
                                 </>
                               )}
                               {p.responseSla && (
@@ -148,7 +148,7 @@ export function SuggestedProsPanel({
                             </p>
                             {inCool && (
                               <p className="mt-1 text-[11px] font-medium text-amber-800">
-                                Cooldown · retry in{" "}
+                                {t("Cooldown · retry in")}{" "}
                                 <Countdown until={cool!.cooldownUntil!} />
                               </p>
                             )}
@@ -159,13 +159,13 @@ export function SuggestedProsPanel({
                             type="button"
                             className="text-right rounded-lg px-1.5 py-0.5 hover:bg-white/80 focus:outline-hidden focus:ring-2 focus:ring-brand-300"
                             onClick={() => setScorePro(p)}
-                            title="Explain match score (sk/rt/rs/ds)"
+                            title={t("Explain match score (sk/rt/rs/ds)")}
                           >
                             <p className="text-2xl font-bold text-brand-800">
                               {(p.rankedScore ?? p.score).toFixed(0)}
                             </p>
                             <p className="text-[10px] uppercase tracking-wide text-slate-500 flex items-center justify-end gap-0.5">
-                              match <Info className="h-3 w-3" />
+                              {t("match")}{" "}<Info className="h-3 w-3" />
                             </p>
                             {(p.heatBoost != null && p.heatBoost > 0) ||
                             p.availabilityHeat?.clean ? (
@@ -176,8 +176,8 @@ export function SuggestedProsPanel({
                                   : ""}
                               </p>
                             ) : (
-                              <p className="text-[10px] text-slate-500" title="No weekly schedule published">
-                                schedule unknown
+                              <p className="text-[10px] text-slate-500" title={t("No weekly schedule published")}>
+                                {t("schedule unknown")}
                               </p>
                             )}
                           </button>
@@ -189,18 +189,18 @@ export function SuggestedProsPanel({
                               onClick={() => onInvitePro(p)}
                               title={
                                 already
-                                  ? "Already invited"
+                                  ? t("Already invited")
                                   : inCool
                                     ? `Cooldown until ${new Date(cool!.cooldownUntil!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                                    : "Invite to bid"
+                                    : t("Invite to bid")
                               }
                             >
                               <Send className="h-3.5 w-3.5" />
                               {already
-                                ? "Invited"
+                                ? t("Invited")
                                 : inCool
-                                  ? "Cooldown"
-                                  : "Invite"}
+                                  ? t("Cooldown")
+                                  : t("Invite")}
                             </button>
                           )}
                         </div>
@@ -212,8 +212,8 @@ export function SuggestedProsPanel({
                 {bulkMode && (
                   <div className="rounded-xl bg-brand-50 p-3 ring-1 ring-brand-100 space-y-3">
                     <p className="text-sm font-medium text-brand-950">
-                      {selectedInviteIds.length} pro
-                      {selectedInviteIds.length === 1 ? "" : "s"} selected
+                      {selectedInviteIds.length} {t("pro")}
+                      {selectedInviteIds.length === 1 ? "" : "s"} {t("selected")}
                       {inviteQuota
                         ? ` · ${inviteQuota.remaining} invites left on this job`
                         : ""}
@@ -225,13 +225,13 @@ export function SuggestedProsPanel({
                         disabled={selectedInviteIds.length === 0 || inviteBusy}
                         onClick={() => setBulkConfirmOpen(true)}
                       >
-                        Continue…
+                        {t("Continue…")}
                       </button>
                     ) : (
                       <>
                         <div>
                           <p className="label">
-                            Optional shared message
+                            {t("Optional shared message")}
                           </p>
                           <div className="mb-2 flex flex-wrap gap-1.5">
                             {inviteTemplates.slice(0, 6).map((tpl) => (
@@ -241,15 +241,15 @@ export function SuggestedProsPanel({
                                 className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
                                 onClick={() => setBulkMessage(tpl.body)}
                               >
-                                {tpl.label}
+                                {t(tpl.label)}
                               </button>
                             ))}
                           </div>
                           <textarea
-                            aria-label="Optional shared message"
+                            aria-label={t("Optional shared message")}
                             className="input min-h-[72px]"
                             maxLength={500}
-                            placeholder="Optional note for all selected pros"
+                            placeholder={t("Optional note for all selected pros")}
                             value={bulkMessage}
                             onChange={(e) => setBulkMessage(e.target.value)}
                           />
@@ -264,7 +264,7 @@ export function SuggestedProsPanel({
                             onClick={confirmBulkInvite}
                           >
                             {inviteBusy
-                              ? "Sending…"
+                              ? t("Sending…")
                               : `Send ${selectedInviteIds.length} invite${selectedInviteIds.length === 1 ? "" : "s"}`}
                           </button>
                           <button
@@ -273,7 +273,7 @@ export function SuggestedProsPanel({
                             disabled={inviteBusy}
                             onClick={() => setBulkConfirmOpen(false)}
                           >
-                            Back
+                            {t("Back")}
                           </button>
                         </div>
                       </>
@@ -284,13 +284,13 @@ export function SuggestedProsPanel({
                 {invitingProId && !bulkMode && (
                   <div className="rounded-xl bg-brand-50 p-3 ring-1 ring-brand-100 space-y-3">
                     <p className="text-sm font-medium text-brand-950">
-                      Invite{" "}
+                      {t("Invite")}{" "}
                       {suggestedPros.find((x) => x.userId === invitingProId)
                         ?.name || "pro"}{" "}
-                      to bid?
+                      {t("to bid?")}
                     </p>
                     <div>
-                      <p className="label">Optional message</p>
+                      <p className="label">{t("Optional message")}</p>
                       <div className="mb-2 flex flex-wrap gap-1.5">
                         {inviteTemplates.slice(0, 8).map((tpl) => (
                           <button
@@ -300,23 +300,23 @@ export function SuggestedProsPanel({
                             onClick={() => setInviteMessage(tpl.body)}
                             title={tpl.body}
                           >
-                            {tpl.label}
+                            {t(tpl.label)}
                           </button>
                         ))}
                       </div>
                       <textarea
-                        aria-label="Optional message"
+                        aria-label={t("Optional message")}
                         className="input min-h-[72px]"
                         maxLength={500}
-                        placeholder="e.g. Flexible on timing, need someone this week"
+                        placeholder={t("e.g. Flexible on timing, need someone this week")}
                         value={inviteMessage}
                         onChange={(e) => setInviteMessage(e.target.value)}
                       />
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <input
-                          aria-label="Template label"
+                          aria-label={t("Template label")}
                           className="input py-1.5! text-xs max-w-[140px]"
-                          placeholder="Template label"
+                          placeholder={t("Template label")}
                           value={tplLabel}
                           onChange={(e) => setTplLabel(e.target.value)}
                         />
@@ -347,7 +347,7 @@ export function SuggestedProsPanel({
                             }
                           }}
                         >
-                          Save template
+                          {t("Save template")}
                         </button>
                       </div>
                     </div>
@@ -358,7 +358,7 @@ export function SuggestedProsPanel({
                         disabled={inviteBusy}
                         onClick={confirmInvite}
                       >
-                        {inviteBusy ? "Sending…" : "Send invite"}
+                        {inviteBusy ? t("Sending…") : t("Send invite")}
                       </button>
                       <button
                         type="button"
@@ -372,7 +372,7 @@ export function SuggestedProsPanel({
                           setInviteMessage("");
                         }}
                       >
-                        Cancel
+                        {t("Cancel")}
                       </button>
                     </div>
                   </div>
@@ -391,7 +391,7 @@ export function SuggestedProsPanel({
                 <div className="flex items-center gap-2 mb-2">
                   <BarChart3 className="h-4 w-4 text-brand-700" />
                   <h3 className="text-sm font-semibold text-slate-900">
-                    Invite analytics
+                    {t("Invite analytics")}
                   </h3>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -418,7 +418,7 @@ export function SuggestedProsPanel({
                       className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200"
                     >
                       <p className="text-[10px] uppercase tracking-wide text-slate-500">
-                        {c.label}
+                        {t(c.label)}
                       </p>
                       <p className="text-xl font-bold text-slate-900">
                         {c.value}
@@ -430,8 +430,7 @@ export function SuggestedProsPanel({
                   ))}
                 </div>
                 <p className="mt-2 text-[11px] text-slate-500">
-                  Opened ≈ notification read or deep-link visit · Click-ish
-                  tracked when pros open the invite job link
+                  {t("Opened ≈ notification read or deep-link visit · Click-ish tracked when pros open the invite job link")}
                 </p>
               </div>
             )}

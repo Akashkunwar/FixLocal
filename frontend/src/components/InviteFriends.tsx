@@ -4,6 +4,7 @@ import { createMyReferralCode, getMyReferrals, type Referral } from "../api/feat
 import { REFERRAL_STATUS_LABEL, whatsappShareUrl } from "../lib/referrals";
 import { fmtDate, money } from "../lib/format";
 import { useToast } from "./Toast";
+import { t } from "../lib/i18n";
 
 /** Settings card: a personal invite link plus who joined through it. Rewards are not offered (yet). */
 export function InviteFriends() {
@@ -57,31 +58,31 @@ export function InviteFriends() {
     <section className="card space-y-4 p-5 sm:p-6" aria-labelledby="invite-title">
       <div>
         <h2 id="invite-title" className="flex items-center gap-2 font-semibold text-slate-900">
-          <Gift className="h-5 w-5 text-brand-700" aria-hidden /> Invite friends
+          <Gift className="h-5 w-5 text-brand-700" aria-hidden /> {t("Invite friends")}
         </h2>
         <p className="mt-1 text-sm text-slate-500">
-          Share your personal link. When a friend finishes their first job on FixLocal, you each get{" "}
-          {ref ? money(ref.rewardAmount) : "₹100"} FixLocal credit (simulated, like escrow).
+          {t("Share your personal link. When a friend finishes their first job on FixLocal, you each get")}{" "}
+          {ref ? money(ref.rewardAmount) : "₹100"} {t("FixLocal credit (simulated, like escrow).")}
         </p>
       </div>
-      {failed && <p className="text-sm text-rose-700">Couldn't load your invites right now.</p>}
-      {!ref && !failed && <p className="text-sm text-slate-500">Loading…</p>}
+      {failed && <p className="text-sm text-rose-700">{t("Couldn't load your invites right now.")}</p>}
+      {!ref && !failed && <p className="text-sm text-slate-500">{t("Loading…")}</p>}
       {ref && !ref.link && (
         <button type="button" className="btn-primary" onClick={create} disabled={busy}>
-          {busy ? "Creating…" : "Create my invite link"}
+          {busy ? t("Creating…") : t("Create my invite link")}
         </button>
       )}
       {ref?.link && (
         <>
           <div>
             <label htmlFor="invite-link" className="label">
-              Your invite link (code <span className="font-mono">{ref.code}</span>)
+              {t("Your invite link (code")}{" "}<span className="font-mono">{ref.code}</span>)
             </label>
             <input id="invite-link" className="input font-mono text-sm" readOnly value={ref.link} onFocus={(e) => e.target.select()} />
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-secondary btn-sm" onClick={copy}>
-              <Copy className="h-4 w-4" aria-hidden /> Copy link
+              <Copy className="h-4 w-4" aria-hidden /> {t("Copy link")}
             </button>
             <a
               className="btn-secondary btn-sm"
@@ -89,11 +90,11 @@ export function InviteFriends() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              <MessageCircle className="h-4 w-4" aria-hidden /> Share on WhatsApp
+              <MessageCircle className="h-4 w-4" aria-hidden /> {t("Share on WhatsApp")}
             </a>
             {canShare && (
               <button type="button" className="btn-secondary btn-sm" onClick={share}>
-                <Share2 className="h-4 w-4" aria-hidden /> More ways to share
+                <Share2 className="h-4 w-4" aria-hidden /> {t("More ways to share")}
               </button>
             )}
           </div>
@@ -117,23 +118,23 @@ export function InviteFriends() {
           </dl>
           {ref.earned > 0 && (
             <p className="text-sm text-slate-700">
-              Credit earned from invites: <strong>{money(ref.earned)}</strong>{" "}
+              {t("Credit earned from invites:")}{" "}<strong>{money(ref.earned)}</strong>{" "}
               <a href="#credit" className="text-brand-700 underline">
-                See your credit
+                {t("See your credit")}
               </a>
             </p>
           )}
           {ref.people.length > 0 && (
-            <ul className="divide-y divide-slate-100 text-sm" aria-label="People you invited">
+            <ul className="divide-y divide-slate-100 text-sm" aria-label={t("People you invited")}>
               {ref.people.map((p, i) => (
                 <li key={i} className="flex flex-wrap items-center justify-between gap-2 py-2">
                   <span className="font-medium text-slate-800">{p.firstName}</span>
                   <span className="text-slate-500">
-                    {REFERRAL_STATUS_LABEL[p.status]} · joined {fmtDate(p.joinedAt)}
-                    {p.reward === "granted" && p.rewardAmount > 0 && <strong className="text-emerald-700"> · {money(p.rewardAmount)} earned</strong>}
-                    {p.reward === "granted" && p.rewardAmount === 0 && " · monthly limit reached"}
-                    {p.reward === "blocked" && " · not eligible"}
-                    {p.reward === "reversed" && " · credit reversed"}
+                    {t(REFERRAL_STATUS_LABEL[p.status])} {t("· joined")}{" "}{fmtDate(p.joinedAt)}
+                    {p.reward === "granted" && p.rewardAmount > 0 && <strong className="text-emerald-700"> · {money(p.rewardAmount)} {t("earned")}</strong>}
+                    {p.reward === "granted" && p.rewardAmount === 0 && t(" · monthly limit reached")}
+                    {p.reward === "blocked" && t(" · not eligible")}
+                    {p.reward === "reversed" && t(" · credit reversed")}
                   </span>
                 </li>
               ))}

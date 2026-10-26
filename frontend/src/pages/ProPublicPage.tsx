@@ -32,6 +32,7 @@ import {
   DAY_LABELS,
   normalizeWeeklyAvailability,
 } from "../lib/availability";
+import { t } from "../lib/i18n";
 
 function proDescription(p: TradespersonProfile) {
   const name = p.name || "Professional";
@@ -114,7 +115,7 @@ export function ProPublicPage() {
 
   if (loadError) {
     return (
-      <Shell title="Pro profile">
+      <Shell title={t("Pro profile")}>
         <p className="card p-6 text-sm text-slate-600" role="alert">
           {loadError}
         </p>
@@ -122,13 +123,13 @@ export function ProPublicPage() {
     );
   }
   if (loading || !profile) {
-    return <Shell title="Pro profile"><Spinner /></Shell>;
+    return <Shell title={t("Pro profile")}><Spinner /></Shell>;
   }
 
   return (
     <Shell
-      title={profile.name || "Professional"}
-      subtitle={profile.city || "Local pro"}
+      title={profile.name || t("Professional")}
+      subtitle={profile.city || t("Local pro")}
       description={proDescription(profile)}
       actions={
         <div className="flex flex-wrap gap-2">
@@ -138,7 +139,7 @@ export function ProPublicPage() {
               className="btn-primary btn-sm"
               onClick={() => setShowInvite((v) => !v)}
             >
-              <Send className="h-4 w-4" /> Invite to job
+              <Send className="h-4 w-4" /> {t("Invite to job")}
             </button>
           )}
           {!user && (
@@ -146,7 +147,7 @@ export function ProPublicPage() {
               className="btn-primary btn-sm no-underline"
               to={`/register?next=${encodeURIComponent(`/pros/${profile.userId}`)}`}
             >
-              <Send className="h-4 w-4" aria-hidden /> Sign up to get a quote
+              <Send className="h-4 w-4" aria-hidden /> {t("Sign up to get a quote")}
             </Link>
           )}
           {user && (
@@ -159,7 +160,7 @@ export function ProPublicPage() {
                   .catch((e) => error(e.message))
               }
             >
-              <Heart className="h-4 w-4" /> Save
+              <Heart className="h-4 w-4" /> {t("Save")}
             </button>
           )}
           <ShareButtons
@@ -173,19 +174,19 @@ export function ProPublicPage() {
     >
       {showInvite && canInvite && (
         <section className="mb-6 card p-4 space-y-3 ring-1 ring-brand-100">
-          <h2 className="font-semibold text-sm">Invite {profile.name || "this pro"} to bid</h2>
+          <h2 className="font-semibold text-sm">{t("Invite")}{" "}{profile.name || t("this pro")} {t("to bid")}</h2>
           {openJobs.length === 0 ? (
             <p className="text-sm text-slate-500">
-              No open jobs yet.{" "}
+              {t("No open jobs yet.")}{" "}
               <Link className="text-brand-700 underline" to="/client/jobs/new">
-                Post a job
+                {t("Post a job")}
               </Link>{" "}
-              first, then invite from here.
+              {t("first, then invite from here.")}
             </p>
           ) : (
             <>
               <div>
-                <label className="label" htmlFor="invite-job">Open job</label>
+                <label className="label" htmlFor="invite-job">{t("Open job")}</label>
                 <select
                   id="invite-job"
                   className="input"
@@ -200,12 +201,12 @@ export function ProPublicPage() {
                 </select>
               </div>
               <div>
-                <label className="label" htmlFor="invite-message">Optional message</label>
+                <label className="label" htmlFor="invite-message">{t("Optional message")}</label>
                 <input id="invite-message"
                   className="input"
                   value={inviteMessage}
                   onChange={(e) => setInviteMessage(e.target.value)}
-                  placeholder="Flexible this week — photos attached on the job"
+                  placeholder={t("Flexible this week — photos attached on the job")}
                   maxLength={500}
                 />
               </div>
@@ -216,7 +217,7 @@ export function ProPublicPage() {
                   disabled={inviteBusy || !inviteJobId}
                   onClick={onInvite}
                 >
-                  {inviteBusy ? "Sending…" : "Send invite"}
+                  {inviteBusy ? t("Sending…") : t("Send invite")}
                 </button>
                 <button
                   type="button"
@@ -224,7 +225,7 @@ export function ProPublicPage() {
                   disabled={inviteBusy}
                   onClick={() => setShowInvite(false)}
                 >
-                  Cancel
+                  {t("Cancel")}
                 </button>
               </div>
             </>
@@ -255,13 +256,13 @@ export function ProPublicPage() {
             </div>
             {contactRevealed && (profile.email || profile.phone) && (
               <p className="mt-3 text-sm text-slate-600">
-                Contact:{" "}
+                {t("Contact:")}{" "}
                 {profile.phone && <a href={`tel:${profile.phone}`}>{profile.phone}</a>}
                 {profile.phone && profile.email && " · "}
                 {profile.email && <a href={`mailto:${profile.email}`}>{profile.email}</a>}
               </p>
             )}
-            <p className="mt-4 text-slate-700 whitespace-pre-wrap">{profile.bio || "No bio yet."}</p>
+            <p className="mt-4 text-slate-700 whitespace-pre-wrap">{profile.bio || t("No bio yet.")}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {(profile.skills || "")
                 .split(",")
@@ -274,15 +275,15 @@ export function ProPublicPage() {
                 ))}
             </div>
             {profile.serviceAreas && (
-              <p className="mt-3 text-sm text-slate-500">Serves: {profile.serviceAreas}</p>
+              <p className="mt-3 text-sm text-slate-500">{t("Serves:")}{" "}{profile.serviceAreas}</p>
             )}
             {normalizeCustomRatePackages(profile.customRatePackages).length > 0 && (
               <div className="mt-5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Custom rate packages
+                  {t("Custom rate packages")}
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-500">
-                  Set by this professional — still ask for a firm quote on your job.
+                  {t("Set by this professional — still ask for a firm quote on your job.")}
                 </p>
                 <ul className="mt-3 grid gap-2 sm:grid-cols-3">
                   {normalizeCustomRatePackages(profile.customRatePackages).map((p) => (
@@ -290,8 +291,8 @@ export function ProPublicPage() {
                       key={p.id}
                       className="rounded-xl bg-brand-50/60 px-3 py-2.5 ring-1 ring-brand-100"
                     >
-                      <p className="text-sm font-semibold text-slate-900">{p.label}</p>
-                      {p.hint && <p className="text-[11px] text-slate-500">{p.hint}</p>}
+                      <p className="text-sm font-semibold text-slate-900">{t(p.label)}</p>
+                      {p.hint && <p className="text-[11px] text-slate-500">{t(p.hint)}</p>}
                       <p className="mt-1 text-sm font-medium text-brand-800">
                         {formatCustomPackage(p)}
                       </p>
@@ -303,10 +304,10 @@ export function ProPublicPage() {
             {softRatePackages(profile.hourlyRateMin, profile.hourlyRateMax).length > 0 && (
               <div className="mt-5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Soft rate packages
+                  {t("Soft rate packages")}
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-500">
-                  Rough ranges from hourly rates — ask for a firm quote on your job.
+                  {t("Rough ranges from hourly rates — ask for a firm quote on your job.")}
                 </p>
                 <ul className="mt-3 grid gap-2 sm:grid-cols-3">
                   {softRatePackages(profile.hourlyRateMin, profile.hourlyRateMax).map((p) => (
@@ -314,8 +315,8 @@ export function ProPublicPage() {
                       key={p.id}
                       className="rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200"
                     >
-                      <p className="text-sm font-semibold text-slate-900">{p.label}</p>
-                      <p className="text-[11px] text-slate-500">{p.hint}</p>
+                      <p className="text-sm font-semibold text-slate-900">{t(p.label)}</p>
+                      <p className="text-[11px] text-slate-500">{t(p.hint)}</p>
                       <p className="mt-1 text-sm font-medium text-brand-800">{p.display}</p>
                     </li>
                   ))}
@@ -327,7 +328,7 @@ export function ProPublicPage() {
 
           {profile.weeklyAvailability && (
             <section className="card p-4 sm:p-6">
-              <h2 className="font-semibold text-lg mb-3">Weekly availability</h2>
+              <h2 className="font-semibold text-lg mb-3">{t("Weekly availability")}</h2>
               <ul className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {DAY_KEYS.map((day) => {
 
@@ -348,7 +349,7 @@ export function ProPublicPage() {
                       <p className="text-xs mt-0.5">
                         {slot.enabled
                           ? windows.map((w) => `${w.start}–${w.end}`).join(" · ")
-                          : "Off"}
+                          : t("Off")}
                       </p>
                     </li>
                   );
@@ -356,7 +357,7 @@ export function ProPublicPage() {
               </ul>
               {(profile.blockedDates?.length ?? 0) > 0 && (
                 <p className="mt-3 text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
-                  Blocked dates: {profile.blockedDates!.join(", ")}
+                  {t("Blocked dates:")}{" "}{profile.blockedDates!.join(", ")}
                 </p>
               )}
             </section>
@@ -365,9 +366,9 @@ export function ProPublicPage() {
 
           {normalizeCaseStudies(profile.caseStudies).length > 0 && (
             <section className="card p-4 sm:p-6">
-              <h2 className="font-semibold text-lg mb-1">Past work</h2>
+              <h2 className="font-semibold text-lg mb-1">{t("Past work")}</h2>
               <p className="text-xs text-slate-500 mb-4">
-                Case studies from this professional — before/after and notes.
+                {t("Case studies from this professional — before/after and notes.")}
               </p>
               <ul className="space-y-4">
                 {normalizeCaseStudies(profile.caseStudies).map((cs) => (
@@ -397,11 +398,11 @@ export function ProPublicPage() {
                             </a>
                           ) : (
                             <figcaption className="flex h-full items-center justify-center text-[11px] text-slate-500">
-                              Before
+                              {t("Before")}
                             </figcaption>
                           )}
                           {cs.beforeUrl && (
-                            <figcaption className="sr-only">Before</figcaption>
+                            <figcaption className="sr-only">{t("Before")}</figcaption>
                           )}
                         </figure>
                         <figure className="overflow-hidden rounded-lg bg-slate-100 aspect-4/3">
@@ -415,18 +416,18 @@ export function ProPublicPage() {
                             </a>
                           ) : (
                             <figcaption className="flex h-full items-center justify-center text-[11px] text-slate-500">
-                              After
+                              {t("After")}
                             </figcaption>
                           )}
                           {cs.afterUrl && (
-                            <figcaption className="sr-only">After</figcaption>
+                            <figcaption className="sr-only">{t("After")}</figcaption>
                           )}
                         </figure>
                       </div>
                     )}
                     {(cs.beforeUrl || cs.afterUrl) && (
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                        Before · After
+                        {t("Before · After")}
                       </p>
                     )}
                   </li>
@@ -437,7 +438,7 @@ export function ProPublicPage() {
 
           {(profile.galleryUrls?.length ?? 0) > 0 && (
             <section className="card p-6">
-              <h2 className="font-semibold text-lg mb-4">Work gallery</h2>
+              <h2 className="font-semibold text-lg mb-4">{t("Work gallery")}</h2>
               <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {profile.galleryUrls!.map((url) => (
                   <li key={url} className="aspect-4/3 overflow-hidden rounded-xl bg-slate-100">
@@ -451,9 +452,9 @@ export function ProPublicPage() {
           )}
 
           <section className="card p-6">
-            <h2 className="font-semibold text-lg mb-4">Reviews</h2>
+            <h2 className="font-semibold text-lg mb-4">{t("Reviews")}</h2>
             {reviews.length === 0 ? (
-              <p className="text-sm text-slate-500">No reviews yet.</p>
+              <p className="text-sm text-slate-500">{t("No reviews yet.")}</p>
             ) : (
               <ul className="space-y-4">
                 {reviews.map((r) => (
@@ -463,7 +464,7 @@ export function ProPublicPage() {
                       <span className="text-sm font-medium">{r.reviewerName}</span>
                     </div>
                     {r.comment && <p className="mt-1 text-sm text-slate-600">{r.comment}</p>}
-                    {r.jobTitle && <p className="mt-1 text-xs text-slate-500">Job: {r.jobTitle}</p>}
+                    {r.jobTitle && <p className="mt-1 text-xs text-slate-500">{t("Job:")}{" "}{r.jobTitle}</p>}
                   </li>
                 ))}
               </ul>

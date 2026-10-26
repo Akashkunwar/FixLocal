@@ -1,21 +1,28 @@
-import { describe, expect, it } from "vitest";
-import { translate } from "./i18n";
+import { beforeAll, describe, expect, it } from "vitest";
+import { loadHindi, translate } from "./i18n";
 import { HI } from "./i18n-hi";
 
-const SOURCES = import.meta.glob<string>(["../**/*.{ts,tsx}", "!../**/*.test.{ts,tsx}"], {
-  query: "?raw",
-  import: "default",
-  eager: true,
-});
+const SOURCES = import.meta.glob<string>(
+  ["../**/*.{ts,tsx}", "!../**/*.test.{ts,tsx}"],
+  {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  },
+);
 
 describe("i18n", () => {
+  beforeAll(() => loadHindi());
   it("falls back to English for anything untranslated", () => {
     expect(translate("hi", "Log in")).toBe("लॉग इन");
     expect(translate("en", "Log in")).toBe("Log in");
     expect(translate("hi", "Some new sentence")).toBe("Some new sentence");
+    expect(translate("hi", "New job: Fix the geyser")).toBe(
+      "नया काम: Fix the geyser",
+    );
   });
 
-  it("has a Hindi entry for every t(\"…\") literal in the app", () => {
+  it('has a Hindi entry for every t("…") literal in the app', () => {
     const missing = new Set<string>();
     expect(Object.keys(SOURCES).length).toBeGreaterThan(50);
     for (const text of Object.values(SOURCES)) {

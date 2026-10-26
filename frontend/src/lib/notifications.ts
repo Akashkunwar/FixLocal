@@ -1,3 +1,4 @@
+import { t } from "./t";
 import type { Notification } from "../api/extras";
 
 /** Fired on window when notifications are read elsewhere (the bell reloads its badge). */
@@ -43,7 +44,7 @@ export function dayLabel(iso: string, now = new Date()): string {
   const d = new Date(iso);
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = Math.round((day(now) - day(d)) / 86_400_000);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Yesterday";
+  if (diff === 0) return t("Today");
+  if (diff === 1) return t("Yesterday");
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
 }

@@ -4,6 +4,7 @@ import { Coins } from "lucide-react";
 import { getMyCredits, type CreditEntry, type Credits } from "../api/features";
 import { fmtDate, money } from "../lib/format";
 import { useAuth } from "../auth/AuthContext";
+import { t } from "../lib/i18n";
 
 const KIND_LABEL: Record<CreditEntry["kind"], string> = {
   referral_reward: "Referral reward",
@@ -35,33 +36,32 @@ export function CreditCard() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="credit-title" className="flex items-center gap-2 font-semibold text-slate-900">
-            <Coins className="h-5 w-5 text-brand-700" aria-hidden /> FixLocal credit
+            <Coins className="h-5 w-5 text-brand-700" aria-hidden /> {t("FixLocal credit")}
           </h2>
           <p className="mt-1 text-sm text-slate-500">
             {credits?.usedAt === "payout"
-              ? "Credit is added to your next payout automatically."
-              : "Credit comes off what you fund at your next hire automatically."}{" "}
-            Simulated, like escrow.
+              ? t("Credit is added to your next payout automatically.")
+              : t("Credit comes off what you fund at your next hire automatically.")}{" "}
+            {t("Simulated, like escrow.")}
           </p>
         </div>
         <p className="font-display text-3xl font-semibold text-slate-900" aria-live="polite">
-          <span className="sr-only">Balance: </span>
+          <span className="sr-only">{t("Balance:")}{" "}</span>
           {credits ? money(credits.balance) : "—"}
         </p>
       </div>
-      {failed && <p className="text-sm text-rose-700">Couldn't load your credit right now.</p>}
+      {failed && <p className="text-sm text-rose-700">{t("Couldn't load your credit right now.")}</p>}
       {credits && credits.entries.length === 0 && (
         <p className="text-sm text-slate-600">
-          No credit yet. Invite a friend below: when they finish their first job (worth {money(credits.minJobAmount)} or more), you each
-          get {money(credits.rewardAmount)}.
+          {t("No credit yet. Invite a friend below: when they finish their first job (worth")}{" "}{money(credits.minJobAmount)} {t("or more), you each get")}{" "}{money(credits.rewardAmount)}.
         </p>
       )}
       {credits && credits.entries.length > 0 && (
-        <ul className="divide-y divide-slate-100 text-sm" aria-label="Credit history">
+        <ul className="divide-y divide-slate-100 text-sm" aria-label={t("Credit history")}>
           {credits.entries.map((e) => (
             <li key={e.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
               <span className="min-w-0">
-                <span className="font-medium text-slate-800">{KIND_LABEL[e.kind]}</span>
+                <span className="font-medium text-slate-800">{t(KIND_LABEL[e.kind])}</span>
                 <span className="block text-xs text-slate-500">
                   {fmtDate(e.createdAt)}
                   {e.jobId && e.jobTitle && (

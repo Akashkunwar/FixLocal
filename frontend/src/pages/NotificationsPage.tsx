@@ -13,6 +13,7 @@ import {
   type Notification,
 } from "../api/extras";
 import { NOTIFICATION_GROUPS, NOTIFICATIONS_CHANGED, dayLabel, notificationHref } from "../lib/notifications";
+import { t } from "../lib/i18n";
 
 const PAGE = 20;
 
@@ -79,16 +80,16 @@ export function NotificationsPage() {
   let lastDay = "";
   return (
     <Shell
-      title="Notifications"
-      subtitle={unreadCount ? `${unreadCount} unread` : "You're all caught up"}
+      title={t("Notifications")}
+      subtitle={unreadCount ? `${unreadCount} unread` : t("You're all caught up")}
       actions={
         <button type="button" className="btn-secondary btn-sm" onClick={markAll} disabled={!unreadCount}>
-          <CheckCheck className="h-4 w-4" aria-hidden /> Mark all read
+          <CheckCheck className="h-4 w-4" aria-hidden /> {t("Mark all read")}
         </button>
       }
     >
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Show">
+        <div className="flex flex-wrap gap-2" role="group" aria-label={t("Show")}>
           {NOTIFICATION_GROUPS.map((g) => (
             <button
               key={g.key}
@@ -100,20 +101,20 @@ export function NotificationsPage() {
                 group === g.key ? "border-brand-700 bg-brand-700 text-white" : "border-slate-300 bg-white text-slate-700"
               )}
             >
-              {g.label}
+              {t(g.label)}
             </button>
           ))}
         </div>
         <label className="ml-auto flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
-          Unread only
+          {t("Unread only")}
         </label>
       </div>
 
       {loading ? (
         <Spinner />
       ) : items.length === 0 ? (
-        <EmptyState title="Nothing here" description={unreadOnly ? "No unread notifications in this view." : "Notifications about your jobs, bids and messages show up here."} />
+        <EmptyState title={t("Nothing here")} description={unreadOnly ? t("No unread notifications in this view.") : t("Notifications about your jobs, bids and messages show up here.")} />
       ) : (
         <div className="card overflow-hidden">
           <ul>
@@ -142,8 +143,8 @@ export function NotificationsPage() {
                     />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-slate-900">
-                        {n.title}
-                        {!n.read && <span className="sr-only"> (unread)</span>}
+                        {t(n.title)}
+                        {!n.read && <span className="sr-only"> {t("(unread)")}</span>}
                       </span>
                       <span className="mt-0.5 block text-sm text-slate-600">{n.body}</span>
                       <span className="mt-1 block text-xs text-slate-500">
@@ -158,7 +159,7 @@ export function NotificationsPage() {
           {items.length < total && (
             <div className="p-3 text-center">
               <button type="button" className="btn-secondary btn-sm" onClick={loadMore} disabled={more}>
-                {more ? "Loading…" : `Show older (${total - items.length} more)`}
+                {more ? t("Loading…") : `Show older (${total - items.length} more)`}
               </button>
             </div>
           )}

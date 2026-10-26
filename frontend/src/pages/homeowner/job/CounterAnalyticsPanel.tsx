@@ -1,5 +1,6 @@
 import { BarChart3 } from "lucide-react";
 import type { CounterAnalytics } from "../../../api/jobs";
+import { t } from "../../../lib/i18n";
 
 /** Sent / addressed / declined counter-offers on this job. */
 export function CounterAnalyticsPanel({ stats }: { stats: CounterAnalytics }) {
@@ -8,7 +9,7 @@ export function CounterAnalyticsPanel({ stats }: { stats: CounterAnalytics }) {
       <div className="mb-2 flex items-center gap-2">
         <BarChart3 className="h-4 w-4 text-violet-700" />
         <h3 className="text-sm font-semibold text-slate-900">
-          Counter analytics (this job)
+          {t("Counter analytics (this job)")}
         </h3>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -43,7 +44,7 @@ export function CounterAnalyticsPanel({ stats }: { stats: CounterAnalytics }) {
             className="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-violet-100"
           >
             <p className="text-[10px] uppercase tracking-wide text-slate-500">
-              {c.label}
+              {t(c.label)}
             </p>
             <p className="text-xl font-bold text-slate-900">{c.value}</p>
             {"sub" in c && c.sub ? (

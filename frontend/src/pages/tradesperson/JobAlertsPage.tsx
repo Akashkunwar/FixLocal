@@ -18,6 +18,7 @@ import {
 } from "../../api/features";
 import { CATEGORIES, categoryLabel, fmtDate } from "../../lib/format";
 import { RADII, criteriaOf, describeAlert, type AlertDraft as Draft } from "../../lib/jobAlerts";
+import { t } from "../../lib/i18n";
 
 const FREQUENCIES: { value: AlertFrequency; label: string; hint: string }[] = [
   { value: "daily", label: "Daily digest", hint: "One summary around 8 AM with every match from the last 24 hours." },
@@ -63,11 +64,11 @@ export function JobAlertsPage() {
   const criteria = useMemo(() => criteriaOf(draft, pin), [draft, pin]);
   useEffect(() => {
     const ctrl = new AbortController();
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       previewJobAlert(criteria, ctrl.signal).then(setPreview).catch(() => undefined);
     }, 300);
     return () => {
-      clearTimeout(t);
+      clearTimeout(timer);
       ctrl.abort();
     };
   }, [criteria]);
@@ -129,14 +130,14 @@ export function JobAlertsPage() {
   }
 
   return (
-    <Shell title="Job alerts" subtitle="Get notified (in the app and by email) as soon as a matching job is posted">
+    <Shell title={t("Job alerts")} subtitle={t("Get notified (in the app and by email) as soon as a matching job is posted")}>
       <div className="grid gap-6 lg:grid-cols-5">
         <form onSubmit={onCreate} className="card min-w-0 space-y-5 p-5 lg:col-span-3" aria-labelledby="new-alert">
-          <h2 id="new-alert" className="font-display text-lg font-semibold">New alert</h2>
+          <h2 id="new-alert" className="font-display text-lg font-semibold">{t("New alert")}</h2>
 
           <fieldset>
-            <legend className="label">Trades</legend>
-            <p className="mb-2 text-xs text-slate-500">Leave all off to hear about every category.</p>
+            <legend className="label">{t("Trades")}</legend>
+            <p className="mb-2 text-xs text-slate-500">{t("Leave all off to hear about every category.")}</p>
             <div className="flex flex-wrap gap-2">
               {CATEGORIES.map((c) => {
                 const on = draft.categories.includes(c.value);
@@ -153,7 +154,7 @@ export function JobAlertsPage() {
                     }
                   >
                     <span aria-hidden>{c.emoji} </span>
-                    {c.label}
+                    {t(c.label)}
                   </button>
                 );
               })}
@@ -162,37 +163,37 @@ export function JobAlertsPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="label" htmlFor="alert-radius">Distance</label>
+              <label className="label" htmlFor="alert-radius">{t("Distance")}</label>
               <select
                 id="alert-radius"
                 className="input"
                 value={draft.radiusKm}
                 onChange={(e) => setDraft({ ...draft, radiusKm: e.target.value })}
               >
-                <option value="">Any distance (use city / area)</option>
+                <option value="">{t("Any distance (use city / area)")}</option>
                 {RADII.map((r) => (
                   <option key={r} value={r} disabled={!pin}>
-                    Within {r} km of my base
+                    {t("Within")}{" "}{r} {t("km of my base")}
                   </option>
                 ))}
               </select>
               {!pin && (
                 <p className="mt-1 text-xs text-slate-500">
                   <MapPin className="mr-1 inline h-3 w-3" aria-hidden />
-                  Set your base location in <Link to="/professional/profile">Portfolio</Link> to use distance.
+                  {t("Set your base location in")}{" "}<Link to="/professional/profile">{t("Portfolio")}</Link> {t("to use distance.")}
                 </p>
               )}
             </div>
             <div>
-              <label className="label" htmlFor="alert-city">City</label>
-              <input id="alert-city" className="input" value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} placeholder="e.g. Bengaluru" />
+              <label className="label" htmlFor="alert-city">{t("City")}</label>
+              <input id="alert-city" className="input" value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} placeholder={t("e.g. Bengaluru")} />
             </div>
             <div>
-              <label className="label" htmlFor="alert-area">Area (optional)</label>
-              <input id="alert-area" className="input" value={draft.area} onChange={(e) => setDraft({ ...draft, area: e.target.value })} placeholder="e.g. Indiranagar" />
+              <label className="label" htmlFor="alert-area">{t("Area (optional)")}</label>
+              <input id="alert-area" className="input" value={draft.area} onChange={(e) => setDraft({ ...draft, area: e.target.value })} placeholder={t("e.g. Indiranagar")} />
             </div>
             <div>
-              <label className="label" htmlFor="alert-budget">Minimum budget (₹, optional)</label>
+              <label className="label" htmlFor="alert-budget">{t("Minimum budget (₹, optional)")}</label>
               <input
                 id="alert-budget"
                 className="input"
@@ -203,26 +204,26 @@ export function JobAlertsPage() {
               />
             </div>
             <div>
-              <label className="label" htmlFor="alert-site">Site</label>
+              <label className="label" htmlFor="alert-site">{t("Site")}</label>
               <select
                 id="alert-site"
                 className="input"
                 value={draft.siteType}
                 onChange={(e) => setDraft({ ...draft, siteType: e.target.value as Draft["siteType"] })}
               >
-                <option value="">Homes and offices</option>
-                <option value="residential">Homes only</option>
-                <option value="office">Offices only</option>
+                <option value="">{t("Homes and offices")}</option>
+                <option value="residential">{t("Homes only")}</option>
+                <option value="office">{t("Offices only")}</option>
               </select>
             </div>
             <div>
-              <label className="label" htmlFor="alert-name">Name (optional)</label>
-              <input id="alert-name" className="input" maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Plumbing near home" />
+              <label className="label" htmlFor="alert-name">{t("Name (optional)")}</label>
+              <input id="alert-name" className="input" maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={t("e.g. Plumbing near home")} />
             </div>
           </div>
 
           <fieldset>
-            <legend className="label">How often</legend>
+            <legend className="label">{t("How often")}</legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {FREQUENCIES.map((f) => (
                 <label
@@ -233,8 +234,8 @@ export function JobAlertsPage() {
                 >
                   <input type="radio" name="alert-frequency" value={f.value} checked={frequency === f.value} onChange={() => setFrequency(f.value)} className="mt-0.5" />
                   <span>
-                    <span className="block font-semibold text-slate-900">{f.label}</span>
-                    <span className="block text-slate-600">{f.hint}</span>
+                    <span className="block font-semibold text-slate-900">{t(f.label)}</span>
+                    <span className="block text-slate-600">{t(f.hint)}</span>
                   </span>
                 </label>
               ))}
@@ -243,10 +244,10 @@ export function JobAlertsPage() {
 
           <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700" aria-live="polite">
             {preview == null ? (
-              "Checking open jobs…"
+              t("Checking open jobs…")
             ) : (
               <>
-                <strong>{preview.count}</strong> open job{preview.count === 1 ? "" : "s"} from the last 30 days match right now.
+                <strong>{preview.count}</strong> {t("open job")}{preview.count === 1 ? "" : "s"} {t("from the last 30 days match right now.")}
                 {preview.jobs.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {preview.jobs.map((j) => (
@@ -262,18 +263,18 @@ export function JobAlertsPage() {
           </div>
 
           <button type="submit" className="btn-primary w-full sm:w-auto" disabled={busy || alerts.length >= max}>
-            <BellRing className="h-4 w-4" aria-hidden /> {alerts.length >= max ? `Limit of ${max} alerts reached` : "Save alert"}
+            <BellRing className="h-4 w-4" aria-hidden /> {alerts.length >= max ? `Limit of ${max} alerts reached` : t("Save alert")}
           </button>
         </form>
 
         <section className="min-w-0 space-y-3 lg:col-span-2" aria-labelledby="my-alerts">
           <h2 id="my-alerts" className="font-display text-lg font-semibold">
-            Your alerts <span className="text-sm font-normal text-slate-500">({alerts.length}/{max})</span>
+            {t("Your alerts")}{" "}<span className="text-sm font-normal text-slate-500">({alerts.length}/{max})</span>
           </h2>
           {loading ? (
             <Spinner />
           ) : alerts.length === 0 ? (
-            <EmptyState title="No alerts yet" description="Save one and new matching jobs come straight to you." />
+            <EmptyState title={t("No alerts yet")} description={t("Save one and new matching jobs come straight to you.")} />
           ) : (
             <ul className="space-y-3">
               {alerts.map((a) => (
@@ -283,19 +284,19 @@ export function JobAlertsPage() {
                       <p className="font-semibold text-slate-900">{a.name}</p>
                       <p className="mt-0.5 text-sm text-slate-600">{describeAlert(a)}</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {a.active ? "Active" : "Paused"} · {a.matchCount} match{a.matchCount === 1 ? "" : "es"}
+                        {a.active ? t("Active") : t("Paused")} · {a.matchCount} {t("match")}{a.matchCount === 1 ? "" : "es"}
                         {a.lastMatchedAt ? ` · last ${fmtDate(a.lastMatchedAt)}` : ""}
                       </p>
                       <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
-                        <span>Delivery</span>
+                        <span>{t("Delivery")}</span>
                         <select
                           className="input !w-auto !py-1 text-xs"
                           value={a.frequency}
                           onChange={(e) => onFrequency(a, e.target.value as AlertFrequency)}
                           aria-label={`How often for ${a.name}`}
                         >
-                          <option value="daily">Daily digest</option>
-                          <option value="instant">Instant</option>
+                          <option value="daily">{t("Daily digest")}</option>
+                          <option value="instant">{t("Instant")}</option>
                         </select>
                       </label>
                     </div>

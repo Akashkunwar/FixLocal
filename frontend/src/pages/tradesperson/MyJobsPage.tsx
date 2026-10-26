@@ -6,6 +6,7 @@ import { Badge } from "../../components/ui/Badge";
 import { Spinner } from "../../components/ui/Spinner";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { categoryLabel, fmtDate, money } from "../../lib/format";
+import { t } from "../../lib/i18n";
 
 export function MyJobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -27,7 +28,7 @@ export function MyJobsPage() {
   }, []);
 
   return (
-    <Shell title="My awarded jobs" subtitle="Jobs where your bid was accepted · earnings are simulated">
+    <Shell title={t("My awarded jobs")} subtitle={t("Jobs where your bid was accepted · earnings are simulated")}>
       {loading ? (
         <Spinner />
       ) : loadError ? (
@@ -39,23 +40,23 @@ export function MyJobsPage() {
           {earnings && (
             <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="card p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Earned (completed)</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">{t("Earned (completed)")}</p>
                 <p className="mt-1 font-display text-2xl font-semibold text-brand-800">
                   {money(earnings.totalEarned)}
                 </p>
               </div>
               <div className="card p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Completed</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">{t("Completed")}</p>
                 <p className="mt-1 text-2xl font-semibold">{earnings.completedJobs}</p>
               </div>
               <div className="card p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500">In progress / awarded</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">{t("In progress / awarded")}</p>
                 <p className="mt-1 text-2xl font-semibold">
                   {earnings.inProgressJobs + earnings.awardedJobs}
                 </p>
               </div>
               <div className="card p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Active bids</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">{t("Active bids")}</p>
                 <p className="mt-1 text-2xl font-semibold">{earnings.activeBids}</p>
               </div>
             </div>
@@ -63,12 +64,12 @@ export function MyJobsPage() {
 
           {jobs.length === 0 ? (
             <EmptyState
-              title="No awarded jobs yet"
-              description="Playbook: browse open jobs → bid with a clear quote + visit window → reply fast on counters → keep availability heat healthy."
+              title={t("No awarded jobs yet")}
+              description={t("Playbook: browse open jobs → bid with a clear quote + visit window → reply fast on counters → keep availability heat healthy.")}
               action={
                 <div className="flex flex-wrap justify-center gap-2">
-                  <Link to="/professional" className="btn-primary no-underline">Browse jobs</Link>
-                  <Link to="/professional/profile" className="btn-secondary no-underline">Portfolio & rates</Link>
+                  <Link to="/professional" className="btn-primary no-underline">{t("Browse jobs")}</Link>
+                  <Link to="/professional/profile" className="btn-secondary no-underline">{t("Portfolio & rates")}</Link>
                 </div>
               }
             />
@@ -87,7 +88,7 @@ export function MyJobsPage() {
                         {job.area ? ` · ${job.area}` : ""} · {fmtDate(job.createdAt)}
                       </p>
                       <p className="mt-1 text-sm text-slate-600">
-                        Budget {money(job.budgetMin)} – {money(job.budgetMax)}
+                        {t("Budget")}{" "}{money(job.budgetMin)} – {money(job.budgetMax)}
                       </p>
                     </div>
                     <Badge status={job.status} />

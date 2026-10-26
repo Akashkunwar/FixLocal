@@ -38,7 +38,7 @@ function readReferral(fromUrl: string | null): string {
 export function RegisterPage() {
   const { user, register, loading } = useAuth();
   const [params] = useSearchParams();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   // Invite links (?ref=CODE) survive a detour to /login and back within the tab.
   const [referral] = useState(() => readReferral(params.get("ref")));
   const { error } = useToast();
@@ -81,6 +81,7 @@ export function RegisterPage() {
         name: name.trim() || undefined,
         phone: phone.trim() || undefined,
         referralCode: referral || undefined,
+        language: lang,
       });
       setPassword("");
       setSentTo(email.trim());

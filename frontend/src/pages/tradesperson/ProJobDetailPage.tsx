@@ -62,6 +62,7 @@ import {
   formatCustomPackage,
   type CustomRatePackage,
 } from "../../lib/ratePackages";
+import { t } from "../../lib/i18n";
 
 const DECLINE_CHIPS: { id: string; label: string }[] = [
   { id: "busy", label: "Busy" },
@@ -197,13 +198,13 @@ export function ProJobDetailPage() {
   useEffect(() => {
     if (!fromInvite) return;
     setInviteBanner(true);
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       bidFormRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
     }, 250);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [fromInvite, loading, id]);
 
   useEffect(() => {
@@ -409,19 +410,19 @@ export function ProJobDetailPage() {
   useEffect(() => {
     if (job?.status !== "completed" || window.location.hash !== "#review")
       return;
-    const t = window.setTimeout(
+    const timer = window.setTimeout(
       () =>
         document
           .getElementById("review")
           ?.scrollIntoView({ behavior: "smooth", block: "start" }),
       150,
     );
-    return () => window.clearTimeout(t);
+    return () => window.clearTimeout(timer);
   }, [job?.status]);
 
   if (loadError && !job) {
     return (
-      <Shell title="Job">
+      <Shell title={t("Job")}>
         <div className="card p-6 text-slate-700" role="alert">
           {loadError}
         </div>
@@ -431,7 +432,7 @@ export function ProJobDetailPage() {
 
   if (loading || !job) {
     return (
-      <Shell title="Job">
+      <Shell title={t("Job")}>
         <Spinner />
       </Shell>
     );
@@ -466,7 +467,7 @@ export function ProJobDetailPage() {
               .catch((e) => error(e.message))
           }
         >
-          <Heart className="h-4 w-4" /> Save
+          <Heart className="h-4 w-4" /> {t("Save")}
         </button>
       }
     >
@@ -474,7 +475,7 @@ export function ProJobDetailPage() {
         <StatusTimeline status={job.status} />
         {job.scheduledStart && (
           <p className="mt-3 text-sm text-slate-600">
-            Visit{" "}
+            {t("Visit")}{" "}
             {job.scheduleStatus === "confirmed" ? "confirmed" : "proposed"}:{" "}
             <strong>{fmtDateTime(job.scheduledStart)}</strong>
             {job.scheduledEnd ? ` – ${fmtDateTime(job.scheduledEnd)}` : ""}
@@ -483,10 +484,9 @@ export function ProJobDetailPage() {
       </div>
       {inviteBanner && job.status === "open" && !myBid && (
         <div className="mb-4 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-950">
-          <p className="font-medium">You were invited to bid on this job</p>
+          <p className="font-medium">{t("You were invited to bid on this job")}</p>
           <p className="mt-1 text-xs text-brand-800">
-            Jump to the bid form below, or softly decline if you are not
-            available.
+            {t("Jump to the bid form below, or softly decline if you are not available.")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
@@ -496,7 +496,7 @@ export function ProJobDetailPage() {
                 bidFormRef.current?.scrollIntoView({ behavior: "smooth" })
               }
             >
-              Place a bid
+              {t("Place a bid")}
             </button>
             <button
               type="button"
@@ -504,13 +504,13 @@ export function ProJobDetailPage() {
               disabled={declineBusy}
               onClick={onDeclineInvite}
             >
-              Decline invite
+              {t("Decline invite")}
             </button>
           </div>
           {showDeclineSheet && (
             <div className="mt-3 rounded-xl bg-white/80 p-3 ring-1 ring-brand-100 space-y-3">
               <p className="text-xs font-medium text-brand-950">
-                Why are you declining? (optional)
+                {t("Why are you declining? (optional)")}
               </p>
               <div className="flex flex-wrap gap-2">
                 {DECLINE_CHIPS.map((c) => (
@@ -526,14 +526,14 @@ export function ProJobDetailPage() {
                       setDeclineReason((prev) => (prev === c.id ? "" : c.id))
                     }
                   >
-                    {c.label}
+                    {t(c.label)}
                   </button>
                 ))}
               </div>
               <textarea
                 className="input min-h-[64px] text-sm"
                 maxLength={300}
-                placeholder="Optional note for the client"
+                placeholder={t("Optional note for the client")}
                 value={declineNote}
                 onChange={(e) => setDeclineNote(e.target.value)}
               />
@@ -544,7 +544,7 @@ export function ProJobDetailPage() {
                   disabled={declineBusy}
                   onClick={confirmDeclineInvite}
                 >
-                  {declineBusy ? "…" : "Confirm decline"}
+                  {declineBusy ? "…" : t("Confirm decline")}
                 </button>
                 <button
                   type="button"
@@ -556,7 +556,7 @@ export function ProJobDetailPage() {
                     setDeclineNote("");
                   }}
                 >
-                  Cancel
+                  {t("Cancel")}
                 </button>
               </div>
             </div>
@@ -585,9 +585,9 @@ export function ProJobDetailPage() {
               {job.exactLocation
                 ? [job.address, job.area, job.pincode]
                     .filter(Boolean)
-                    .join(", ") || "Location TBD"
+                    .join(", ") || t("Location TBD")
                 : `${[job.area, job.city].filter(Boolean).join(", ") || "Location TBD"} (exact address shared once you're hired)`}{" "}
-              · Budget {money(job.budgetMin)} – {money(job.budgetMax)}
+              {t("· Budget")}{" "}{money(job.budgetMin)} – {money(job.budgetMax)}
             </p>
             {job.photoUrls?.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -604,7 +604,7 @@ export function ProJobDetailPage() {
             <div className="flex flex-wrap gap-2">
               {isAwardedToMe && job.status === "awarded" && (
                 <button type="button" className="btn-primary" onClick={onStart}>
-                  Start work
+                  {t("Start work")}
                 </button>
               )}
               {isAwardedToMe && job.status === "awarded" && (
@@ -626,7 +626,7 @@ export function ProJobDetailPage() {
                   className="btn-primary"
                   onClick={onComplete}
                 >
-                  Mark work done
+                  {t("Mark work done")}
                 </button>
               )}
               {isAwardedToMe && (liveWork || job.status === "completed") && (
@@ -635,7 +635,7 @@ export function ProJobDetailPage() {
                   className="btn-secondary"
                   onClick={() => setDisputeOpen((v) => !v)}
                 >
-                  Open dispute
+                  {t("Open dispute")}
                 </button>
               )}
             </div>
@@ -644,9 +644,7 @@ export function ProJobDetailPage() {
                 className="rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-900 ring-1 ring-sky-100"
                 role="status"
               >
-                Waiting for the client to confirm. If they don't respond, the
-                job is confirmed automatically and the remaining payment is
-                released.
+                {t("Waiting for the client to confirm. If they don't respond, the job is confirmed automatically and the remaining payment is released.")}
               </p>
             )}
             {disputeOpen && (
@@ -655,7 +653,7 @@ export function ProJobDetailPage() {
                 className="space-y-3 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200"
               >
                 <label className="label" htmlFor="pro-dispute-reason">
-                  What went wrong?
+                  {t("What went wrong?")}
                 </label>
                 <textarea
                   id="pro-dispute-reason"
@@ -666,7 +664,7 @@ export function ProJobDetailPage() {
                   onChange={(e) => setDisputeReason(e.target.value)}
                 />
                 <label className="label" htmlFor="pro-dispute-files">
-                  Evidence (photos or PDF, up to 5)
+                  {t("Evidence (photos or PDF, up to 5)")}
                 </label>
                 <input
                   id="pro-dispute-files"
@@ -681,7 +679,7 @@ export function ProJobDetailPage() {
                   }
                 />
                 <button type="submit" className="btn-primary btn-sm">
-                  Submit dispute
+                  {t("Submit dispute")}
                 </button>
               </form>
             )}
@@ -736,11 +734,11 @@ export function ProJobDetailPage() {
               id="review"
               className={`card scroll-mt-24 p-6 ${clientReview ? "" : "ring-2 ring-brand-200"}`}
             >
-              <h2 className="text-lg font-semibold">Review the client</h2>
+              <h2 className="text-lg font-semibold">{t("Review the client")}</h2>
               <p className="mb-3 mt-1 text-sm text-slate-600">
                 {clientReview
-                  ? "Thanks — this helps other pros know what to expect."
-                  : "How was working with this client? Your rating helps other pros decide which jobs to take."}
+                  ? t("Thanks — this helps other pros know what to expect.")
+                  : t("How was working with this client? Your rating helps other pros decide which jobs to take.")}
               </p>
               {clientReview ? (
                 <div>
@@ -756,14 +754,14 @@ export function ProJobDetailPage() {
                   <StarRating value={reviewRating} onChange={setReviewRating} />
                   <textarea
                     className="input"
-                    aria-label="Review comment"
+                    aria-label={t("Review comment")}
                     maxLength={2000}
-                    placeholder="Was the brief clear? Did they pay on time?"
+                    placeholder={t("Was the brief clear? Did they pay on time?")}
                     value={reviewComment}
                     onChange={(e) => setReviewComment(e.target.value)}
                   />
                   <button type="submit" className="btn-primary">
-                    Submit review
+                    {t("Submit review")}
                   </button>
                 </form>
               )}
@@ -779,36 +777,33 @@ export function ProJobDetailPage() {
                 className="card p-6 space-y-3 scroll-mt-24"
               >
                 <h2 className="font-semibold text-lg">
-                  {myBid ? "Bid again" : "Place a bid"}
+                  {myBid ? t("Bid again") : t("Place a bid")}
                 </h2>
                 {myBid ? (
                   <p
                     className="text-sm text-slate-600"
                     data-testid="rebid-note"
                   >
-                    You withdrew your earlier bid of{" "}
-                    {money(myBid.quoteAmount ?? myBid.amount)}. A new bid
-                    replaces it, and the client can see your previous offer in
-                    the quote history.
+                    {t("You withdrew your earlier bid of")}{" "}
+                    {money(myBid.quoteAmount ?? myBid.amount)}{t(". A new bid replaces it, and the client can see your previous offer in the quote history.")}
                   </p>
                 ) : (
                   <p className="text-xs text-slate-500">
-                    You must be admin-verified to bid.
+                    {t("You must be admin-verified to bid.")}
                   </p>
                 )}
                 {bidFillPackages.length > 0 && (
                   <div className="rounded-xl bg-violet-50/70 p-3 ring-1 ring-violet-100 space-y-2">
                     <p className="text-xs font-semibold text-violet-950">
-                      Fill from portfolio packages
+                      {t("Fill from portfolio packages")}
                     </p>
                     <p className="text-[11px] text-violet-900">
-                      One-click fills bid amount + structured quote from your
-                      custom or soft rate cards.
+                      {t("One-click fills bid amount + structured quote from your custom or soft rate cards.")}
                     </p>
                     <div
                       className="flex flex-wrap gap-2"
                       role="group"
-                      aria-label="Portfolio packages for bid"
+                      aria-label={t("Portfolio packages for bid")}
                     >
                       {bidFillPackages.map((pkg) => (
                         <button
@@ -821,7 +816,7 @@ export function ProJobDetailPage() {
                           }
                           onClick={() => applyPortfolioPackageToBid(pkg)}
                         >
-                          {pkg.label}
+                          {t(pkg.label)}
                           <span className="ml-1 text-slate-500">
                             · {money(pkg.amountMin)}
                             {pkg.source === "soft" ? " ≈" : ""}
@@ -834,7 +829,7 @@ export function ProJobDetailPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label className="label" htmlFor="bid-amount">
-                      Amount (₹)
+                      {t("Amount (₹)")}
                     </label>
                     <input
                       id="bid-amount"
@@ -848,7 +843,7 @@ export function ProJobDetailPage() {
                   </div>
                   <div>
                     <label className="label" htmlFor="bid-eta">
-                      ETA days
+                      {t("ETA days")}
                     </label>
                     <input
                       id="bid-eta"
@@ -863,7 +858,7 @@ export function ProJobDetailPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label className="label" htmlFor="bid-visit-start">
-                      Proposed visit start (optional)
+                      {t("Proposed visit start (optional)")}
                     </label>
                     <input
                       id="bid-visit-start"
@@ -875,7 +870,7 @@ export function ProJobDetailPage() {
                   </div>
                   <div>
                     <label className="label" htmlFor="bid-visit-end">
-                      Proposed visit end
+                      {t("Proposed visit end")}
                     </label>
                     <input
                       id="bid-visit-end"
@@ -888,24 +883,24 @@ export function ProJobDetailPage() {
                 </div>
                 <div>
                   <label className="label" htmlFor="bid-message">
-                    Message
+                    {t("Message")}
                   </label>
                   <textarea
                     id="bid-message"
                     className="input"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    placeholder="What's included?"
+                    placeholder={t("What's included?")}
                   />
                 </div>
                 <div className="rounded-xl bg-amber-50 p-3 ring-1 ring-amber-100 space-y-2">
                   <p className="text-xs font-semibold text-amber-900">
-                    Optional structured quote / estimate
+                    {t("Optional structured quote / estimate")}
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div>
                       <label className="label" htmlFor="bid-quote-amount">
-                        Quote amount (₹)
+                        {t("Quote amount (₹)")}
                       </label>
                       <input
                         id="bid-quote-amount"
@@ -914,12 +909,12 @@ export function ProJobDetailPage() {
                         min={1}
                         value={quoteAmount}
                         onChange={(e) => setQuoteAmount(e.target.value)}
-                        placeholder="Defaults to bid amount if blank"
+                        placeholder={t("Defaults to bid amount if blank")}
                       />
                     </div>
                     <div>
                       <label className="label" htmlFor="bid-quote-file">
-                        Quote PDF / image
+                        {t("Quote PDF / image")}
                       </label>
                       <input
                         id="bid-quote-file"
@@ -935,14 +930,14 @@ export function ProJobDetailPage() {
                   <textarea
                     className="input"
                     rows={2}
-                    aria-label="Quote notes"
+                    aria-label={t("Quote notes")}
                     value={quoteNotes}
                     onChange={(e) => setQuoteNotes(e.target.value)}
-                    placeholder="Materials, labour breakdown, warranty…"
+                    placeholder={t("Materials, labour breakdown, warranty…")}
                   />
                 </div>
                 <button type="submit" className="btn-primary">
-                  Submit bid
+                  {t("Submit bid")}
                 </button>
               </form>
             )}
@@ -951,9 +946,9 @@ export function ProJobDetailPage() {
             myBid.counterOffer &&
             myBid.counterOffer.status === "pending" && (
               <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
-                <p className="font-medium">Client requested a quote revise</p>
+                <p className="font-medium">{t("Client requested a quote revise")}</p>
                 <p className="mt-1 text-xs text-violet-900">
-                  Suggested amount:{" "}
+                  {t("Suggested amount:")}{" "}
                   <strong>
                     ₹{Number(myBid.counterOffer.suggestedAmount).toFixed(0)}
                   </strong>
@@ -976,7 +971,7 @@ export function ProJobDetailPage() {
                         ?.scrollIntoView({ behavior: "smooth" });
                     }}
                   >
-                    Revise toward suggestion
+                    {t("Revise toward suggestion")}
                   </button>
                   <button
                     type="button"
@@ -988,35 +983,34 @@ export function ProJobDetailPage() {
                       setCounterDeclineFloor("");
                     }}
                   >
-                    Decline counter
+                    {t("Decline counter")}
                   </button>
                 </div>
                 {showCounterDecline && (
                   <div className="mt-3 rounded-xl bg-white/90 p-3 ring-1 ring-violet-200">
                     <p className="text-xs font-semibold text-violet-950">
-                      Decline with a template
+                      {t("Decline with a template")}
                     </p>
                     <p className="mt-0.5 text-[11px] text-violet-900">
-                      Pick a chip (no browser prompt). Optional floor replaces
-                      ₹X.
+                      {t("Pick a chip (no browser prompt). Optional floor replaces ₹X.")}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {mergeCounterTemplates(user?.counterTemplates).map(
-                        (t) => (
+                        (tpl) => (
                           <button
-                            key={t.id}
+                            key={tpl.id}
                             type="button"
                             className={
-                              counterDeclineTplId === t.id
+                              counterDeclineTplId === tpl.id
                                 ? "rounded-full bg-violet-700 px-2.5 py-1 text-[11px] font-semibold text-white"
                                 : "rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-medium text-violet-900 ring-1 ring-violet-200"
                             }
                             onClick={() => {
-                              setCounterDeclineTplId(t.id);
-                              setCounterDeclineNote(t.body);
+                              setCounterDeclineTplId(tpl.id);
+                              setCounterDeclineNote(tpl.body);
                             }}
                           >
-                            {t.label}
+                            {t(tpl.label)}
                           </button>
                         ),
                       )}
@@ -1032,13 +1026,13 @@ export function ProJobDetailPage() {
                           setCounterDeclineNote("");
                         }}
                       >
-                        Freeform
+                        {t("Freeform")}
                       </button>
                     </div>
                     {counterDeclineNote.includes("₹X") ||
                     counterDeclineNote.includes(" X ") ? (
                       <label className="mt-2 block text-[11px] text-slate-600">
-                        Floor amount for ₹X
+                        {t("Floor amount for ₹X")}
                         <input
                           className="input mt-1 h-8 text-sm"
                           type="text"
@@ -1054,7 +1048,7 @@ export function ProJobDetailPage() {
                     <textarea
                       className="input mt-2 text-sm"
                       rows={3}
-                      placeholder="Decline note (optional)"
+                      placeholder={t("Decline note (optional)")}
                       value={counterDeclineNote}
                       onChange={(e) => {
                         setCounterDeclineTplId((cur) =>
@@ -1066,7 +1060,7 @@ export function ProJobDetailPage() {
                     {counterDeclineFloor.trim() &&
                     /₹X|\bX\b/i.test(counterDeclineNote) ? (
                       <p className="mt-1 text-[11px] text-slate-500">
-                        Preview:{" "}
+                        {t("Preview:")}{" "}
                         {counterDeclineNote
                           .replace(/₹X/gi, `₹${counterDeclineFloor.trim()}`)
                           .replace(/\bX\b/g, counterDeclineFloor.trim())}
@@ -1102,7 +1096,7 @@ export function ProJobDetailPage() {
                           }
                         }}
                       >
-                        {counterDeclineBusy ? "…" : "Confirm decline"}
+                        {counterDeclineBusy ? "…" : t("Confirm decline")}
                       </button>
                       <button
                         type="button"
@@ -1110,7 +1104,7 @@ export function ProJobDetailPage() {
                         disabled={counterDeclineBusy}
                         onClick={() => setShowCounterDecline(false)}
                       >
-                        Cancel
+                        {t("Cancel")}
                       </button>
                     </div>
                   </div>
@@ -1120,14 +1114,13 @@ export function ProJobDetailPage() {
 
           {myBid?.viewedNoReply?.due && (
             <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              <p className="font-medium">Viewed but no reply</p>
+              <p className="font-medium">{t("Viewed but no reply")}</p>
               <p className="mt-1 text-xs text-amber-900">
-                Homeowner viewed your revised quote
+                {t("Homeowner viewed your revised quote")}
                 {myBid.viewedNoReply.hoursSinceView != null
                   ? ` ~${Math.floor(myBid.viewedNoReply.hoursSinceView)}h ago`
                   : ""}{" "}
-                with no further revise (SLA soft flag). Consider updating the
-                quote or messaging.
+                {t("with no further revise (SLA soft flag). Consider updating the quote or messaging.")}
               </p>
             </div>
           )}
@@ -1137,7 +1130,7 @@ export function ProJobDetailPage() {
             myBid.counterHistory.length > 0 && (
               <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
                 <summary className="cursor-pointer font-medium text-slate-800">
-                  Counter-offer history ({myBid.counterHistory.length})
+                  {t("Counter-offer history (")}{myBid.counterHistory.length})
                 </summary>
                 <ul className="mt-2 space-y-1 text-xs text-slate-600">
                   {[...myBid.counterHistory].reverse().map((h, i) => (
@@ -1160,7 +1153,7 @@ export function ProJobDetailPage() {
 
           {myBid && (
             <div className="card p-6">
-              <h2 className="font-semibold">Your bid</h2>
+              <h2 className="font-semibold">{t("Your bid")}</h2>
               <p className="mt-2 text-2xl font-bold">{money(myBid.amount)}</p>
               <div className="mt-2">
                 <Badge status={myBid.status} />
@@ -1173,7 +1166,7 @@ export function ProJobDetailPage() {
                 (myBid.quoteHistory && myBid.quoteHistory.length > 0)) && (
                 <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm ring-1 ring-amber-100">
                   <p className="font-semibold text-amber-950">
-                    Quote{" "}
+                    {t("Quote")}{" "}
                     {myBid.quoteAmount != null ? money(myBid.quoteAmount) : ""}
                     {myBid.quoteHistory && myBid.quoteHistory.length > 0
                       ? ` · ${myBid.quoteHistory.length} prior revision(s)`
@@ -1191,7 +1184,7 @@ export function ProJobDetailPage() {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      View quote attachment
+                      {t("View quote attachment")}
                     </a>
                   )}
                   {myBid.quoteHistory && myBid.quoteHistory.length > 0 && (
@@ -1213,7 +1206,7 @@ export function ProJobDetailPage() {
                                     : "font-semibold text-rose-700"
                                 }
                               >
-                                Latest Δ {delta > 0 ? "+" : ""}
+                                {t("Latest Δ")}{" "}{delta > 0 ? "+" : ""}
                                 {money(delta)}
                               </li>
                             )}
@@ -1222,7 +1215,7 @@ export function ProJobDetailPage() {
                               .slice(0, 5)
                               .map((h, i) => (
                                 <li key={`${h.revisedAt}-${i}`}>
-                                  Was {h.amount != null ? money(h.amount) : "—"}{" "}
+                                  {t("Was")}{" "}{h.amount != null ? money(h.amount) : "—"}{" "}
                                   · {new Date(h.revisedAt).toLocaleString()}
                                   {h.notes ? (
                                     <span className="block truncate text-slate-500">
@@ -1254,24 +1247,24 @@ export function ProJobDetailPage() {
                         setShowQuoteEdit(true);
                       }}
                     >
-                      Revise quote
+                      {t("Revise quote")}
                     </button>
                   ) : (
                     <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50/50 p-3 space-y-2">
                       <p className="text-xs font-semibold text-amber-950">
-                        Revise structured quote
+                        {t("Revise structured quote")}
                       </p>
                       <input
                         className="input"
                         type="number"
                         min={1}
-                        placeholder="Quote amount"
+                        placeholder={t("Quote amount")}
                         value={quoteEditAmount}
                         onChange={(e) => setQuoteEditAmount(e.target.value)}
                       />
                       <textarea
                         className="input min-h-[60px]"
-                        placeholder="Quote notes"
+                        placeholder={t("Quote notes")}
                         value={quoteEditNotes}
                         onChange={(e) => setQuoteEditNotes(e.target.value)}
                       />
@@ -1301,14 +1294,14 @@ export function ProJobDetailPage() {
                             }
                           }}
                         >
-                          {quoteEditBusy ? "Saving…" : "Save revision"}
+                          {quoteEditBusy ? t("Saving…") : t("Save revision")}
                         </button>
                         <button
                           type="button"
                           className="btn-ghost btn-sm"
                           onClick={() => setShowQuoteEdit(false)}
                         >
-                          Cancel
+                          {t("Cancel")}
                         </button>
                       </div>
                     </div>
@@ -1317,7 +1310,7 @@ export function ProJobDetailPage() {
               )}
               {myBid.proposedVisitStart && (
                 <p className="mt-2 text-sm text-brand-700">
-                  Proposed visit: {fmtDateTime(myBid.proposedVisitStart)}
+                  {t("Proposed visit:")}{" "}{fmtDateTime(myBid.proposedVisitStart)}
                   {myBid.proposedVisitEnd
                     ? ` – ${fmtDateTime(myBid.proposedVisitEnd)}`
                     : ""}
@@ -1329,7 +1322,7 @@ export function ProJobDetailPage() {
                   className="btn-danger btn-sm mt-3"
                   onClick={onWithdraw}
                 >
-                  Withdraw
+                  {t("Withdraw")}
                 </button>
               )}
             </div>
@@ -1337,27 +1330,27 @@ export function ProJobDetailPage() {
 
           {(isAwardedToMe ||
             (myBid?.status === "active" && job.status === "open")) && (
-            <JobChat jobId={job.id} title="Messages with the client" />
+            <JobChat jobId={job.id} title={t("Messages with the client")} />
           )}
         </div>
         <aside className="h-fit space-y-3">
           <div className="card p-5">
-            <h3 className="font-semibold">Competition</h3>
+            <h3 className="font-semibold">{t("Competition")}</h3>
             <p className="mt-2 text-sm text-slate-600">
               {job.status !== "open"
-                ? "Bidding has closed."
+                ? t("Bidding has closed.")
                 : otherBidCount === 0
-                  ? "No other active bids yet."
+                  ? t("No other active bids yet.")
                   : `${otherBidCount} other active bid${otherBidCount === 1 ? "" : "s"} (amounts are private).`}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Up to {job.maxBids} bids are accepted on this job.
+              {t("Up to")}{" "}{job.maxBids} {t("bids are accepted on this job.")}
             </p>
           </div>
           <ReportButton
             targetType="job"
             targetId={job.id}
-            label="Report this job"
+            label={t("Report this job")}
           />
           <BlockButton userId={job.homeownerId} name="this client" />
         </aside>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, Circle, X } from "lucide-react";
 import clsx from "clsx";
+import { t } from "../lib/i18n";
 
 export type OnboardingItem = {
   id: string;
@@ -62,15 +63,15 @@ export function OnboardingChecklist({
           <h2 className="font-semibold text-slate-900">{title}</h2>
           {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
           <p className="mt-1 text-[11px] font-medium text-brand-800">
-            {progress.done} of {progress.total} done
+            {progress.done} {t("of")}{" "}{progress.total} {t("done")}
           </p>
         </div>
         <button
           type="button"
           className="btn-ghost btn-sm shrink-0"
           onClick={dismiss}
-          aria-label="Dismiss checklist"
-          title="Dismiss — you can ignore this"
+          aria-label={t("Dismiss checklist")}
+          title={t("Dismiss — you can ignore this")}
         >
           <X className="h-4 w-4" />
         </button>
@@ -84,12 +85,12 @@ export function OnboardingChecklist({
                 className="flex items-center gap-3 px-4 py-2.5 text-sm no-underline text-inherit hover:bg-slate-50 sm:px-5"
               >
                 <ItemIcon done={item.done} />
-                <span className={clsx(item.done && "text-slate-500 line-through")}>{item.label}</span>
+                <span className={clsx(item.done && "text-slate-500 line-through")}>{t(item.label)}</span>
               </Link>
             ) : (
               <div className="flex items-center gap-3 px-4 py-2.5 text-sm sm:px-5">
                 <ItemIcon done={item.done} />
-                <span className={clsx(item.done && "text-slate-500 line-through")}>{item.label}</span>
+                <span className={clsx(item.done && "text-slate-500 line-through")}>{t(item.label)}</span>
               </div>
             )}
           </li>
