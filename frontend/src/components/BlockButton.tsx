@@ -3,6 +3,7 @@ import { Ban } from "lucide-react";
 import { blockUser } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "./Toast";
+import { t } from "../lib/i18n";
 
 type Props = { userId?: string | null; name?: string | null; className?: string; onBlocked?: () => void };
 
@@ -31,26 +32,25 @@ export function BlockButton({ userId, name, className = "", onBlocked }: Props) 
     }
   }
 
-  if (done) return <p className="text-sm text-slate-500">Blocked · manage in Settings</p>;
+  if (done) return <p className="text-sm text-slate-500">{t("Blocked · manage in Settings")}</p>;
   if (!confirming) {
     return (
       <button type="button" className={`btn-ghost btn-sm text-slate-500 ${className}`} onClick={() => setConfirming(true)}>
-        <Ban className="h-4 w-4" aria-hidden /> Block
+        <Ban className="h-4 w-4" aria-hidden /> {t("Block")}
       </button>
     );
   }
   return (
     <div className="card space-y-2 p-4" role="group" aria-label={`Block ${who}`}>
       <p className="text-sm text-slate-700">
-        Block {who}? They won't be able to bid on your jobs, invite you or message you, and you won't be able to contact
-        them. Jobs already in progress are not affected.
+        {t("Block")}{" "}{who}{t("? They won't be able to bid on your jobs, invite you or message you, and you won't be able to contact them. Jobs already in progress are not affected.")}
       </p>
       <div className="flex gap-2">
         <button type="button" className="btn-danger btn-sm" onClick={block} disabled={busy}>
-          {busy ? "Blocking…" : "Block"}
+          {busy ? t("Blocking…") : t("Block")}
         </button>
         <button type="button" className="btn-ghost btn-sm" onClick={() => setConfirming(false)}>
-          Cancel
+          {t("Cancel")}
         </button>
       </div>
     </div>

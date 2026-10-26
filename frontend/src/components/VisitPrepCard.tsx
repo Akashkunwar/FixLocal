@@ -7,6 +7,7 @@ import {
 } from "../lib/visitPrep";
 import { ClipboardCheck } from "lucide-react";
 import clsx from "clsx";
+import { t } from "../lib/i18n";
 
 /** Client visit-prep checklist for proposed / confirmed visit windows. */
 export function VisitPrepCard({ job }: { job: Job }) {
@@ -50,15 +51,15 @@ export function VisitPrepCard({ job }: { job: Job }) {
             className="font-semibold flex items-center gap-2 text-slate-900"
           >
             <ClipboardCheck className="h-4 w-4 text-brand-700" />
-            Visit prep
+            {t("Visit prep")}
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Soft checklist before the professional arrives
-            {status === "confirmed" ? " (visit confirmed)" : " (visit proposed)"}.
+            {t("Soft checklist before the professional arrives")}
+            {status === "confirmed" ? t(" (visit confirmed)") : t(" (visit proposed)")}.
           </p>
         </div>
         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-          {doneCount}/{items.length} ready
+          {doneCount}/{items.length} {t("ready")}
         </span>
       </div>
       <ul className="space-y-2" role="list">
@@ -88,14 +89,14 @@ export function VisitPrepCard({ job }: { job: Job }) {
                       done ? "text-emerald-900" : "text-slate-900"
                     )}
                   >
-                    {item.label}
+                    {t(item.label)}
                   </span>
                   {item.hint && (
                     <span
                       id={`prep-hint-${item.id}`}
                       className="mt-0.5 block text-[11px] text-slate-500"
                     >
-                      {item.hint}
+                      {t(item.hint)}
                     </span>
                   )}
                 </span>

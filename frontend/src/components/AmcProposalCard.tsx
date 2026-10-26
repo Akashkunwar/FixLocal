@@ -28,6 +28,7 @@ import {
 } from "../lib/ics";
 import { useToast } from "./Toast";
 import { Calendar, RefreshCw } from "lucide-react";
+import { t } from "../lib/i18n";
 
 const PROPOSE_CADENCES = CADENCE_OPTIONS.filter((o) => o.value !== "one_time");
 
@@ -277,11 +278,11 @@ export function AmcProposalCard({
       <>
         {role === "pro" && fillPackages.length > 0 && (
           <div>
-            <p className="label">Fill from portfolio rate packages</p>
+            <p className="label">{t("Fill from portfolio rate packages")}</p>
             <p className="mb-2 text-xs text-slate-500">
-              One-click fill name + amounts from your custom or soft packages.
+              {t("One-click fill name + amounts from your custom or soft packages.")}
             </p>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Rate packages">
+            <div className="flex flex-wrap gap-2" role="group" aria-label={t("Rate packages")}>
               {fillPackages.map((p) => (
                 <button
                   key={p.id}
@@ -290,7 +291,7 @@ export function AmcProposalCard({
                   title={p.hint || formatCustomPackage(p)}
                   onClick={() => applyPackage(p)}
                 >
-                  {p.label}
+                  {t(p.label)}
                   <span className="ml-1 text-slate-500">
                     · {money(p.amountMin)}
                     {p.source === "soft" ? " ≈" : ""}
@@ -303,20 +304,20 @@ export function AmcProposalCard({
 
         <div>
           <label className="label" htmlFor={`${idPrefix}-pkg`}>
-            Package name
+            {t("Package name")}
           </label>
           <input
             id={`${idPrefix}-pkg`}
             className="input"
             value={packageLabel}
             onChange={(e) => setPackageLabel(e.target.value)}
-            placeholder="e.g. Quarterly AMC check"
+            placeholder={t("e.g. Quarterly AMC check")}
             required
           />
         </div>
         <div>
-          <p className="label">Cadence</p>
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Proposal cadence">
+          <p className="label">{t("Cadence")}</p>
+          <div className="flex flex-wrap gap-2" role="group" aria-label={t("Proposal cadence")}>
             {PROPOSE_CADENCES.map((opt) => (
               <button
                 key={opt.value}
@@ -327,7 +328,7 @@ export function AmcProposalCard({
                 aria-pressed={cadence === opt.value}
                 onClick={() => setCadence(opt.value)}
               >
-                {opt.label}
+                {t(opt.label)}
               </button>
             ))}
           </div>
@@ -335,7 +336,7 @@ export function AmcProposalCard({
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
             <label className="label" htmlFor={`${idPrefix}-min`}>
-              Amount min (₹)
+              {t("Amount min (₹)")}
             </label>
             <input
               id={`${idPrefix}-min`}
@@ -349,7 +350,7 @@ export function AmcProposalCard({
           </div>
           <div>
             <label className="label" htmlFor={`${idPrefix}-max`}>
-              Amount max (₹)
+              {t("Amount max (₹)")}
             </label>
             <input
               id={`${idPrefix}-max`}
@@ -362,20 +363,20 @@ export function AmcProposalCard({
           </div>
           <div>
             <label className="label" htmlFor={`${idPrefix}-unit`}>
-              Unit
+              {t("Unit")}
             </label>
             <input
               id={`${idPrefix}-unit`}
               className="input"
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
-              placeholder="visit / month"
+              placeholder={t("visit / month")}
             />
           </div>
         </div>
         <div>
           <label className="label" htmlFor={`${idPrefix}-note`}>
-            Note (optional)
+            {t("Note (optional)")}
           </label>
           <textarea
             id={`${idPrefix}-note`}
@@ -383,7 +384,7 @@ export function AmcProposalCard({
             rows={2}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="What’s included, response SLA, materials…"
+            placeholder={t("What’s included, response SLA, materials…")}
           />
         </div>
       </>
@@ -398,12 +399,12 @@ export function AmcProposalCard({
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="font-semibold text-lg text-slate-900">
-            Soft AMC / recurring
+            {t("Soft AMC / recurring")}
           </h2>
           <p className="text-sm text-slate-500">
             {role === "client"
-              ? "Request a package + cadence, or reply when your professional proposes. Soft only — no auto-billing."
-              : "Propose a package, or reply when the client requests AMC. Soft only — finalize in chat."}
+              ? t("Request a package + cadence, or reply when your professional proposes. Soft only — no auto-billing.")
+              : t("Propose a package, or reply when the client requests AMC. Soft only — finalize in chat.")}
           </p>
         </div>
       </div>
@@ -425,7 +426,7 @@ export function AmcProposalCard({
           <p className="font-semibold">
             {proposal.packageLabel}{" "}
             <span className="font-normal text-xs uppercase tracking-wide opacity-80">
-              · {status === "requested" ? "client request" : status}
+              · {status === "requested" ? t("client request") : status}
             </span>
           </p>
           <p className="mt-0.5 text-xs">
@@ -453,10 +454,10 @@ export function AmcProposalCard({
           <div className="flex items-start gap-2">
             <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" aria-hidden />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-sky-950">Soft next-visit reminder</p>
+              <p className="text-sm font-semibold text-sky-950">{t("Soft next-visit reminder")}</p>
               <p className="text-xs text-sky-800">
-                Suggested around <span className="font-medium">{nextVisitLabel}</span> based on{" "}
-                {cadenceLabel(proposal?.cadence)} cadence. Hint only — confirm the real window in chat.
+                {t("Suggested around")}{" "}<span className="font-medium">{nextVisitLabel}</span> {t("based on")}{" "}
+                {cadenceLabel(proposal?.cadence)} {t("cadence. Hint only — confirm the real window in chat.")}
               </p>
             </div>
           </div>
@@ -471,7 +472,7 @@ export function AmcProposalCard({
                 })
               }
             >
-              Add to calendar (.ics)
+              {t("Add to calendar (.ics)")}
             </button>
             <a
               className="btn-ghost btn-sm no-underline"
@@ -479,7 +480,7 @@ export function AmcProposalCard({
               target="_blank"
               rel="noreferrer"
             >
-              Google Calendar
+              {t("Google Calendar")}
             </a>
             {multiStub && nextVisitIso && (
               <button
@@ -491,9 +492,9 @@ export function AmcProposalCard({
                     cadence: proposal?.cadence,
                   })
                 }
-                title="Includes confirmed visit (if scheduled) + soft AMC next-visit hint"
+                title={t("Includes confirmed visit (if scheduled) + soft AMC next-visit hint")}
               >
-                Multi-event .ics stub
+                {t("Multi-event .ics stub")}
               </button>
             )}
           </div>
@@ -503,11 +504,11 @@ export function AmcProposalCard({
       {showProForm && (
         <form onSubmit={onPropose} className="space-y-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {proposal ? "Send updated proposal" : "Propose to client"}
+            {proposal ? t("Send updated proposal") : t("Propose to client")}
           </p>
           {packageFormFields("amc")}
           <button type="submit" className="btn-primary btn-sm" disabled={busy}>
-            {busy ? "Sending…" : "Send proposal"}
+            {busy ? t("Sending…") : t("Send proposal")}
           </button>
         </form>
       )}
@@ -518,40 +519,39 @@ export function AmcProposalCard({
           className="space-y-3 rounded-xl bg-sky-50/60 p-4 ring-1 ring-sky-100"
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
-            {proposal ? "Send updated AMC request" : "Request AMC from professional"}
+            {proposal ? t("Send updated AMC request") : t("Request AMC from professional")}
           </p>
           <p className="text-xs text-slate-600">
-            Inverse of a pro proposal — ask for a recurring package. Soft only; they can accept,
-            decline, or counter.
+            {t("Inverse of a pro proposal — ask for a recurring package. Soft only; they can accept, decline, or counter.")}
           </p>
           {packageFormFields("amc-req")}
           <button type="submit" className="btn-primary btn-sm" disabled={busy}>
-            {busy ? "Sending…" : "Request AMC"}
+            {busy ? t("Sending…") : t("Request AMC")}
           </button>
         </form>
       )}
 
       {role === "client" && status === "requested" && (
         <p className="text-xs text-slate-500">
-          Waiting for your professional to reply to this AMC request.
+          {t("Waiting for your professional to reply to this AMC request.")}
         </p>
       )}
 
       {role === "pro" && status === "proposed" && (
         <p className="text-xs text-slate-500">
-          Waiting for the client to reply to your proposal.
+          {t("Waiting for the client to reply to your proposal.")}
         </p>
       )}
 
       {showProReplyToRequest && (
         <div className="space-y-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
           <p className="text-xs text-slate-600">
-            Client requested AMC — soft reply. You can refine package amounts before accepting.
+            {t("Client requested AMC — soft reply. You can refine package amounts before accepting.")}
           </p>
           {fillPackages.length > 0 && (
             <div>
-              <p className="label">Fill from portfolio rate packages</p>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Rate packages">
+              <p className="label">{t("Fill from portfolio rate packages")}</p>
+              <div className="flex flex-wrap gap-2" role="group" aria-label={t("Rate packages")}>
                 {fillPackages.map((p) => (
                   <button
                     key={p.id}
@@ -559,7 +559,7 @@ export function AmcProposalCard({
                     className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-violet-50 hover:ring-violet-200"
                     onClick={() => applyPackage(p)}
                   >
-                    {p.label}
+                    {t(p.label)}
                     <span className="ml-1 text-slate-500">· {money(p.amountMin)}</span>
                   </button>
                 ))}
@@ -569,7 +569,7 @@ export function AmcProposalCard({
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
               <label className="label" htmlFor="amc-pro-min">
-                Amount min (₹)
+                {t("Amount min (₹)")}
               </label>
               <input
                 id="amc-pro-min"
@@ -582,7 +582,7 @@ export function AmcProposalCard({
             </div>
             <div>
               <label className="label" htmlFor="amc-pro-max">
-                Amount max (₹)
+                {t("Amount max (₹)")}
               </label>
               <input
                 id="amc-pro-max"
@@ -595,7 +595,7 @@ export function AmcProposalCard({
             </div>
             <div>
               <label className="label" htmlFor="amc-pro-unit">
-                Unit
+                {t("Unit")}
               </label>
               <input
                 id="amc-pro-unit"
@@ -612,7 +612,7 @@ export function AmcProposalCard({
               disabled={busy}
               onClick={() => onReplyRequest("accept")}
             >
-              Accept request
+              {t("Accept request")}
             </button>
             <button
               type="button"
@@ -620,7 +620,7 @@ export function AmcProposalCard({
               disabled={busy}
               onClick={() => setShowCounter((v) => !v)}
             >
-              Counter cadence
+              {t("Counter cadence")}
             </button>
             <button
               type="button"
@@ -628,12 +628,12 @@ export function AmcProposalCard({
               disabled={busy}
               onClick={() => onReplyRequest("decline")}
             >
-              Decline
+              {t("Decline")}
             </button>
           </div>
           <div className="space-y-2">
             <label className="label" htmlFor="amc-pro-reply-note">
-              Reply note (optional)
+              {t("Reply note (optional)")}
             </label>
             <textarea
               id="amc-pro-reply-note"
@@ -641,13 +641,13 @@ export function AmcProposalCard({
               rows={2}
               value={replyNote}
               onChange={(e) => setReplyNote(e.target.value)}
-              placeholder="e.g. Can do monthly at this range"
+              placeholder={t("e.g. Can do monthly at this range")}
             />
           </div>
           {showCounter && (
             <div className="space-y-2">
-              <p className="label">Preferred cadence</p>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Counter cadence">
+              <p className="label">{t("Preferred cadence")}</p>
+              <div className="flex flex-wrap gap-2" role="group" aria-label={t("Counter cadence")}>
                 {PROPOSE_CADENCES.map((opt) => (
                   <button
                     key={opt.value}
@@ -660,7 +660,7 @@ export function AmcProposalCard({
                     aria-pressed={replyCadence === opt.value}
                     onClick={() => setReplyCadence(opt.value)}
                   >
-                    {opt.label}
+                    {t(opt.label)}
                   </button>
                 ))}
               </div>
@@ -670,7 +670,7 @@ export function AmcProposalCard({
                 disabled={busy}
                 onClick={() => onReplyRequest("counter")}
               >
-                Send counter
+                {t("Send counter")}
               </button>
             </div>
           )}
@@ -680,7 +680,7 @@ export function AmcProposalCard({
       {showClientReply && (
         <div className="space-y-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
           <p className="text-xs text-slate-600">
-            Soft reply — accepting doesn’t charge you; confirm scope in chat.
+            {t("Soft reply — accepting doesn’t charge you; confirm scope in chat.")}
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -689,7 +689,7 @@ export function AmcProposalCard({
               disabled={busy}
               onClick={() => onReply("accept")}
             >
-              Accept interest
+              {t("Accept interest")}
             </button>
             <button
               type="button"
@@ -697,7 +697,7 @@ export function AmcProposalCard({
               disabled={busy}
               onClick={() => setShowCounter((v) => !v)}
             >
-              Counter cadence
+              {t("Counter cadence")}
             </button>
             <button
               type="button"
@@ -705,12 +705,12 @@ export function AmcProposalCard({
               disabled={busy}
               onClick={() => onReply("decline")}
             >
-              Decline
+              {t("Decline")}
             </button>
           </div>
           <div className="space-y-2">
             <label className="label" htmlFor="amc-reply-note">
-              Reply note (optional)
+              {t("Reply note (optional)")}
             </label>
             <textarea
               id="amc-reply-note"
@@ -718,13 +718,13 @@ export function AmcProposalCard({
               rows={2}
               value={replyNote}
               onChange={(e) => setReplyNote(e.target.value)}
-              placeholder="e.g. Prefer monthly over AMC for now"
+              placeholder={t("e.g. Prefer monthly over AMC for now")}
             />
           </div>
           {showCounter && (
             <div className="space-y-2">
-              <p className="label">Preferred cadence</p>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Counter cadence">
+              <p className="label">{t("Preferred cadence")}</p>
+              <div className="flex flex-wrap gap-2" role="group" aria-label={t("Counter cadence")}>
                 {PROPOSE_CADENCES.map((opt) => (
                   <button
                     key={opt.value}
@@ -737,7 +737,7 @@ export function AmcProposalCard({
                     aria-pressed={replyCadence === opt.value}
                     onClick={() => setReplyCadence(opt.value)}
                   >
-                    {opt.label}
+                    {t(opt.label)}
                   </button>
                 ))}
               </div>
@@ -747,7 +747,7 @@ export function AmcProposalCard({
                 disabled={busy}
                 onClick={() => onReply("counter")}
               >
-                Send counter
+                {t("Send counter")}
               </button>
             </div>
           )}

@@ -38,11 +38,11 @@ export function StatusTimeline({ status }: { status: string }) {
         </div>
         <p className="mt-2 text-sm text-slate-500">
           {t("Step")}{" "}{Math.max(0, idx) + 1} {t("of")}{" "}{JOB_TIMELINE.length} ·{" "}
-          <strong className="text-slate-900">{labels[current]}</strong>
+          <strong className="text-slate-900">{t(labels[current])}</strong>
           {idx + 1 < JOB_TIMELINE.length && (
             <span className="text-slate-500">
               {" "}
-              {t("· next:")}{" "}{labels[JOB_TIMELINE[idx + 1]]}
+              {t("· next:")}{" "}{t(labels[JOB_TIMELINE[idx + 1]])}
             </span>
           )}
         </p>
@@ -70,7 +70,7 @@ export function StatusTimeline({ status }: { status: string }) {
                   done ? "font-semibold text-slate-900" : "text-slate-500",
                 )}
               >
-                {labels[step]}
+                {t(labels[step])}
               </span>
               {i < JOB_TIMELINE.length - 1 && (
                 <div
