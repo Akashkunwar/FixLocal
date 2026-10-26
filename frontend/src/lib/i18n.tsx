@@ -48,6 +48,24 @@ function storeLang(l: Lang) {
   }
 }
 
+/** Set when someone picks a language while logged out; their next log-in saves it to the account. */
+const PICKED_KEY = "fixlocal:lang-picked";
+function pickedLoggedOut(): boolean {
+  try {
+    return localStorage.getItem(PICKED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function setPickedLoggedOut(on: boolean) {
+  try {
+    if (on) localStorage.setItem(PICKED_KEY, "1");
+    else localStorage.removeItem(PICKED_KEY);
+  } catch {
+    /* private mode */
+  }
+}
+
 /** Call before the first render so a Hindi start-up shows Hindi straight away. */
 export async function prepareLanguage() {
   if (storedLang() === "hi") await loadHindi().catch(() => undefined);
@@ -83,7 +101,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     setLangState(l);
   }, []);
 
-  // Adopt the account's language when someone logs in (or the session is restored on load).
+  // On log-in (or when a session is restored on load) the account's language wins, unless the person
+  // picked a language on this device while logged out: then that choice is saved to the account.
   const adoptedFor = useRef<string | null>(null);
   const accountLang = user?.language;
   const userId = user?.id ?? null;
@@ -94,15 +113,19 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     }
     if (adoptedFor.current === userId) return;
     adoptedFor.current = userId;
-    if (accountLang && accountLang !== lang) void apply(accountLang);
+    if (pickedLoggedOut()) {
+      setPickedLoggedOut(false);
+      if (accountLang !== lang) updateMe({ language: lang }).catch(() => undefined);
+    } else if (accountLang && accountLang !== lang) void apply(accountLang);
   }, [userId, accountLang, lang, apply]);
 
   const setLang = useCallback(
     (l: Lang) => {
       void apply(l);
       if (userId) updateMe({ language: l }).catch(() => undefined); // keeps other devices in step
+      else setPickedLoggedOut(true);
     },
-    [apply, userId],
+    [apply, userId]
   );
 
   useEffect(() => {

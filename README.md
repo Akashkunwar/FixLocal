@@ -171,7 +171,7 @@ Backend settings added for launch:
 | `cd backend && npm run test:tz` | Date logic under three server time zones (UTC, IST, US Pacific) |
 | `cd frontend && npm test` | UI unit tests: bid comparison (highlights, sorting, budget fit), token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary, booking cancellation, blocking, data export, Terms consent, sitemap, the pro-profile SEO shell, job-alert wording, notification grouping, spending CSV, referrals, the install prompt and Hindi coverage (75 tests) |
 | `cd frontend && npm run size` | Bundle budgets after `npm run build` (entry, React vendor, job wizard, job page); fails if Leaflet reaches the entry chunk |
-| `cd frontend && npm run test:e2e` | 51 Playwright tests in a real browser against a real API, including an axe WCAG 2.1 A/AA and reflow check on 26 pages (plus the install banner, invite card and Hindi pages) at 1280 px and 390 px |
+| `cd frontend && npm run test:e2e` | 55 Playwright tests in a real browser against a real API, including an axe WCAG 2.1 A/AA and reflow check on 26 pages (plus the install banner, invite and credit cards, text alerts and the Hindi pages) at 1280 px and 390 px |
 | `npm run lint` / `npm run typecheck` | In both packages; lint fails on any warning |
 
 The end-to-end suite starts its own API on port **3101** with a fresh `fixlocal_e2e` database (Redis DB 14), and a Vite server on port **5174**. It never touches the development database or the servers on 3001/5173. The first run needs `npx playwright install chromium`.
