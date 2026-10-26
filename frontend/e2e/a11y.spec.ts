@@ -97,6 +97,7 @@ for (const size of sizes) {
         ["pro job detail", `/professional/jobs/${job.id}`],
         ["portfolio", "/professional/profile"],
         ["analytics", "/professional/analytics"],
+        ["job alerts", "/professional/alerts"],
       ]) {
         await page.goto(path);
         found.push(...(await audit(page, name)));

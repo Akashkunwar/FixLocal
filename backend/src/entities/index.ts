@@ -20,6 +20,7 @@ export { EmailToken } from "./EmailToken";
 export { Report } from "./Report";
 export { UserTemplate, TEMPLATE_KINDS } from "./UserTemplate";
 export { UserBlock } from "./UserBlock";
+export { JobAlert } from "./JobAlert";
 
 import { User } from "./User";
 import { TradespersonProfile } from "./TradespersonProfile";
@@ -43,6 +44,7 @@ import { EmailToken } from "./EmailToken";
 import { Report } from "./Report";
 import { UserTemplate } from "./UserTemplate";
 import { UserBlock } from "./UserBlock";
+import { JobAlert } from "./JobAlert";
 
 export const ALL_ENTITIES = [
   User,
@@ -67,4 +69,5 @@ export const ALL_ENTITIES = [
   Report,
   UserTemplate,
   UserBlock,
+  JobAlert,
 ];

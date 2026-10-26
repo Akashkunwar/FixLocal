@@ -8,7 +8,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { categoryEmoji, categoryGroups, categoryLabel, fmtDate, money } from "../../lib/format";
 import { SITE_TYPES, siteTypeLabel, type SiteType } from "../../lib/paths";
 import { useToast } from "../../components/Toast";
-import { Bookmark, MapPin, Search } from "lucide-react";
+import { BellRing, Bookmark, MapPin, Search } from "lucide-react";
 import clsx from "clsx";
 import { OnboardingChecklist } from "../../components/OnboardingChecklist";
 import { PendingReviewsCard } from "../../components/PendingReviewsCard";
@@ -351,6 +351,20 @@ export function BrowseJobsPage() {
           <button type="button" className="btn-secondary btn-sm" onClick={saveSearch}>
             <Bookmark className="h-3.5 w-3.5" /> Save search
           </button>
+          <Link
+            className="btn-secondary btn-sm no-underline"
+            to={`/professional/alerts?${new URLSearchParams(
+              Object.entries({
+                category: facets.category,
+                city: facets.city,
+                area: facets.neighborhood,
+                minBudget: facets.budgetMin,
+                siteType: facets.siteType,
+              }).filter(([, v]) => v) as [string, string][]
+            ).toString()}`}
+          >
+            <BellRing className="h-3.5 w-3.5" aria-hidden /> Alert me about new jobs like these
+          </Link>
           {savedLabel && <span className="text-slate-500">Saved: {savedLabel}</span>}
         </div>
       </div>

@@ -13,6 +13,7 @@ import {
   openJobsCacheKey,
 } from "../utils/cache";
 import { notifyHomeownerMatchHints } from "../utils/matchAlerts";
+import { notifyJobAlerts } from "../utils/jobAlerts";
 import { createNotifications } from "../utils/notifications";
 import { revokeThreadStreams } from "../utils/sse";
 import { toJob } from "../serializers";
@@ -224,6 +225,11 @@ export async function createJob(req: Request, res: Response) {
     await notifyHomeownerMatchHints(job);
   } catch (err) {
     logger.warn({ err }, "match hints failed");
+  }
+  try {
+    await notifyJobAlerts(job);
+  } catch (err) {
+    logger.warn({ err }, "job alerts failed");
   }
   return res.status(201).json({ job: toJob(job, "private") });
 }

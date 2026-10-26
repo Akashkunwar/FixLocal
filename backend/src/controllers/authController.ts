@@ -9,6 +9,7 @@ import { User, UserRole } from "../entities/User";
 import { TradespersonProfile, VerificationStatus } from "../entities/TradespersonProfile";
 import { EmailToken, type EmailTokenType } from "../entities/EmailToken";
 import { UserTemplate, TEMPLATE_KINDS, type TemplateKind } from "../entities/UserTemplate";
+import { JobAlert } from "../entities/JobAlert";
 import { AuditAction } from "../entities/AuditLog";
 import { Upload, UploadKind } from "../entities/Upload";
 import { comparePassword, dummyCompare, hashPassword } from "../utils/password";
@@ -390,6 +391,7 @@ export async function deleteAccount(req: Request, res: Response) {
     );
     await m.query(`UPDATE "users" SET "phone" = NULL, "avatarUrl" = NULL WHERE "id" = $1`, [user.id]);
     await m.delete(UserTemplate, { userId: user.id });
+    await m.delete(JobAlert, { userId: user.id });
     await m.query(`UPDATE "jobs" SET "status" = 'cancelled' WHERE "homeownerId" = $1 AND "status" = 'open'`, [user.id]);
     await m.query(`UPDATE "bids" SET "status" = 'withdrawn' WHERE "tradespersonId" = $1 AND "status" = 'active'`, [
       user.id,
@@ -492,6 +494,7 @@ export async function exportMyData(req: Request, res: Response) {
     ledger,
     uploads,
     templates,
+    jobAlerts,
   ] = await Promise.all([
     q(`SELECT * FROM "tradesperson_profiles" WHERE "userId" = $1`),
     q(`SELECT "id", "title", "description", "category", "status", "budgetMin", "budgetMax", "address", "area", "city",
@@ -519,6 +522,8 @@ export async function exportMyData(req: Request, res: Response) {
       `SELECT "name", "kind", "jobId", "mime", "size", "originalName", "createdAt" FROM "uploads" WHERE "ownerUserId" = $1`
     ),
     q(`SELECT "kind", "position", "data", "createdAt" FROM "user_templates" WHERE "userId" = $1`),
+    q(`SELECT "name", "categories", "city", "area", "lat", "lng", "radiusKm", "minBudget", "siteType", "active",
+              "matchCount", "lastMatchedAt", "createdAt" FROM "job_alerts" WHERE "userId" = $1`),
   ]);
   const body = {
     exportedAt: new Date().toISOString(),
@@ -539,6 +544,7 @@ export async function exportMyData(req: Request, res: Response) {
     escrowLedger: ledger,
     files: uploads,
     templates,
+    jobAlerts,
   };
   res.setHeader(
     "Content-Disposition",

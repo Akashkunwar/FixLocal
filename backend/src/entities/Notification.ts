@@ -21,6 +21,8 @@ export enum NotificationType {
   /** Favorited pro availability / matching job heuristics */
   PRO_AVAILABLE = "pro_available",
   MATCH = "match",
+  /** A new job matched one of a professional's job alerts. */
+  JOB_ALERT = "job_alert",
 }
 
 @Entity("notifications")

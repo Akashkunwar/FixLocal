@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { setPageMeta } from "../lib/site";
 import {
   BarChart3,
+  BellRing,
   Bookmark,
   Briefcase,
   ClipboardList,
@@ -58,6 +59,7 @@ const proLinks: NavItem[] = [
     short: "Jobs",
     icon: Search,
   },
+  { to: "/professional/alerts", label: "Job alerts", short: "Alerts", icon: BellRing },
   { to: "/professional/my-jobs", label: "My jobs", icon: Briefcase },
   {
     to: "/professional/analytics",

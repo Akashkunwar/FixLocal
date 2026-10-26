@@ -13,6 +13,7 @@ export const EMAIL_NOTIFICATION_TYPES: ReadonlySet<string> = new Set([
   NotificationType.BID_ACCEPTED,
   NotificationType.JOB_STATUS,
   NotificationType.DISPUTE,
+  NotificationType.JOB_ALERT,
 ]);
 
 /** The account-level email switch lives in notificationPrefs under this key (default on). */

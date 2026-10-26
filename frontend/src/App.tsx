@@ -41,6 +41,7 @@ const ProJobDetailPage = page(() => import("./pages/tradesperson/ProJobDetailPag
 const MyJobsPage = page(() => import("./pages/tradesperson/MyJobsPage"), "MyJobsPage");
 const ProfilePage = page(() => import("./pages/tradesperson/ProfilePage"), "ProfilePage");
 const AnalyticsPage = page(() => import("./pages/tradesperson/AnalyticsPage"), "AnalyticsPage");
+const JobAlertsPage = page(() => import("./pages/tradesperson/JobAlertsPage"), "JobAlertsPage");
 
 const ANY: Role[] = ["ADMIN", "HOMEOWNER", "TRADESPERSON"];
 
@@ -64,6 +65,7 @@ const PROTECTED: { path: string; allow: Role[]; element: ReactNode }[] = [
   { path: `${PRO_ROOT}/my-jobs`, allow: ["TRADESPERSON"], element: <MyJobsPage /> },
   { path: `${PRO_ROOT}/profile`, allow: ["TRADESPERSON"], element: <ProfilePage /> },
   { path: `${PRO_ROOT}/analytics`, allow: ["TRADESPERSON"], element: <AnalyticsPage /> },
+  { path: `${PRO_ROOT}/alerts`, allow: ["TRADESPERSON"], element: <JobAlertsPage /> },
   { path: `${PRO_ROOT}/favorites`, allow: ["TRADESPERSON"], element: <FavoritesPage /> },
 ];
 

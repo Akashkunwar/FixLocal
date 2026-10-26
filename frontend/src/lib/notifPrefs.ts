@@ -8,7 +8,8 @@ export type NotifPrefKey =
   | "review"
   | "system"
   | "pro_available"
-  | "match";
+  | "match"
+  | "job_alert";
 
 export const NOTIF_PREF_META: { key: NotifPrefKey; label: string; hint: string }[] = [
   { key: "new_bid", label: "New bids", hint: "When someone bids on your job" },
@@ -21,6 +22,7 @@ export const NOTIF_PREF_META: { key: NotifPrefKey; label: string; hint: string }
   { key: "system", label: "System / payments", hint: "Escrow releases and account notices" },
   { key: "pro_available", label: "Saved pro availability", hint: "When a favorited pro updates availability or is verified" },
   { key: "match", label: "Match tips", hint: "Favorite-pro fit, job invites, and similar-job alerts" },
+  { key: "job_alert", label: "Job alerts", hint: "New jobs matching the alerts you saved (professionals)" },
 ];
 
 export const DEFAULT_NOTIF_PREFS: Record<NotifPrefKey, boolean> = {
@@ -34,6 +36,7 @@ export const DEFAULT_NOTIF_PREFS: Record<NotifPrefKey, boolean> = {
   system: true,
   pro_available: true,
   match: true,
+  job_alert: true,
 };
 
 /** Account preferences on top of the defaults (the server is the only store). */
