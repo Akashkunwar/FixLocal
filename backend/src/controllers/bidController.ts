@@ -1,3 +1,4 @@
+import { applyClientCredit } from "../domain/credits";
 import type { Request, Response } from "express";
 import { isBlockedBetween } from "../utils/blocks";
 import { In, Not } from "typeorm";
@@ -405,7 +406,8 @@ export async function acceptBid(req: Request, res: Response) {
     }
     await transitionJob(m, ctx.job.id, "award", patch);
     await createEscrow(m, ctx.job, current.tradespersonId, escrow.amount, req.user!.id);
-    return { accepted: current, escrow, rejected: others.map((o) => o.tradespersonId) };
+    const creditUsed = await applyClientCredit(m, ctx.job.homeownerId, ctx.job.id, escrow.amount);
+    return { accepted: current, escrow, creditUsed, rejected: others.map((o) => o.tradespersonId) };
   });
 
   await invalidateOpenJobsCache();

@@ -1,3 +1,4 @@
+import { grantReferralRewards } from "../domain/credits";
 import { LessThan } from "typeorm";
 import { AppDataSource } from "../data-source";
 import { config } from "../config";
@@ -34,6 +35,7 @@ export async function autoConfirmJobs(now = new Date()) {
         await transitionJob(m, job.id, "auto_confirm", { completedAt: now });
         const fresh = await m.findOneOrFail(Job, { where: { id: job.id } });
         const released = await releaseRemaining(m, fresh, null);
+        const rewards = await grantReferralRewards(m, job.id, now);
         await writeAudit(
           {
             actorUserId: SYSTEM_ACTOR_ID,
@@ -46,8 +48,9 @@ export async function autoConfirmJobs(now = new Date()) {
           },
           m
         );
-        return released;
+        return { ...released, rewards };
       });
+      if (result.rewards.length) await createNotifications(result.rewards);
       confirmed += 1;
       const accepted = job.acceptedBidId ? await AppDataSource.getRepository(Bid).findOne({ where: { id: job.acceptedBidId } }) : null;
       const total = result.released.reduce((s, m) => s + Number(m.amount), 0);

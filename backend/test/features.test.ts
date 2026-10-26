@@ -239,7 +239,7 @@ describe("referrals", () => {
 
     const mine = (await api().get("/api/referrals/me").set(inviter.auth)).body.referral;
     expect(mine.totals).toEqual({ joined: 1, confirmed: 0, completedFirstJob: 0 });
-    expect(mine.people).toEqual([{ firstName: "Asha", joinedAt: expect.any(String), status: "joined" }]);
+    expect(mine.people).toEqual([{ firstName: "Asha", joinedAt: expect.any(String), status: "joined", reward: null, rewardAmount: 0 }]);
     expect(JSON.stringify(mine)).not.toMatch(/@example\.com/);
     expect((await api().get("/api/referrals/me").set((await admin()).auth)).status).toBe(403);
   });

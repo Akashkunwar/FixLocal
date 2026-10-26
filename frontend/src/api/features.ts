@@ -93,8 +93,16 @@ export type Referral = {
   code: string | null;
   link: string | null;
   shareText: string | null;
+  rewardAmount: number;
+  earned: number;
   totals: { joined: number; confirmed: number; completedFirstJob: number };
-  people: { firstName: string; joinedAt: string; status: ReferralStatus }[];
+  people: {
+    firstName: string;
+    joinedAt: string;
+    status: ReferralStatus;
+    reward: "granted" | "blocked" | "reversed" | null;
+    rewardAmount: number;
+  }[];
 };
 
 export function getMyReferrals() {
@@ -103,4 +111,27 @@ export function getMyReferrals() {
 
 export function createMyReferralCode() {
   return api<{ referral: Referral }>("/api/referrals/me/code", { method: "POST" });
+}
+
+// ---- FixLocal credit ----
+export type CreditEntry = {
+  id: string;
+  kind: "referral_reward" | "applied_payment" | "applied_payout" | "reversal" | "restored";
+  amount: number;
+  note: string | null;
+  jobId: string | null;
+  jobTitle: string | null;
+  createdAt: string;
+};
+export type Credits = {
+  balance: number;
+  rewardAmount: number;
+  minJobAmount: number;
+  usedAt: "payment" | "payout";
+  simulated: boolean;
+  entries: CreditEntry[];
+};
+
+export function getMyCredits() {
+  return api<{ credits: Credits }>("/api/credits/me");
 }

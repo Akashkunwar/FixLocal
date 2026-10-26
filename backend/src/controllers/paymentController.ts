@@ -1,3 +1,4 @@
+import { creditUsedOnJob } from "../domain/credits";
 import type { Request, Response } from "express";
 import { In } from "typeorm";
 import { AppDataSource } from "../data-source";
@@ -39,8 +40,12 @@ export async function listMilestones(req: Request, res: Response) {
     .take(3)
     .getMany();
 
+  const v = viewer(req);
+  const credit =
+    v.id === job.homeownerId || v.id === ctx.acceptedProId ? await creditUsedOnJob(AppDataSource.manager, v.id, job.id) : null;
   return res.json({
     jobId: job.id,
+    credit,
     paymentStatus: job.paymentStatus,
     escrowAmount: job.escrowAmount != null ? Number(job.escrowAmount) : null,
     escrowSource: job.escrowSource || null,
@@ -79,7 +84,10 @@ export async function releaseMilestone(req: Request, res: Response) {
       userId: result.payeeUserId,
       type: NotificationType.SYSTEM,
       title: "Payment released",
-      body: `${result.milestone.label} (₹${Number(result.milestone.amount).toFixed(0)}) released on "${ctx.job.title}".`,
+      body: `${result.milestone.label} (₹${Number(result.milestone.amount).toFixed(0)}) released on "${ctx.job.title}".${
+        result.creditAdded ? ` Your ₹${result.creditAdded.toFixed(0)} FixLocal credit was added to this payout (simulated).` : ""
+      }`,
+      text: true,
       link: `/professional/jobs/${ctx.job.id}`,
       meta: { jobId: ctx.job.id, milestoneId: result.milestone.id },
     });

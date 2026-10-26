@@ -1,3 +1,5 @@
+import { CreditEntry } from "../entities/CreditEntry";
+import crypto from "node:crypto";
 import { JobAlertMatch } from "../entities/JobAlertMatch";
 import { JobAlertDigest } from "../entities/JobAlertDigest";
 import { asLang, emails } from "../domain/i18n";
@@ -124,6 +126,11 @@ async function notifyExistingOwner(existing: User) {
   });
 }
 
+/** Keyed hash of IP + browser at sign-up; only ever compared with the referrer's, never shown or exported. */
+function deviceHash(req: Request) {
+  return crypto.createHmac("sha256", config().jwtSecret).update(`${req.ip}|${req.get("user-agent") || ""}`).digest("hex");
+}
+
 const isUniqueViolation = (err: unknown) => (err as { code?: string } | null)?.code === "23505";
 
 export async function register(req: Request, res: Response) {
@@ -169,6 +176,7 @@ export async function register(req: Request, res: Response) {
           termsVersion: TERMS_VERSION,
           referredById: referrer && !referrer.deletedAt ? referrer.id : null,
           language: language ?? "en",
+          signupDeviceHash: deviceHash(req),
         })
       );
       if (role === UserRole.TRADESPERSON) {
@@ -396,6 +404,9 @@ export async function deleteAccount(req: Request, res: Response) {
     await m.delete(JobAlert, { userId: user.id });
     await m.delete(JobAlertMatch, { userId: user.id });
     await m.delete(JobAlertDigest, { userId: user.id });
+    // Credit is personal: it goes with the account. Reward decisions stay (ids only) so a deleted
+    // account can't be used to collect the same referral twice.
+    await m.delete(CreditEntry, { userId: user.id });
     await m.query(`UPDATE "jobs" SET "status" = 'cancelled' WHERE "homeownerId" = $1 AND "status" = 'open'`, [user.id]);
     await m.query(`UPDATE "bids" SET "status" = 'withdrawn' WHERE "tradespersonId" = $1 AND "status" = 'active'`, [
       user.id,
@@ -498,6 +509,8 @@ export async function exportMyData(req: Request, res: Response) {
     ledger,
     uploads,
     templates,
+    credits,
+    referralRewards,
     jobAlerts,
   ] = await Promise.all([
     q(`SELECT * FROM "tradesperson_profiles" WHERE "userId" = $1`),
@@ -526,6 +539,10 @@ export async function exportMyData(req: Request, res: Response) {
       `SELECT "name", "kind", "jobId", "mime", "size", "originalName", "createdAt" FROM "uploads" WHERE "ownerUserId" = $1`
     ),
     q(`SELECT "kind", "position", "data", "createdAt" FROM "user_templates" WHERE "userId" = $1`),
+    q(`SELECT "kind", "amount", "jobId", "note", "createdAt" FROM "credit_entries" WHERE "userId" = $1 ORDER BY "createdAt"`),
+    q(`SELECT CASE WHEN "referrerId" = $1 THEN 'you_invited' ELSE 'you_were_invited' END AS "role", "status", "reason",
+              "referrerAmount", "referredAmount", "jobId", "createdAt", "reversedAt"
+         FROM "referral_rewards" WHERE "referrerId" = $1 OR "referredId" = $1 ORDER BY "createdAt"`),
     q(`SELECT "name", "categories", "city", "area", "lat", "lng", "radiusKm", "minBudget", "siteType", "active", "frequency",
               "matchCount", "lastMatchedAt", "createdAt" FROM "job_alerts" WHERE "userId" = $1`),
   ]);
@@ -548,6 +565,8 @@ export async function exportMyData(req: Request, res: Response) {
     escrowLedger: ledger,
     files: uploads,
     templates,
+    credits: { note: "FixLocal credit is simulated, like escrow.", entries: credits },
+    referralRewards,
     jobAlerts,
   };
   res.setHeader(

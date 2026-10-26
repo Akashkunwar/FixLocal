@@ -192,6 +192,8 @@ export type JobPayments = {
   escrowSource?: "quote" | "bid" | null;
   releasedTotal: number;
   remainingHeld: number;
+  /** FixLocal credit the viewer used on this job (simulated). */
+  credit?: { appliedToPayment: number; addedToPayout: number } | null;
   milestones: PaymentMilestone[];
   parties?: {
     homeowner?: { id: string; name?: string | null; email?: string } | null;

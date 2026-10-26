@@ -27,6 +27,7 @@ import blockRoutes from "./routes/blocks";
 import seoRoutes from "./routes/seo";
 import jobAlertRoutes from "./routes/jobAlerts";
 import referralRoutes from "./routes/referrals";
+import creditRoutes from "./routes/credits";
 import { consoleMailer } from "./services/mailer";
 
 export function createApp(): Express {
@@ -110,6 +111,7 @@ export function createApp(): Express {
   app.use("/api/seo", seoRoutes);
   app.use("/api/job-alerts", jobAlertRoutes);
   app.use("/api/referrals", referralRoutes);
+  app.use("/api/credits", creditRoutes);
   // Old links (/uploads/<name>) go through the same access checks.
   app.get("/uploads/:name", serveFile);
 

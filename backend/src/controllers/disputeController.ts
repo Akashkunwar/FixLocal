@@ -1,3 +1,5 @@
+import type { NotificationInput } from "../utils/notifications";
+import { grantReferralRewards, reverseReferralRewards } from "../domain/credits";
 import type { NextFunction, Request, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { Dispute, DisputeResolution, DisputeStatus } from "../entities/Dispute";
@@ -136,6 +138,7 @@ export async function resolveDispute(req: Request, res: Response) {
         ? "completed"
         : "restore");
 
+  const notices: NotificationInput[] = [];
   const result = await AppDataSource.transaction(async (m) => {
     const claimed = await m.update(
       Dispute,
@@ -148,12 +151,15 @@ export async function resolveDispute(req: Request, res: Response) {
     let refunded: Awaited<ReturnType<typeof refundMilestones>> | null = null;
     if (refundMilestoneIds?.length) {
       refunded = await refundMilestones(m, job, refundMilestoneIds, req.user!.id, note);
+      notices.push(...refunded.creditNotices);
     }
     let released: Awaited<ReturnType<typeof releaseRemaining>> | null = null;
     let finalStatus: JobStatus;
     if (outcome === "cancelled") {
       await transitionJob(m, job.id, "resolve_cancel");
       const all = await refundMilestones(m, job, "all_unreleased", req.user!.id, note);
+      // The client won: referral credit earned on this job goes back even if nothing was left to refund.
+      notices.push(...all.creditNotices, ...(await reverseReferralRewards(m, job.id, "dispute_lost", req.user!.id)));
       refunded = refunded
         ? { ...all, refunded: [...refunded.refunded, ...all.refunded], totalRefunded: refunded.totalRefunded + all.totalRefunded }
         : all;
@@ -161,6 +167,7 @@ export async function resolveDispute(req: Request, res: Response) {
     } else if (outcome === "completed") {
       await transitionJob(m, job.id, "resolve_complete", { completedAt: job.completedAt ?? new Date() });
       released = await releaseRemaining(m, job, req.user!.id);
+      notices.push(...(await grantReferralRewards(m, job.id)));
       finalStatus = JobStatus.COMPLETED;
     } else {
       const previous = (existing.previousJobStatus as JobStatus) || JobStatus.IN_PROGRESS;
@@ -205,6 +212,7 @@ export async function resolveDispute(req: Request, res: Response) {
       meta: { jobId: ctx.job.id, disputeId, resolution },
     }))
   );
+  if (notices.length) await createNotifications(notices);
   const dispute = await AppDataSource.getRepository(Dispute).findOneOrFail({ where: { id: disputeId }, relations: ["job", "raisedBy"] });
   const job = await AppDataSource.getRepository(Job).findOneOrFail({ where: { id: ctx.job.id } });
   return res.json({ dispute: toDispute(dispute), job: toJob(job, "private") });

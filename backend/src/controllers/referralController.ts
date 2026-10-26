@@ -1,3 +1,4 @@
+import { config } from "../config";
 import crypto from "crypto";
 import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
@@ -33,7 +34,7 @@ async function ensureCode(userId: string): Promise<string> {
   throw new Error("Could not allocate a referral code");
 }
 
-type Row = { name: string | null; createdAt: Date; confirmed: boolean; completed: boolean };
+type Row = { name: string | null; createdAt: Date; confirmed: boolean; completed: boolean; reward: string | null; rewardAmount: string | null };
 
 /** POST: create the code if needed (idempotent), then the same body as GET. */
 export async function createMyReferralCode(req: Request, res: Response) {
@@ -47,21 +48,28 @@ export async function getMyReferrals(req: Request, res: Response) {
   const code = me?.referralCode ?? null;
   const rows: Row[] = await AppDataSource.query(
     `SELECT u."name", u."createdAt", (u."emailVerifiedAt" IS NOT NULL) AS "confirmed",
+            r."status" AS "reward", r."referrerAmount" AS "rewardAmount",
             (EXISTS (SELECT 1 FROM "jobs" j WHERE j."homeownerId" = u."id" AND j."status" = 'completed')
              OR EXISTS (SELECT 1 FROM "jobs" j JOIN "bids" b ON b."id" = j."acceptedBidId"
                          WHERE b."tradespersonId" = u."id" AND j."status" = 'completed')) AS "completed"
        FROM "users" u
+       LEFT JOIN "referral_rewards" r ON r."referredId" = u."id"
       WHERE u."referredById" = $1 AND u."deletedAt" IS NULL
       ORDER BY u."createdAt" DESC
       LIMIT 100`,
     [req.user!.id]
   );
+  const rewardInr = config().referral.rewardInr;
   const link = code ? appLink(`/register?ref=${code}`) : null;
   return res.json({
     referral: {
       code,
       link,
-      shareText: link ? `I use FixLocal to find verified local professionals. Join with my link: ${link}` : null,
+      shareText: link
+        ? `I use FixLocal to find verified local professionals. Join with my link and we both get ₹${rewardInr} credit after your first job: ${link}`
+        : null,
+      rewardAmount: rewardInr,
+      earned: rows.reduce((s, r) => s + (r.reward === "granted" ? Number(r.rewardAmount || 0) : 0), 0),
       totals: {
         joined: rows.length,
         confirmed: rows.filter((r) => r.confirmed).length,
@@ -72,6 +80,9 @@ export async function getMyReferrals(req: Request, res: Response) {
         firstName: (r.name || "").trim().split(/\s+/)[0] || "Someone",
         joinedAt: r.createdAt,
         status: r.completed ? "completed_first_job" : r.confirmed ? "confirmed" : "joined",
+        // "granted" (with the amount you got: 0 when your monthly cap was reached), "blocked", "reversed" or null (not yet).
+        reward: r.reward,
+        rewardAmount: r.reward === "granted" ? Number(r.rewardAmount || 0) : 0,
       })),
     },
   });

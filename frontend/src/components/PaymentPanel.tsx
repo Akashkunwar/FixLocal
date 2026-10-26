@@ -95,7 +95,19 @@ export function PaymentPanel({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge status={data.paymentStatus} />
-          {data.escrowSource && (
+          {!!data.credit?.appliedToPayment && (
+        <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-900">
+          FixLocal credit used: <strong>{money(data.credit.appliedToPayment)}</strong>. You funded{" "}
+          {money(Math.max(0, (data.escrowAmount ?? 0) - data.credit.appliedToPayment))} of this escrow; FixLocal covered the rest (simulated).
+        </p>
+      )}
+      {!!data.credit?.addedToPayout && (
+        <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-900">
+          Your FixLocal credit of <strong>{money(data.credit.addedToPayout)}</strong> was added to a payout on this job (simulated).
+        </p>
+      )}
+
+      {data.escrowSource && (
             <span
               className={
                 data.escrowSource === "quote"

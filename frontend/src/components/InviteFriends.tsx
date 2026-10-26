@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Copy, Gift, MessageCircle, Share2 } from "lucide-react";
 import { createMyReferralCode, getMyReferrals, type Referral } from "../api/features";
 import { REFERRAL_STATUS_LABEL, whatsappShareUrl } from "../lib/referrals";
-import { fmtDate } from "../lib/format";
+import { fmtDate, money } from "../lib/format";
 import { useToast } from "./Toast";
 
 /** Settings card: a personal invite link plus who joined through it. Rewards are not offered (yet). */
@@ -60,7 +60,8 @@ export function InviteFriends() {
           <Gift className="h-5 w-5 text-brand-700" aria-hidden /> Invite friends
         </h2>
         <p className="mt-1 text-sm text-slate-500">
-          Share your personal link. You'll see when friends sign up, confirm their email and finish a first job.
+          Share your personal link. When a friend finishes their first job on FixLocal, you each get{" "}
+          {ref ? money(ref.rewardAmount) : "₹100"} FixLocal credit (simulated, like escrow).
         </p>
       </div>
       {failed && <p className="text-sm text-rose-700">Couldn't load your invites right now.</p>}
@@ -114,6 +115,14 @@ export function InviteFriends() {
               </div>
             ))}
           </dl>
+          {ref.earned > 0 && (
+            <p className="text-sm text-slate-700">
+              Credit earned from invites: <strong>{money(ref.earned)}</strong>{" "}
+              <a href="#credit" className="text-brand-700 underline">
+                See your credit
+              </a>
+            </p>
+          )}
           {ref.people.length > 0 && (
             <ul className="divide-y divide-slate-100 text-sm" aria-label="People you invited">
               {ref.people.map((p, i) => (
@@ -121,6 +130,10 @@ export function InviteFriends() {
                   <span className="font-medium text-slate-800">{p.firstName}</span>
                   <span className="text-slate-500">
                     {REFERRAL_STATUS_LABEL[p.status]} · joined {fmtDate(p.joinedAt)}
+                    {p.reward === "granted" && p.rewardAmount > 0 && <strong className="text-emerald-700"> · {money(p.rewardAmount)} earned</strong>}
+                    {p.reward === "granted" && p.rewardAmount === 0 && " · monthly limit reached"}
+                    {p.reward === "blocked" && " · not eligible"}
+                    {p.reward === "reversed" && " · credit reversed"}
                   </span>
                 </li>
               ))}

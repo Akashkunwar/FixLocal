@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { apiCall, apiLogin, awardedJob, login, mailLink, PASSWORD, postJob, registerViaApi, SEEDED, uniqueEmail } from "./fixtures";
+import { apiCall, apiLogin, awardedJob, login, mailLink, PASSWORD, postJob, SEEDED, uniqueEmail } from "./fixtures";
 
 type Notif = { title: string; type: string; link?: string };
 
@@ -93,7 +93,16 @@ test("client spending page: escrow totals, history filter and CSV download", asy
 });
 
 test("a user shares an invite link and sees the friend who joined through it", async ({ page, browser, request }) => {
-  const inviter = await registerViaApi(request, "TRADESPERSON", "Inviting Pro");
+  // The inviter signs up on a different device than the friend (same-device sign-ups earn nothing).
+  const inviterEmail = uniqueEmail("inviter");
+  const reg = await request.post("/api/auth/register", {
+    headers: { "User-Agent": "Inviter's phone" },
+    data: { email: inviterEmail, password: PASSWORD, role: "TRADESPERSON", name: "Inviting Pro", acceptTerms: true },
+  });
+  expect(reg.status()).toBe(202);
+  const verifyToken = new URLSearchParams((await mailLink(request, inviterEmail, "verify-email")).split("?")[1]).get("token");
+  expect((await request.post("/api/auth/verify-email", { data: { token: verifyToken } })).status()).toBe(200);
+  const inviter = { email: inviterEmail };
   await login(page, inviter.email);
   await page.goto("/settings");
   const card = page.getByRole("region", { name: "Invite friends" });
@@ -125,7 +134,21 @@ test("a user shares an invite link and sees the friend who joined through it", a
   await expect(people).toContainText("Ravi");
   await expect(people).toContainText("Email confirmed");
   await expect(people).not.toContainText(email);
-  const axe = await new AxeBuilder({ page }).include("[aria-labelledby=invite-title]").withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+
+  // The friend's first job is confirmed: both get ₹100 FixLocal credit.
+  const friendApi = await apiLogin(request, email);
+  const worker = await apiLogin(request, SEEDED.pro2);
+  const { job } = await awardedJob(request, friendApi, worker, 1500);
+  await apiCall(request, worker, "post", `/api/jobs/${job.id}/start`);
+  await apiCall(request, worker, "post", `/api/jobs/${job.id}/mark-done`);
+  await apiCall(request, friendApi, "post", `/api/jobs/${job.id}/confirm`);
+  await page.reload();
+  await expect(people).toContainText("₹100 earned");
+  const credit = page.getByRole("region", { name: "FixLocal credit" });
+  await expect(credit).toContainText("Balance: ₹100");
+  await expect(credit.getByRole("list", { name: "Credit history" })).toContainText("Referral reward");
+  await expect(credit).toContainText("added to your next payout");
+  const axe = await new AxeBuilder({ page }).include("[aria-labelledby=invite-title]").include("#credit").withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   expect(axe.violations.map((v) => v.id)).toEqual([]);
 });
 

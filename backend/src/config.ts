@@ -51,6 +51,10 @@ const schema = z
     SMTP_URL: z.string().optional(),
     MAIL_FROM: z.string().default("FixLocal <no-reply@fixlocal.local>"),
     ALLOW_CONSOLE_MAIL: bool(false),
+    // Referral programme (simulated credit). 0 turns rewards off.
+    REFERRAL_REWARD_INR: int(100),
+    REFERRAL_MONTHLY_CAP: int(10),
+    REFERRAL_MIN_JOB_INR: int(500),
   })
   .superRefine((env, ctx) => {
     if (env.STORAGE_DRIVER === "s3" && !env.S3_BUCKET) {
@@ -134,6 +138,7 @@ export type AppConfig = {
   mailProvider: "console" | "smtp";
   smtpUrl: string | null;
   mailFrom: string;
+  referral: { rewardInr: number; monthlyCap: number; minJobInr: number };
 };
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -181,6 +186,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     mailProvider: e.MAIL_PROVIDER,
     smtpUrl: e.SMTP_URL || null,
     mailFrom: e.MAIL_FROM,
+    referral: { rewardInr: e.REFERRAL_REWARD_INR, monthlyCap: e.REFERRAL_MONTHLY_CAP, minJobInr: e.REFERRAL_MIN_JOB_INR },
   };
 }
 

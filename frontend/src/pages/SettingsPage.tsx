@@ -4,6 +4,7 @@ import { Shell } from "../components/Shell";
 import { TemplateEditor } from "../components/TemplateEditor";
 import { PrivacySettings } from "../components/PrivacySettings";
 import { InviteFriends } from "../components/InviteFriends";
+import { CreditCard } from "../components/CreditCard";
 import { LanguageSettings } from "../components/LanguageSettings";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/Toast";
@@ -418,7 +419,12 @@ export function SettingsPage() {
 
         {user.role !== "ADMIN" && <LanguageSettings />}
 
-        {(user.role === "HOMEOWNER" || user.role === "TRADESPERSON") && <InviteFriends />}
+        {(user.role === "HOMEOWNER" || user.role === "TRADESPERSON") && (
+          <>
+            <CreditCard />
+            <InviteFriends />
+          </>
+        )}
 
         <PrivacySettings />
 
