@@ -5,7 +5,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: fixlocal
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-fixlocal}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       POSTGRES_DB: fixlocal
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -31,7 +31,7 @@ services:
     environment:
       PGHOST: db
       PGUSER: fixlocal
-      PGPASSWORD: ${DB_PASSWORD:-fixlocal}
+      PGPASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       PGDATABASE: fixlocal
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
     entrypoint: ["/bin/sh", "-c"]
@@ -58,7 +58,7 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       DB_USERNAME: fixlocal
-      DB_PASSWORD: ${DB_PASSWORD:-fixlocal}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       DB_NAME: fixlocal
       MIGRATIONS_RUN: "true"
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (32+ random characters)}
