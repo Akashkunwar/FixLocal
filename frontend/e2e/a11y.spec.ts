@@ -79,6 +79,7 @@ for (const size of sizes) {
         ["pro profile", `/pros/${pro.id}`],
         ["settings", "/settings"],
         ["notifications", "/notifications"],
+        ["spending", "/client/spending"],
       ]) {
         await page.goto(path);
         found.push(...(await audit(page, name)));

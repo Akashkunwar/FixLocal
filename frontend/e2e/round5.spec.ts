@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiCall, apiLogin, login, postJob, SEEDED } from "./fixtures";
+import { apiCall, apiLogin, awardedJob, login, postJob, SEEDED } from "./fixtures";
 
 type Notif = { title: string; type: string; link?: string };
 
@@ -56,4 +56,25 @@ test("notification centre: open from the bell, filter by type, mark all read", a
   await expect(page.getByText("You're all caught up").first()).toBeVisible();
   await page.getByLabel("Unread only").check();
   await expect(page.getByText("Nothing here")).toBeVisible();
+});
+
+test("client spending page: escrow totals, history filter and CSV download", async ({ page, request }) => {
+  const client = await apiLogin(request, SEEDED.client);
+  const pro = await apiLogin(request, SEEDED.pro);
+  const { job } = await awardedJob(request, client, pro, 2400);
+  await login(page, SEEDED.client);
+  await page.getByRole("link", { name: "Spending" }).first().click();
+  await expect(page.getByRole("heading", { name: "Spending & history", level: 1 })).toBeVisible();
+  await expect(page.getByText("Held in escrow", { exact: true })).toBeVisible();
+  const row = page.getByRole("listitem").filter({ has: page.getByRole("link", { name: job.title }) });
+  await expect(row).toContainText("₹2,400 held");
+  await page.getByLabel("Show").selectOption("cancelled");
+  await expect(page.getByRole("link", { name: job.title })).toHaveCount(0);
+  await page.getByLabel("Show").selectOption("all");
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download CSV" }).click()]);
+  expect(download.suggestedFilename()).toMatch(/^fixlocal-spending-\d{4}-\d{2}-\d{2}\.csv$/);
+  const fs = await import("node:fs");
+  const csv = fs.readFileSync((await download.path())!, "utf8");
+  expect(csv).toContain(job.title);
+  expect(csv).toMatch(/^\ufeff?Posted,Job,Category/);
 });

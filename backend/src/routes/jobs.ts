@@ -12,6 +12,7 @@ import * as match from "../controllers/matchController";
 import * as status from "../controllers/jobStatusController";
 import * as payments from "../controllers/paymentController";
 import * as schedule from "../controllers/scheduleController";
+import { getMySpending } from "../controllers/spendingController";
 import * as photos from "../controllers/completionPhotosController";
 import * as amc from "../controllers/amcProposalController";
 import * as disputes from "../controllers/disputeController";
@@ -50,6 +51,8 @@ router.get(
 );
 router.get("/counter-analytics", requireRole(HOMEOWNER, ADMIN), validate({ query: counterAnalyticsQuery }), getCounterAnalytics);
 
+// Before "/:id": a client's spending and job history.
+router.get("/spending", requireRole(HOMEOWNER), getMySpending);
 router.get("/:id", params, jobs.getJob);
 router.patch(
   "/:id",

@@ -45,3 +45,41 @@ export function deleteJobAlert(id: string) {
 export function previewJobAlert(body: JobAlertCriteria, signal?: AbortSignal) {
   return api<AlertPreview>("/api/job-alerts/preview", { method: "POST", body: JSON.stringify(body), signal });
 }
+
+// ---- client spending & history ----
+export type SpendingJob = {
+  jobId: string;
+  title: string;
+  category: string;
+  status: string;
+  createdAt: string;
+  completedAt: string | null;
+  agreedAmount: number | null;
+  paid: number;
+  refunded: number;
+  inEscrow: number;
+  pro: { id: string; name: string } | null;
+};
+
+export type Spending = {
+  totals: {
+    paid: number;
+    inEscrow: number;
+    refunded: number;
+    jobsPosted: number;
+    jobsCompleted: number;
+    jobsActive: number;
+    jobsOpen: number;
+    jobsCancelled: number;
+    averageJob: number;
+  };
+  months: { month: string; amount: number }[];
+  byCategory: { category: string; jobs: number; paid: number }[];
+  topPros: { proId: string; name: string; jobs: number; paid: number }[];
+  jobs: SpendingJob[];
+  note: string;
+};
+
+export function getMySpending() {
+  return api<{ spending: Spending }>("/api/jobs/spending");
+}

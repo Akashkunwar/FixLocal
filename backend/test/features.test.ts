@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { VerificationStatus } from "../src/entities/TradespersonProfile";
 import { alertMatchesJob } from "../src/utils/jobAlerts";
-import { api, client, createJob, pro, rows } from "./helpers";
+import { acceptBid, api, awardedJob, client, createJob, placeBid, pro, rows } from "./helpers";
 
 const alertsOf = async (userId: string) =>
   rows<{ title: string; body: string; link: string; type: string }>(
@@ -131,5 +131,41 @@ describe("notification centre", () => {
     const msgs = await api().get("/api/notifications?types=message,new_bid").set(owner.auth);
     expect(msgs.body.notifications.some((n: { type: string }) => n.type === "message")).toBe(true);
     expect((await api().get("/api/notifications?types=nope").set(owner.auth)).status).toBe(400);
+  });
+});
+
+describe("client spending and job history", () => {
+  it("adds up paid, held and refunded escrow per job, month, category and pro; private to the client", async () => {
+    const done = await awardedJob({ stage: "completed", amount: 1000 });
+    const owner = done.owner;
+    // A second job with the same pro, still in escrow.
+    const j2 = await createJob(owner, { title: "Fix bathroom tap", category: "plumbing" });
+    const b2 = await placeBid(done.worker, j2.id, { amount: 600 });
+    expect((await acceptBid(owner, b2.id)).status).toBe(200);
+    // A third, cancelled before work with a refund.
+    const other = await pro({ name: "Second Pro" });
+    const j3 = await createJob(owner, { title: "Paint a wall", category: "painting" });
+    const b3 = await placeBid(other, j3.id, { amount: 400 });
+    expect((await acceptBid(owner, b3.id)).status).toBe(200);
+    await api().post(`/api/jobs/${j3.id}/cancel-booking`).set(owner.auth).send({ reason: "Plans changed" }).expect(200);
+    await createJob(owner, { title: "Still open" });
+
+    const res = await api().get("/api/jobs/spending").set(owner.auth);
+    expect(res.status).toBe(200);
+    const s = res.body.spending;
+    expect(s.totals).toMatchObject({ paid: 1000, inEscrow: 600, jobsPosted: 4, jobsCompleted: 1, jobsActive: 1, jobsOpen: 1, jobsCancelled: 1 });
+    expect(s.totals.refunded).toBeGreaterThan(0);
+    expect(s.months).toHaveLength(12);
+    expect(s.months[11].amount).toBe(1000);
+    expect(s.byCategory).toEqual([{ category: "plumbing", jobs: 1, paid: 1000 }]);
+    expect(s.topPros[0]).toMatchObject({ proId: done.worker.user.id, jobs: 1, paid: 1000 });
+    const row = s.jobs.find((j: { jobId: string }) => j.jobId === j2.id);
+    expect(row).toMatchObject({ paid: 0, inEscrow: 600, pro: { id: done.worker.user.id } });
+    expect(row).not.toHaveProperty("address");
+
+    expect((await api().get("/api/jobs/spending").set(done.worker.auth)).status).toBe(403);
+    const stranger = await client();
+    const empty = (await api().get("/api/jobs/spending").set(stranger.auth)).body.spending;
+    expect(empty.totals).toMatchObject({ paid: 0, inEscrow: 0, jobsPosted: 0 });
   });
 });

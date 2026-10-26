@@ -42,6 +42,7 @@ const MyJobsPage = page(() => import("./pages/tradesperson/MyJobsPage"), "MyJobs
 const ProfilePage = page(() => import("./pages/tradesperson/ProfilePage"), "ProfilePage");
 const AnalyticsPage = page(() => import("./pages/tradesperson/AnalyticsPage"), "AnalyticsPage");
 const NotificationsPage = page(() => import("./pages/NotificationsPage"), "NotificationsPage");
+const SpendingPage = page(() => import("./pages/homeowner/SpendingPage"), "SpendingPage");
 const JobAlertsPage = page(() => import("./pages/tradesperson/JobAlertsPage"), "JobAlertsPage");
 
 const ANY: Role[] = ["ADMIN", "HOMEOWNER", "TRADESPERSON"];
@@ -61,6 +62,7 @@ const PROTECTED: { path: string; allow: Role[]; element: ReactNode }[] = [
   { path: `${CLIENT_ROOT}/jobs/new`, allow: ["HOMEOWNER"], element: <CreateJobPage /> },
   { path: `${CLIENT_ROOT}/jobs/:id`, allow: ["HOMEOWNER"], element: <JobDetailPage /> },
   { path: `${CLIENT_ROOT}/pros`, allow: ["HOMEOWNER"], element: <FindProsPage /> },
+  { path: `${CLIENT_ROOT}/spending`, allow: ["HOMEOWNER"], element: <SpendingPage /> },
   { path: `${CLIENT_ROOT}/favorites`, allow: ["HOMEOWNER"], element: <FavoritesPage /> },
   { path: PRO_ROOT, allow: ["TRADESPERSON"], element: <BrowseJobsPage /> },
   { path: `${PRO_ROOT}/jobs/:id`, allow: ["TRADESPERSON"], element: <ProJobDetailPage /> },

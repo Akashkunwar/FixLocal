@@ -19,6 +19,7 @@ import {
   Search,
   Settings,
   UserRound,
+  Wallet,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -48,6 +49,7 @@ const clientLinks: NavItem[] = [
     icon: Search,
   },
   { to: "/client/favorites", label: "Shortlist", icon: Heart },
+  { to: "/client/spending", label: "Spending", icon: Wallet },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
