@@ -32,3 +32,28 @@ test("a pro saves a job alert and is notified when a matching job is posted", as
   await card.getByRole("button", { name: "Delete E2E electrical alert" }).click();
   await expect(card).toHaveCount(0);
 });
+
+test("notification centre: open from the bell, filter by type, mark all read", async ({ page, request }) => {
+  const client = await apiLogin(request, SEEDED.client);
+  const pro = await apiLogin(request, SEEDED.pro);
+  const job = await postJob(request, client, { title: `E2E notif centre ${Date.now().toString(36)}` });
+  await apiCall(request, pro, "post", `/api/jobs/${job.id}/bids`, { amount: 1800, message: "Can come tomorrow." });
+  await apiCall(request, pro, "post", `/api/messages/${job.id}`, { body: "Hi, is parking available?" });
+
+  await login(page, SEEDED.client);
+  await page.getByRole("button", { name: /Notifications/ }).click();
+  await page.getByRole("link", { name: "See all notifications" }).click();
+  await expect(page).toHaveURL(/\/notifications$/);
+  await expect(page.getByRole("heading", { name: "Notifications", level: 1 })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(`New bid on your job.*${job.title}`) }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Messages" }).click();
+  await expect(page.getByRole("button", { name: "Messages" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("link", { name: /New bid on your job/ })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  await page.getByRole("button", { name: "Mark all read" }).click();
+  await expect(page.getByText("You're all caught up").first()).toBeVisible();
+  await page.getByLabel("Unread only").check();
+  await expect(page.getByText("Nothing here")).toBeVisible();
+});

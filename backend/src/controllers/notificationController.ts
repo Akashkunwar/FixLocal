@@ -9,7 +9,7 @@ import { notFound } from "../http/errors";
 const repo = () => AppDataSource.getRepository(Notification);
 
 export async function listNotifications(req: Request, res: Response) {
-  const { unread, limit, before } = req.valid.query;
+  const { unread, limit, before, types } = req.valid.query;
   const qb = repo()
     .createQueryBuilder("n")
     .where("n.userId = :userId", { userId: req.user!.id })
@@ -17,6 +17,7 @@ export async function listNotifications(req: Request, res: Response) {
     .take(limit ?? 30);
   if (unread) qb.andWhere("n.read = false");
   if (before) qb.andWhere("n.createdAt < :before", { before });
+  if (types?.length) qb.andWhere("n.type IN (:...types)", { types });
   const [rows, total] = await qb.getManyAndCount();
   const unreadCount = await repo().count({ where: { userId: req.user!.id, read: false } });
   return res.json({ notifications: rows.map(toNotification), unreadCount, total });

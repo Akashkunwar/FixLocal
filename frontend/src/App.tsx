@@ -41,11 +41,13 @@ const ProJobDetailPage = page(() => import("./pages/tradesperson/ProJobDetailPag
 const MyJobsPage = page(() => import("./pages/tradesperson/MyJobsPage"), "MyJobsPage");
 const ProfilePage = page(() => import("./pages/tradesperson/ProfilePage"), "ProfilePage");
 const AnalyticsPage = page(() => import("./pages/tradesperson/AnalyticsPage"), "AnalyticsPage");
+const NotificationsPage = page(() => import("./pages/NotificationsPage"), "NotificationsPage");
 const JobAlertsPage = page(() => import("./pages/tradesperson/JobAlertsPage"), "JobAlertsPage");
 
 const ANY: Role[] = ["ADMIN", "HOMEOWNER", "TRADESPERSON"];
 
 const PROTECTED: { path: string; allow: Role[]; element: ReactNode }[] = [
+  { path: "/notifications", allow: ANY, element: <NotificationsPage /> },
   { path: "/settings", allow: ANY, element: <SettingsPage /> },
   { path: "/admin", allow: ["ADMIN"], element: <AdminStatsPage /> },
   { path: "/admin/users", allow: ["ADMIN"], element: <AdminUsersPage /> },

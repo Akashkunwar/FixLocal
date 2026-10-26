@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DisputeResolution, DisputeStatus } from "../entities/Dispute";
 import { FavoriteTargetType } from "../entities/Favorite";
+import { NotificationType } from "../entities/Notification";
 import { boolish, enumOf, fileRefString, id, isoDate, limit, optionalText, page, requiredText } from "./common";
 
 // ---- disputes ----
@@ -70,6 +71,11 @@ export const sendMessageBody = z
 // ---- notifications ----
 export const listNotificationsQuery = z.object({
   unread: boolish.optional(),
+  /** Comma-separated notification types, e.g. "message" or "new_bid,bid_accepted". */
+  types: z.preprocess(
+    (v) => (typeof v === "string" && v ? v.split(",").map((t) => t.trim()) : undefined),
+    z.array(enumOf(NotificationType, "Invalid notification type")).max(20).optional()
+  ),
   limit: limit(50),
   before: z.preprocess((v) => (v === "" ? undefined : v), isoDate.optional()),
   ticket: z.string().max(200).optional(),

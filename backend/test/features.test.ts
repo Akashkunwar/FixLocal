@@ -108,3 +108,28 @@ describe("job alerts for professionals", () => {
     expect(results.filter((r) => r.status === 409)[0].body.code).toBe("ALERT_LIMIT");
   });
 });
+
+describe("notification centre", () => {
+  it("filters by type and pages with `before`", async () => {
+    const owner = await client();
+    const bidders = await Promise.all([pro(), pro(), pro()]);
+    const job = await createJob(owner);
+    for (const b of bidders) {
+      await api().post(`/api/jobs/${job.id}/bids`).set(b.auth).send({ amount: 1200 }).expect(201);
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    await api().post(`/api/messages/${job.id}`).set(bidders[0].auth).send({ body: "Hello, when can I visit?" }).expect(201);
+    const bids = await api().get("/api/notifications?types=new_bid&limit=2").set(owner.auth);
+    expect(bids.status).toBe(200);
+    expect(bids.body.notifications).toHaveLength(2);
+    expect(bids.body.total).toBe(3);
+    expect(bids.body.notifications.every((n: { type: string }) => n.type === "new_bid")).toBe(true);
+    const older = await api()
+      .get(`/api/notifications?types=new_bid&limit=2&before=${encodeURIComponent(bids.body.notifications[1].createdAt)}`)
+      .set(owner.auth);
+    expect(older.body.notifications).toHaveLength(1);
+    const msgs = await api().get("/api/notifications?types=message,new_bid").set(owner.auth);
+    expect(msgs.body.notifications.some((n: { type: string }) => n.type === "message")).toBe(true);
+    expect((await api().get("/api/notifications?types=nope").set(owner.auth)).status).toBe(400);
+  });
+});

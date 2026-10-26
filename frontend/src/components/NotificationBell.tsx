@@ -9,31 +9,8 @@ import {
 } from "../api/extras";
 import { fmtDateTime } from "../lib/format";
 import { openSse } from "../lib/sse";
+import { NOTIFICATIONS_CHANGED, notificationHref } from "../lib/notifications";
 import clsx from "clsx";
-
-function inviteAwareLink(n: Notification): string {
-  const meta = n.meta || {};
-  if (meta.invite === true && typeof meta.jobId === "string") {
-    return `/professional/jobs/${meta.jobId}?invite=1#bid-form`;
-  }
-  if (meta.inviteDeclined === true && typeof meta.jobId === "string") {
-    return `/client/jobs/${meta.jobId}`;
-  }
-  if (
-    meta.quoteRevised === true &&
-    typeof meta.jobId === "string" &&
-    typeof meta.bidId === "string"
-  ) {
-    return `/client/jobs/${meta.jobId}?bid=${meta.bidId}#bid-${meta.bidId}`;
-  }
-  if (meta.counterOffer === true && typeof meta.jobId === "string") {
-    return `/professional/jobs/${meta.jobId}?counter=1#bid-form`;
-  }
-  if (meta.quoteViewed === true && typeof meta.jobId === "string") {
-    return `/professional/jobs/${meta.jobId}`;
-  }
-  return n.link || "#";
-}
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
@@ -92,6 +69,13 @@ export function NotificationBell() {
     const t = window.setInterval(() => load(), ms);
     return () => clearInterval(t);
   }, [open, live]);
+
+  useEffect(() => {
+    // The notification centre page marks things read; keep the badge in step.
+    const reload = () => load();
+    window.addEventListener(NOTIFICATIONS_CHANGED, reload);
+    return () => window.removeEventListener(NOTIFICATIONS_CHANGED, reload);
+  }, []);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -161,7 +145,7 @@ export function NotificationBell() {
             {items.map((n) => (
               <li key={n.id}>
                 <Link
-                  to={inviteAwareLink(n)}
+                  to={notificationHref(n)}
                   onClick={() => onClickItem(n)}
                   className={clsx(
                     "block px-4 py-3 hover:bg-slate-50 border-b border-slate-50",
@@ -175,6 +159,13 @@ export function NotificationBell() {
               </li>
             ))}
           </ul>
+          <Link
+            to="/notifications"
+            onClick={() => setOpen(false)}
+            className="block border-t border-slate-100 px-4 py-3 text-center text-sm font-medium text-brand-700"
+          >
+            See all notifications
+          </Link>
         </div>
       )}
     </div>
