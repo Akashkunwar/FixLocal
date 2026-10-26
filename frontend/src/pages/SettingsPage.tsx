@@ -5,6 +5,7 @@ import { TemplateEditor } from "../components/TemplateEditor";
 import { PrivacySettings } from "../components/PrivacySettings";
 import { InviteFriends } from "../components/InviteFriends";
 import { CreditCard } from "../components/CreditCard";
+import { TextAlertsCard } from "../components/TextAlertsCard";
 import { LanguageSettings } from "../components/LanguageSettings";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/Toast";
@@ -418,6 +419,8 @@ export function SettingsPage() {
         </form>
 
         {user.role !== "ADMIN" && <LanguageSettings />}
+
+        {(user.role === "HOMEOWNER" || user.role === "TRADESPERSON") && <TextAlertsCard />}
 
         {(user.role === "HOMEOWNER" || user.role === "TRADESPERSON") && (
           <>

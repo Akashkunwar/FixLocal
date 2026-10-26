@@ -36,6 +36,10 @@ export type User = {
   role: Role;
   name?: string | null;
   phone?: string | null;
+  phoneVerified?: boolean;
+  smsOptIn?: boolean;
+  whatsappOptIn?: boolean;
+  language?: "en" | "hi";
   avatarUrl?: string | null;
   emailVerified?: boolean;
   /** False until the user accepts the current Terms of Service / Privacy Policy. */
@@ -215,8 +219,36 @@ export function updateMe(body: {
   timezone?: string;
   notificationPrefs?: Record<string, boolean>;
   quoteViewNudgeHours?: number | null;
+  language?: "en" | "hi";
+  smsOptIn?: boolean;
+  whatsappOptIn?: boolean;
 }) {
   return api<{ user: User }>("/api/auth/me", { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export type MessagingSettings = {
+  enabled: boolean;
+  phone: string | null;
+  phoneVerified: boolean;
+  smsOptIn: boolean;
+  whatsappOptIn: boolean;
+  quietHours: { from: string; to: string; timeZone: string };
+  events: string[];
+};
+
+export function getMessagingSettings() {
+  return api<{ messaging: MessagingSettings }>("/api/auth/me/messaging");
+}
+
+export function sendPhoneCode(phone?: string) {
+  return api<{ ok: boolean; sentTo: string }>("/api/auth/me/phone/send-code", {
+    method: "POST",
+    body: JSON.stringify(phone ? { phone } : {}),
+  });
+}
+
+export function verifyPhoneCode(code: string) {
+  return api<{ user: User }>("/api/auth/me/phone/verify", { method: "POST", body: JSON.stringify({ code }) });
 }
 
 export function uploadAvatar(file: File) {

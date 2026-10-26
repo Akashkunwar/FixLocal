@@ -83,3 +83,43 @@ Escrow is simulated (`SimulatedPaymentProvider`). To take real money:
 1. Implement `PaymentProvider` for the gateway (see the Razorpay notes in `backend/src/services/payments.ts`).
 2. Move gateway calls out of the database transaction with an outbox table and webhooks.
 3. Update the Terms and bump `TERMS_VERSION`.
+
+## SMS and WhatsApp alerts
+
+Text alerts are **off by default** (`MESSAGING_ENABLED=false`). While off, Settings shows "Text alerts aren't switched on yet" and the API refuses phone codes and opt-ins. Turning it on with the default `log` drivers is safe: nothing leaves the server, and outside production the dev outbox (`/api/dev/outbox`, `texts`) shows what would have been sent.
+
+**What gets texted** (only to users who verified their mobile number and opted in to that channel in Settings): a first bid on a client's job, being hired, a payment released, and job alerts (instant ones, plus the 8 AM daily digest). Messages are short: a title in the user's language (English or Hindi) and a link.
+
+**Quiet hours:** nothing is sent between 10 PM and 8 AM IST. Texts created then wait in `outbound_messages` and the worker sends them at 8 AM. The one exception is the phone verification code, which the user asked for. Messages are de-duplicated per notification and channel, claimed with `FOR UPDATE SKIP LOCKED` (no double sends across instances), re-checked against the user's opt-in at send time, and retried up to 3 times with back-off. Sent/failed rows are deleted after 30 days.
+
+### MSG91 (SMS)
+
+1. Create an MSG91 account and complete **DLT registration** (required in India): register the entity, a 6-character sender ID (header) and a transactional content template.
+2. Create a **Flow** in MSG91 whose template has one variable named `message` (for example `##message##`), linked to the DLT template. Both the OTP text and alert texts are sent through it.
+3. Set:
+   ```
+   MESSAGING_ENABLED=true
+   SMS_DRIVER=msg91
+   MSG91_AUTH_KEY=<your auth key>
+   MSG91_TEMPLATE_ID=<flow template id>
+   MSG91_SENDER_ID=<6-letter sender id>   # optional if set on the flow
+   ```
+4. Restart the API. Startup fails with a clear error if `SMS_DRIVER=msg91` is set without the key and template.
+
+### WhatsApp Cloud API
+
+1. In Meta Business Manager, create a WhatsApp Business account, add and verify the sending number, and note its **Phone number ID**.
+2. Create a **System User** with `whatsapp_business_messaging` permission and generate a permanent access token.
+3. Create a **Utility** message template named `fixlocal_update` (or set `WHATSAPP_TEMPLATE`) with a body of one variable, e.g. `{{1}}`, in **English (`en`) and Hindi (`hi`)**, and wait for approval. Templates are required because FixLocal starts the conversation.
+4. Set:
+   ```
+   MESSAGING_ENABLED=true
+   WHATSAPP_DRIVER=cloud
+   WHATSAPP_TOKEN=<system user token>
+   WHATSAPP_PHONE_NUMBER_ID=<phone number id>
+   WHATSAPP_TEMPLATE=fixlocal_update
+   WHATSAPP_API_VERSION=v21.0
+   ```
+5. Phone verification codes always go by SMS, so a WhatsApp-only setup still needs `SMS_DRIVER=msg91` before real users can verify a number. (With the `log` driver in production, message text is never written to the log, so codes can't be read anywhere.)
+
+Keep these keys in the server's secret store, never in the repo. Watch the API log for `text message failed` warnings.
