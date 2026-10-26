@@ -6,6 +6,8 @@ A local work marketplace. **Clients** post jobs (repairs, cleaning, office and f
 
 The history of features built during the course is in [docs/FEATURE_HISTORY.md](docs/FEATURE_HISTORY.md).
 
+Also built in: **job alerts** for professionals (saved trade/area/budget searches, notified in-app and by email when a matching job is posted), a full **notification centre** (`/notifications`, filter by type, unread only, mark all read), **client spending & history** (paid, held in escrow and refunded totals, by month, category and pro, CSV export), **invite-a-friend links** (`/register?ref=CODE`, tracked in Settings; no rewards are paid), an **install-app banner** for the PWA (Android/desktop install prompt, iPhone Add-to-Home-Screen hint), **share buttons** on pro profiles (WhatsApp, share sheet or copy link) and a **Hindi / English switch** for the main pages.
+
 ## Contents
 
 - [Architecture](#architecture)
@@ -156,12 +158,12 @@ Backend settings added for launch:
 
 | Command | What it covers |
 | --- | --- |
-| `cd backend && npm test` | 215 API tests on a throwaway database (`fixlocal_test`, Redis DB 15; only DB connection settings are read from `backend/.env`): every audit finding's repro, escrow timing (stage gates, dispute freeze, auto-confirm after a dispute), an 896-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), a sweep proving no GET request changes any table, account-enumeration probes, SEO tags and escaping, and the S3 storage driver (2 of them run only when `S3_TEST_ENDPOINT` points at an S3-compatible server, as in CI) |
+| `cd backend && npm test` | 223 API tests on a throwaway database (`fixlocal_test`, Redis DB 15; only DB connection settings are read from `backend/.env`): every audit finding's repro, escrow timing (stage gates, dispute freeze, auto-confirm after a dispute), an 896-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), a sweep proving no GET request changes any table, account-enumeration probes, SEO tags and escaping, and the S3 storage driver (2 of them run only when `S3_TEST_ENDPOINT` points at an S3-compatible server, as in CI) |
 | `cd backend && npm run test:coverage` | The same with a coverage report |
 | `cd backend && npm run test:tz` | Date logic under three server time zones (UTC, IST, US Pacific) |
-| `cd frontend && npm test` | UI unit tests: bid comparison (highlights, sorting, budget fit), token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary, booking cancellation, blocking, data export, Terms consent, sitemap and the pro-profile SEO shell (60 tests) |
+| `cd frontend && npm test` | UI unit tests: bid comparison (highlights, sorting, budget fit), token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary, booking cancellation, blocking, data export, Terms consent, sitemap, the pro-profile SEO shell, job-alert wording, notification grouping, spending CSV, referrals, the install prompt and Hindi coverage (75 tests) |
 | `cd frontend && npm run size` | Bundle budgets after `npm run build` (entry, React vendor, job wizard, job page); fails if Leaflet reaches the entry chunk |
-| `cd frontend && npm run test:e2e` | 44 Playwright tests in a real browser against a real API, including an axe WCAG 2.1 A/AA and reflow check on 23 pages at 1280 px and 390 px |
+| `cd frontend && npm run test:e2e` | 51 Playwright tests in a real browser against a real API, including an axe WCAG 2.1 A/AA and reflow check on 26 pages (plus the install banner, invite card and Hindi pages) at 1280 px and 390 px |
 | `npm run lint` / `npm run typecheck` | In both packages; lint fails on any warning |
 
 The end-to-end suite starts its own API on port **3101** with a fresh `fixlocal_e2e` database (Redis DB 14), and a Vite server on port **5174**. It never touches the development database or the servers on 3001/5173. The first run needs `npx playwright install chromium`.
