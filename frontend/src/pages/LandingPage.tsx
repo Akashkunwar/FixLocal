@@ -1,3 +1,4 @@
+import { InstallAppBanner } from "../components/InstallAppBanner";
 import { useEffect } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { setPageMeta } from "../lib/site";
@@ -31,6 +32,7 @@ export function LandingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <InstallAppBanner />
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
         <div className="flex items-center gap-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-700 text-white">

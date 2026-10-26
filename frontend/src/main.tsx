@@ -12,6 +12,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import { ToastProvider } from "./components/Toast";
 import App from "./App";
 import "./styles.css";
+import { listenForInstallPrompt } from "./lib/install";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -24,6 +25,8 @@ createRoot(document.getElementById("root")!).render(
     </BrowserRouter>
   </StrictMode>
 );
+
+listenForInstallPrompt();
 
 // Only production builds get the offline cache; in dev it would serve stale modules.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {

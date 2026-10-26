@@ -4,6 +4,7 @@ import { dashboardPath } from "../api/client";
 import { NotificationBell } from "./NotificationBell";
 import { EmailVerifyBanner } from "./EmailVerifyBanner";
 import { TermsBanner } from "./TermsBanner";
+import { InstallAppBanner } from "./InstallAppBanner";
 import { SiteFooter } from "./SiteFooter";
 import { useEffect } from "react";
 import { setPageMeta } from "../lib/site";
@@ -199,6 +200,7 @@ export function Shell({
       </header>
       <TermsBanner />
       <EmailVerifyBanner />
+      <InstallAppBanner />
 
       <main className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8">
         {(title || actions) && (

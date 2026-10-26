@@ -116,3 +116,51 @@ test("a user shares an invite link and sees the friend who joined through it", a
   const axe = await new AxeBuilder({ page }).include("[aria-labelledby=invite-title]").withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   expect(axe.violations.map((v) => v.id)).toEqual([]);
 });
+
+test("install banner appears when the browser offers install, prompts once, and stays dismissed", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "Install app" })).toHaveCount(0);
+  const fire = () =>
+    page.evaluate(() => {
+      const w = window as unknown as { __prompted: number };
+      w.__prompted = 0;
+      const ev = Object.assign(new Event("beforeinstallprompt", { cancelable: true }), {
+        prompt: async () => {
+          w.__prompted++;
+        },
+        userChoice: Promise.resolve({ outcome: "dismissed" }),
+      });
+      window.dispatchEvent(ev);
+    });
+  await fire();
+  const banner = page.getByRole("region", { name: "Install app" });
+  await expect(banner).toBeVisible();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+    expect(axe.violations.map((v) => v.id)).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  await banner.getByRole("button", { name: "Install app" }).click();
+  expect(await page.evaluate(() => (window as unknown as { __prompted: number }).__prompted)).toBe(1);
+  await expect(banner).toHaveCount(0); // the event is single-use
+
+  await page.reload();
+  await fire();
+  await banner.getByRole("button", { name: /Not now/ }).click();
+  await expect(banner).toHaveCount(0);
+  await page.reload();
+  await fire();
+  await expect(page.getByRole("region", { name: "Install app" })).toHaveCount(0);
+});
+
+test("pro profile can be shared on WhatsApp or copied", async ({ page, request, context }) => {
+  const pro = await apiLogin(request, SEEDED.pro);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto(`/pros/${pro.id}`);
+  const wa = page.getByRole("link", { name: "Share on WhatsApp" });
+  await expect(wa).toHaveAttribute("href", new RegExp(`^https://wa\\.me/\\?text=.*%2Fpros%2F${pro.id}$`));
+  await page.getByRole("button", { name: "Copy link" }).click();
+  await expect(page.getByText("Link copied")).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(new RegExp(`/pros/${pro.id}$`));
+});

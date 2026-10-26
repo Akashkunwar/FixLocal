@@ -1,3 +1,4 @@
+import { ShareButtons } from "../components/ShareButtons";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Shell } from "../components/Shell";
@@ -161,6 +162,11 @@ export function ProPublicPage() {
               <Heart className="h-4 w-4" /> Save
             </button>
           )}
+          <ShareButtons
+            url={`${window.location.origin}/pros/${profile.userId}`}
+            title={`${profile.name || "A professional"} on FixLocal`}
+            text={`${profile.name || "This professional"}${profile.city ? ` (${profile.city})` : ""} is on FixLocal. See their reviews and work:`}
+          />
           {user?.role === "HOMEOWNER" && <BlockButton userId={profile.userId} name={profile.name} />}
         </div>
       }
