@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { VerificationStatus } from "../src/entities/TradespersonProfile";
 import { alertMatchesJob } from "../src/utils/jobAlerts";
-import { acceptBid, api, awardedJob, client, createJob, placeBid, pro, rows } from "./helpers";
+import { AppDataSource } from "../src/data-source";
+import { acceptBid, admin, api, awardedJob, client, createJob, placeBid, pro, rows } from "./helpers";
 
 const alertsOf = async (userId: string) =>
   rows<{ title: string; body: string; link: string; type: string }>(
@@ -167,5 +168,50 @@ describe("client spending and job history", () => {
     const stranger = await client();
     const empty = (await api().get("/api/jobs/spending").set(stranger.auth)).body.spending;
     expect(empty.totals).toMatchObject({ paid: 0, inEscrow: 0, jobsPosted: 0 });
+  });
+});
+
+describe("referrals", () => {
+  const signUp = (email: string, referralCode?: string) =>
+    api()
+      .post("/api/auth/register")
+      .send({ email, password: "Long-Password-123", role: "HOMEOWNER", name: "Asha Verma", acceptTerms: true, referralCode });
+
+  it("gives each user one stable code and credits sign-ups that use it, without revealing anything", async () => {
+    const inviter = await pro();
+    const before = await api().get("/api/referrals/me").set(inviter.auth);
+    expect(before.body.referral.code).toBeNull();
+    const [a, b] = await Promise.all([
+      api().post("/api/referrals/me/code").set(inviter.auth),
+      api().post("/api/referrals/me/code").set(inviter.auth),
+    ]);
+    expect(a.body.referral.code).toMatch(/^[A-HJKMNP-Z2-9]{8}$/);
+    expect(b.body.referral.code).toBe(a.body.referral.code);
+    const code: string = a.body.referral.code;
+    expect(a.body.referral.link).toMatch(new RegExp(`/register\\?ref=${code}$`));
+
+    const good = await signUp(`ref-${Date.now()}@example.com`, code.toLowerCase());
+    const bad = await signUp(`ref2-${Date.now()}@example.com`, "NOSUCHCODE");
+    expect(good.status).toBe(202);
+    expect(bad.status).toBe(202);
+    expect(bad.body).toEqual(good.body);
+    expect((await signUp(`ref3-${Date.now()}@example.com`, "bad code!")).status).toBe(400);
+
+    const mine = (await api().get("/api/referrals/me").set(inviter.auth)).body.referral;
+    expect(mine.totals).toEqual({ joined: 1, confirmed: 0, completedFirstJob: 0 });
+    expect(mine.people).toEqual([{ firstName: "Asha", joinedAt: expect.any(String), status: "joined" }]);
+    expect(JSON.stringify(mine)).not.toMatch(/@example\.com/);
+    expect((await api().get("/api/referrals/me").set((await admin()).auth)).status).toBe(403);
+  });
+
+  it("counts a referred client's first completed job", async () => {
+    const inviter = await client();
+    const { body } = await api().post("/api/referrals/me/code").set(inviter.auth);
+    const done = await awardedJob({ stage: "completed" });
+    await AppDataSource.query(`UPDATE "users" SET "referredById" = $1 WHERE "id" = $2`, [inviter.user.id, done.owner.user.id]);
+    const mine = (await api().get("/api/referrals/me").set(inviter.auth)).body.referral;
+    expect(body.referral.code).toBeTruthy();
+    expect(mine.totals).toEqual({ joined: 1, confirmed: 1, completedFirstJob: 1 });
+    expect(mine.people[0].status).toBe("completed_first_job");
   });
 });

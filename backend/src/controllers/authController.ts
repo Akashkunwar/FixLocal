@@ -131,9 +131,12 @@ async function notifyExistingOwner(existing: User) {
 const isUniqueViolation = (err: unknown) => (err as { code?: string } | null)?.code === "23505";
 
 export async function register(req: Request, res: Response) {
-  const { email, password, role, name, phone } = req.valid.body;
+  const { email, password, role, name, phone, referralCode } = req.valid.body;
   // Hash first in every case so new and existing addresses take the same time.
   const passwordHash = await hashPassword(password);
+  const referrer = referralCode
+    ? await users().findOne({ where: { referralCode }, select: { id: true, deletedAt: true } })
+    : null;
   const existing = await users().findOne({ where: { email } });
   if (existing) {
     await notifyExistingOwner(existing);
@@ -168,6 +171,7 @@ export async function register(req: Request, res: Response) {
           emailVerifiedAt: autoVerify ? new Date() : null,
           termsAcceptedAt: new Date(),
           termsVersion: TERMS_VERSION,
+          referredById: referrer && !referrer.deletedAt ? referrer.id : null,
         })
       );
       if (role === UserRole.TRADESPERSON) {
@@ -476,7 +480,7 @@ export async function exportMyData(req: Request, res: Response) {
   const q = <T = Record<string, unknown>>(sql: string) => AppDataSource.query(sql, [id]) as Promise<T[]>;
   const [account] = await q(
     `SELECT "id", "email", "role", "name", "phone", "avatarUrl", "timezone", "isSuspended", "emailVerifiedAt",
-            "termsAcceptedAt", "termsVersion", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
+            "termsAcceptedAt", "termsVersion", "referralCode", "referredById", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
        FROM "users" WHERE "id" = $1`
   );
   const [

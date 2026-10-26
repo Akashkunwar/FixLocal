@@ -1,5 +1,6 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { apiCall, apiLogin, awardedJob, login, postJob, SEEDED } from "./fixtures";
+import { apiCall, apiLogin, awardedJob, login, mailLink, PASSWORD, postJob, registerViaApi, SEEDED, uniqueEmail } from "./fixtures";
 
 type Notif = { title: string; type: string; link?: string };
 
@@ -77,4 +78,41 @@ test("client spending page: escrow totals, history filter and CSV download", asy
   const csv = fs.readFileSync((await download.path())!, "utf8");
   expect(csv).toContain(job.title);
   expect(csv).toMatch(/^\ufeff?Posted,Job,Category/);
+});
+
+test("a user shares an invite link and sees the friend who joined through it", async ({ page, browser, request }) => {
+  const inviter = await registerViaApi(request, "TRADESPERSON", "Inviting Pro");
+  await login(page, inviter.email);
+  await page.goto("/settings");
+  const card = page.getByRole("region", { name: "Invite friends" });
+  await card.getByRole("button", { name: "Create my invite link" }).click();
+  const linkBox = card.getByLabel(/Your invite link/);
+  await expect(linkBox).toHaveValue(/\/register\?ref=[A-Z0-9]{8}$/);
+  const link = await linkBox.inputValue();
+  await expect(card.getByRole("link", { name: "Share on WhatsApp" })).toHaveAttribute("href", /^https:\/\/wa\.me\/\?text=.*register%3Fref%3D/);
+
+  // The friend opens the link in their own browser and signs up.
+  const friendCtx = await browser.newContext();
+  const friend = await friendCtx.newPage();
+  const email = uniqueEmail("friend");
+  await friend.goto(new URL(link).pathname + new URL(link).search);
+  await expect(friend.getByText("A friend invited you to FixLocal. Welcome!")).toBeVisible();
+  await friend.getByRole("button", { name: /^Client/ }).click();
+  await friend.getByLabel("Full name").fill("Ravi Friend");
+  await friend.getByLabel("Email").fill(email);
+  await friend.getByLabel("Password").fill(PASSWORD);
+  await friend.getByRole("checkbox", { name: /agree to the Terms/ }).check();
+  await friend.getByRole("button", { name: "Create account" }).click();
+  await expect(friend.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
+  const token = new URLSearchParams((await mailLink(request, email, "verify-email")).split("?")[1]).get("token");
+  expect((await request.post("/api/auth/verify-email", { data: { token } })).status()).toBe(200);
+  await friendCtx.close();
+
+  await page.reload();
+  const people = card.getByRole("list", { name: "People you invited" });
+  await expect(people).toContainText("Ravi");
+  await expect(people).toContainText("Email confirmed");
+  await expect(people).not.toContainText(email);
+  const axe = await new AxeBuilder({ page }).include("[aria-labelledby=invite-title]").withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+  expect(axe.violations.map((v) => v.id)).toEqual([]);
 });

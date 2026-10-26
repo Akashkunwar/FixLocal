@@ -83,3 +83,21 @@ export type Spending = {
 export function getMySpending() {
   return api<{ spending: Spending }>("/api/jobs/spending");
 }
+
+// ---- referrals ----
+export type ReferralStatus = "joined" | "confirmed" | "completed_first_job";
+export type Referral = {
+  code: string | null;
+  link: string | null;
+  shareText: string | null;
+  totals: { joined: number; confirmed: number; completedFirstJob: number };
+  people: { firstName: string; joinedAt: string; status: ReferralStatus }[];
+};
+
+export function getMyReferrals() {
+  return api<{ referral: Referral }>("/api/referrals/me");
+}
+
+export function createMyReferralCode() {
+  return api<{ referral: Referral }>("/api/referrals/me/code", { method: "POST" });
+}

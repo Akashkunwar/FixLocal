@@ -17,6 +17,11 @@ export const registerBody = z.object({
     .regex(/^[+0-9 ()-]*$/, "Enter a valid phone number")
     .optional(),
   acceptTerms: z.literal(true, { message: "Please accept the Terms of Service and Privacy Policy" }),
+  /** From an invite link (?ref=CODE). Unknown codes are ignored, so sign-up looks the same either way. */
+  referralCode: z.preprocess(
+    (v) => (typeof v === "string" ? v.trim().toUpperCase() || undefined : v),
+    z.string().max(16).regex(/^[A-Z0-9]*$/, "Invalid invite code").optional()
+  ),
 });
 
 export const loginBody = z.object({

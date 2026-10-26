@@ -3,7 +3,7 @@ import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError, dashboardPath, resendConfirmation } from "../api/client";
 import { useToast } from "../components/Toast";
-import { Wrench } from "lucide-react";
+import { Gift, Wrench } from "lucide-react";
 import { safeNext } from "../lib/paths";
 import clsx from "clsx";
 
@@ -22,9 +22,23 @@ const ROLE_CARDS = [
   },
 ];
 
+const REF_KEY = "fixlocal:ref";
+
+function readReferral(fromUrl: string | null): string {
+  const clean = (v: string | null) => (v || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+  try {
+    if (clean(fromUrl)) sessionStorage.setItem(REF_KEY, clean(fromUrl));
+    return sessionStorage.getItem(REF_KEY) || "";
+  } catch {
+    return clean(fromUrl);
+  }
+}
+
 export function RegisterPage() {
   const { user, register, loading } = useAuth();
   const [params] = useSearchParams();
+  // Invite links (?ref=CODE) survive a detour to /login and back within the tab.
+  const [referral] = useState(() => readReferral(params.get("ref")));
   const { error } = useToast();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -64,9 +78,15 @@ export function RegisterPage() {
       await register(email.trim(), password, role, {
         name: name.trim() || undefined,
         phone: phone.trim() || undefined,
+        referralCode: referral || undefined,
       });
       setPassword("");
       setSentTo(email.trim());
+      try {
+        sessionStorage.removeItem(REF_KEY);
+      } catch {
+        /* storage blocked: nothing to clear */
+      }
     } catch (ex) {
       const msg = ex instanceof ApiError ? ex.message : "Registration failed";
       setErr(msg);
@@ -128,6 +148,11 @@ export function RegisterPage() {
           <p className="mt-1 text-sm text-slate-500">
             Clients post work. Professionals bid after admin verification.
           </p>
+          {referral && (
+            <p className="mt-3 rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-900" role="status">
+              <Gift className="mr-1 inline h-4 w-4" aria-hidden /> A friend invited you to FixLocal. Welcome!
+            </p>
+          )}
         </div>
         {err && (
           <div className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200" role="alert">

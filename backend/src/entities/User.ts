@@ -2,6 +2,9 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
@@ -69,6 +72,19 @@ export class User {
 
   @Column({ type: "varchar", length: 16, nullable: true })
   termsVersion?: string | null;
+
+  /** Personal invite code (created the first time the user opens "Invite friends"). */
+  @Column({ type: "varchar", length: 12, nullable: true, unique: true })
+  referralCode?: string | null;
+
+  /** Who invited this user (set at sign-up from ?ref=CODE). */
+  @Index()
+  @Column({ type: "uuid", nullable: true })
+  referredById?: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL", nullable: true })
+  @JoinColumn({ name: "referredById" })
+  referredBy?: User | null;
 
   /** Hours before "viewed but no reply" nudge (null = env/default 4). */
   @Column({ type: "int", nullable: true })
