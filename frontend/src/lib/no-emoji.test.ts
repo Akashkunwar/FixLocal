@@ -14,7 +14,7 @@ const SOURCES = import.meta.glob<string>(
   ],
   { query: "?raw", import: "default", eager: true },
 );
-const EMOJI = /(?![©®™])\p{Extended_Pictographic}|[\u2605\u2606\uFE0F\u20E3]/u;
+const EMOJI = /(?![©®™])\p{Extended_Pictographic}|\u2605|\u2606|\uFE0F|\u20E3/u;
 
 describe("no emoji in the UI", () => {
   it("scans the frontend source and the HTML shell", () => {
