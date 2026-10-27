@@ -1,3 +1,4 @@
+import { CategoryIcon } from "../../components/CategoryIcon";
 import { UrgentBadge } from "../../components/UrgentBadge";
 import { JobQuestionsPanel } from "../../components/JobQuestionsPanel";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -458,7 +459,12 @@ export function ProJobDetailPage() {
   return (
     <Shell
       title={job.title}
-      subtitle={`${categoryLabel(job.category)} · ${fmtDate(job.createdAt)}`}
+      subtitle={
+        <>
+          <CategoryIcon category={job.category} className="mr-1.5" />
+          {`${categoryLabel(job.category)} · ${fmtDate(job.createdAt)}`}
+        </>
+      }
       actions={
         <button
           type="button"

@@ -137,7 +137,7 @@ export function FindProsPage() {
   }, [urlCategory, urlSite]);
 
   function saveSearch() {
-    const label = [facets.category, facets.city, facets.neighborhood, facets.ratingMin && `${facets.ratingMin}+★`]
+    const label = [facets.category, facets.city, facets.neighborhood, facets.ratingMin && `${facets.ratingMin}+ stars`]
       .filter(Boolean)
       .join(" · ") || "My pro search";
     localStorage.setItem(SAVED_KEY, JSON.stringify({ ...facets, label }));
@@ -207,7 +207,7 @@ export function FindProsPage() {
               <optgroup key={group} label={group}>
                 {cats.map((c) => (
                   <option key={c.value} value={c.value}>
-                    {c.emoji} {c.label}
+                    {c.label}
                   </option>
                 ))}
               </optgroup>

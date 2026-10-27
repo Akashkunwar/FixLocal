@@ -1,3 +1,4 @@
+import { RatingStar } from "../../../components/ui/RatingStar";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BadgeCheck, CalendarClock, Clock, MapPin, Quote } from "lucide-react";
@@ -266,7 +267,8 @@ export function BidCard({
                 <span className="line-clamp-2">{p.latestReview.comment}</span>
               </blockquote>
               <figcaption className="mt-1 text-[11px] text-slate-500">
-                {t("Latest review ·")}{" "}{p.latestReview.rating}★
+                {t("Latest review ·")}{" "}{p.latestReview.rating}
+                <RatingStar className="ml-0.5" />
               </figcaption>
             </figure>
           )}

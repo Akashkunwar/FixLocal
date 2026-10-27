@@ -41,17 +41,17 @@ export function initials(name?: string | null, email?: string) {
 }
 
 export const CATEGORIES = [
-  { value: "plumbing", label: "Plumbing", emoji: "🔧", group: "Home repair & maintenance" },
-  { value: "electrical", label: "Electrical", emoji: "⚡", group: "Home repair & maintenance" },
-  { value: "carpentry", label: "Carpentry", emoji: "🪚", group: "Home repair & maintenance" },
-  { value: "painting", label: "Painting", emoji: "🎨", group: "Home repair & maintenance" },
-  { value: "appliance", label: "Appliance", emoji: "🔌", group: "Home repair & maintenance" },
-  { value: "cleaning", label: "Cleaning (home & office)", emoji: "🧹", group: "Cleaning" },
-  { value: "construction", label: "Construction / skilled trades", emoji: "🏗️", group: "Construction" },
-  { value: "office_facilities", label: "Office & facilities", emoji: "🏢", group: "Office & facilities" },
-  { value: "tech_services", label: "Tech services (CCTV, networking, AMC)", emoji: "📡", group: "Tech services" },
-  { value: "moving", label: "Moving / drivers / helpers", emoji: "🚚", group: "Moving" },
-  { value: "other", label: "Other", emoji: "🛠️", group: "Other" },
+  { value: "plumbing", label: "Plumbing", group: "Home repair & maintenance" },
+  { value: "electrical", label: "Electrical", group: "Home repair & maintenance" },
+  { value: "carpentry", label: "Carpentry", group: "Home repair & maintenance" },
+  { value: "painting", label: "Painting", group: "Home repair & maintenance" },
+  { value: "appliance", label: "Appliance", group: "Home repair & maintenance" },
+  { value: "cleaning", label: "Cleaning (home & office)", group: "Cleaning" },
+  { value: "construction", label: "Construction / skilled trades", group: "Construction" },
+  { value: "office_facilities", label: "Office & facilities", group: "Office & facilities" },
+  { value: "tech_services", label: "Tech services (CCTV, networking, AMC)", group: "Tech services" },
+  { value: "moving", label: "Moving / drivers / helpers", group: "Moving" },
+  { value: "other", label: "Other", group: "Other" },
 ] as const;
 
 export type CategoryValue = (typeof CATEGORIES)[number]["value"];
@@ -59,10 +59,6 @@ export type CategoryValue = (typeof CATEGORIES)[number]["value"];
 export function categoryLabel(c: string) {
   const label = CATEGORIES.find((x) => x.value === c)?.label;
   return label ? t(label) : c;
-}
-
-export function categoryEmoji(c: string) {
-  return CATEGORIES.find((x) => x.value === c)?.emoji || "🛠️";
 }
 
 /** Ordered [groupName, categories[]] for <optgroup> selects. */

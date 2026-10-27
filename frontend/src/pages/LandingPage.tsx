@@ -1,3 +1,4 @@
+import { CategoryIcon, LeadGroupIcon } from "../components/CategoryIcon";
 import { LanguageToggle, useI18n } from "../lib/i18n";
 import { InstallAppBanner } from "../components/InstallAppBanner";
 import { useEffect } from "react";
@@ -29,8 +30,8 @@ export function LandingPage() {
 
   const leadCats = LEAD_GROUPS.map((g) => {
     const cats = categoriesForLeadGroup(g);
-    return cats[0] ? { group: g, emoji: cats[0].emoji, value: cats[0].value } : null;
-  }).filter(Boolean) as { group: string; emoji: string; value: string }[];
+    return cats[0] ? { group: g, value: cats[0].value } : null;
+  }).filter(Boolean) as { group: string; value: string }[];
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -113,7 +114,7 @@ export function LandingPage() {
           {leadCats.map((c) => (
             <div key={c.group} className="card flex flex-col gap-3 p-4 transition hover:shadow-lift">
               <Link to={leadGroupHubPath(c.group)} className="flex items-center gap-3 no-underline text-inherit">
-                <span className="text-2xl">{c.emoji}</span>
+                <LeadGroupIcon group={c.group} size="lg" tile />
                 <div>
                   <p className="font-semibold text-slate-900">{c.group}</p>
                   <p className="text-xs text-slate-500">{t("Open hub · specialties & next steps")}</p>
@@ -155,9 +156,9 @@ export function LandingPage() {
                     <li key={c.value}>
                       <Link
                         to={clientPath(`pros?category=${encodeURIComponent(c.value)}`)}
-                        className="text-slate-700 no-underline hover:text-brand-800 hover:underline"
+                        className="inline-flex items-center gap-1.5 text-slate-700 no-underline hover:text-brand-800 hover:underline"
                       >
-                        {c.emoji} {c.label}
+                        <CategoryIcon category={c.value} size="sm" /> {c.label}
                       </Link>
                     </li>
                   ))}

@@ -1,3 +1,4 @@
+import { CategoryIcon } from "../../components/CategoryIcon";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shell } from "../../components/Shell";
@@ -374,7 +375,8 @@ export function CreateJobPage() {
                     )}
                     onClick={() => patch({ category: c.value })}
                   >
-                    {c.emoji} {t(c.label)}
+                    <CategoryIcon category={c.value} size="xs" inherit className="mr-1" />
+                    {t(c.label)}
                   </button>
                 ))}
               </div>

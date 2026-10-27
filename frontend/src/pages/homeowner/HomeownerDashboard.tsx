@@ -1,3 +1,4 @@
+import { CategoryIcon } from "../../components/CategoryIcon";
 import { UrgentBadge } from "../../components/UrgentBadge";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -6,7 +7,7 @@ import { listJobs, getHomeownerInviteAnalytics, getHomeownerShortlistInviteAnaly
 import { Badge } from "../../components/ui/Badge";
 import { Spinner } from "../../components/ui/Spinner";
 import { EmptyState } from "../../components/ui/EmptyState";
-import { categoryEmoji, categoryGroups, categoryLabel, fmtDate, money } from "../../lib/format";
+import { categoryGroups, categoryLabel, fmtDate, money } from "../../lib/format";
 import { Plus, Search } from "lucide-react";
 import { OnboardingChecklist } from "../../components/OnboardingChecklist";
 import { PendingReviewsCard } from "../../components/PendingReviewsCard";
@@ -217,7 +218,7 @@ export function HomeownerDashboard() {
           {categoryGroups().map(([group, cats]) => (
             <optgroup key={group} label={t(group)}>
               {cats.map((c) => (
-                <option key={c.value} value={c.value}>{c.emoji} {t(c.label)}</option>
+                <option key={c.value} value={c.value}>{t(c.label)}</option>
               ))}
             </optgroup>
           ))}
@@ -259,7 +260,7 @@ export function HomeownerDashboard() {
                 className="flex flex-wrap items-center justify-between gap-4 p-5 no-underline text-inherit"
               >
                 <div className="flex items-start gap-3 min-w-0">
-                  <span className="text-2xl">{categoryEmoji(job.category)}</span>
+                  <CategoryIcon category={job.category} size="md" tile />
                   <div className="min-w-0">
                     <p className="font-semibold text-slate-900 truncate">
                       {job.urgent && <UrgentBadge className="mr-2 align-middle" />}

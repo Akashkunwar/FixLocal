@@ -1,3 +1,4 @@
+import { RatingStar } from "../../../components/ui/RatingStar";
 import { Link } from "react-router-dom";
 import { type Job } from "../../../api/jobs";
 import { ResponseSlaBadge } from "../../../components/ui/ResponseSlaBadge";
@@ -127,7 +128,8 @@ export function SuggestedProsPanel({
                                 "—"}
                             </p>
                             <p className="mt-1 text-[11px] text-slate-500">
-                              ★ {p.averageRating.toFixed(1)} ({p.reviewCount})
+                              <RatingStar className="mr-0.5" />
+                              {p.averageRating.toFixed(1)} ({p.reviewCount})
                               {p.breakdown.distanceKm != null && (
                                 <> · ~{p.breakdown.distanceKm} {t("km")}</>
                               )}
