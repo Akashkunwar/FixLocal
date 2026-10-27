@@ -231,7 +231,7 @@ export function Shell({
 
       {user && (
         <nav
-          className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-md md:hidden safe-bottom"
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white md:hidden safe-bottom"
           aria-label="Mobile primary"
         >
           <div className="mx-auto flex max-w-6xl overflow-x-auto px-1 py-1">

@@ -354,7 +354,7 @@ export function BrowseJobsPage() {
             type="button"
             className={clsx(
               "inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition",
-              facets.urgent ? "bg-amber-600 text-white ring-amber-600" : "bg-white text-amber-900 ring-amber-300 hover:bg-amber-50"
+              facets.urgent ? "bg-amber-800 text-white ring-amber-800" : "bg-white text-amber-900 ring-amber-300 hover:bg-amber-50"
             )}
             aria-pressed={!!facets.urgent}
             onClick={() => {
