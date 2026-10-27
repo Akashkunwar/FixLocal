@@ -34,6 +34,20 @@ export async function autoConfirmJobs(now = new Date()) {
   for (const job of due) {
     try {
       const result = await AppDataSource.transaction(async (m) => {
+        // Re-check under the row lock: a dispute ruled "no action" may have restarted the window
+        // (or the client confirmed) after the list above was read.
+        const [locked]: { status: JobStatus; pendingConfirmationAt: Date | null }[] = await m.query(
+          `SELECT "status", "pendingConfirmationAt" FROM "jobs" WHERE "id" = $1 FOR UPDATE`,
+          [job.id]
+        );
+        if (
+          !locked ||
+          locked.status !== JobStatus.PENDING_CONFIRMATION ||
+          !locked.pendingConfirmationAt ||
+          new Date(locked.pendingConfirmationAt) >= cutoff
+        ) {
+          return null;
+        }
         await transitionJob(m, job.id, "auto_confirm", { completedAt: now });
         const fresh = await m.findOneOrFail(Job, { where: { id: job.id } });
         const released = await releaseRemaining(m, fresh, null);
@@ -52,6 +66,7 @@ export async function autoConfirmJobs(now = new Date()) {
         );
         return { ...released, rewards };
       });
+      if (!result) continue;
       if (result.rewards.length) await createNotifications(result.rewards);
       confirmed += 1;
       const accepted = job.acceptedBidId ? await AppDataSource.getRepository(Bid).findOne({ where: { id: job.acceptedBidId } }) : null;

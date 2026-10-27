@@ -232,9 +232,9 @@ export async function adminStats(_req: Request, res: Response) {
     AppDataSource.getRepository(Bid).count({ where: { status: BidStatus.ACTIVE } }),
     AppDataSource.getRepository(Review).count(),
     AppDataSource.query(
-      `SELECT COALESCE(SUM(CASE WHEN "type" = 'release' THEN "amount" END), 0) AS released,
-              COALESCE(SUM(CASE WHEN "type" = 'refund' THEN "amount" END), 0) AS refunded,
-              COALESCE(SUM(CASE WHEN "type" = 'hold' THEN "amount" END), 0) AS held
+      `SELECT COALESCE(SUM(CASE WHEN "type" IN ('release', 'credit_release') THEN "amount" WHEN "type" = 'clawback' THEN -"amount" END), 0) AS released,
+              COALESCE(SUM(CASE WHEN "type" IN ('refund', 'clawback') THEN "amount" END), 0) AS refunded,
+              COALESCE(SUM(CASE WHEN "type" IN ('hold', 'credit_hold') THEN "amount" END), 0) AS held
          FROM "ledger_entries"`
     ),
     AppDataSource.query(`SELECT COUNT(*)::int AS n FROM "reports" WHERE "status" = 'open'`),

@@ -31,6 +31,16 @@ export const money = z.coerce
   .transform(roundMoney);
 
 export const optionalMoney = z.preprocess(blankToUndefined, money.optional());
+
+/** Smallest amount that can fund escrow: split three ways, no milestone may round to ₹0. */
+export const MIN_ESCROW_INR = 10;
+export const escrowMoney = z.coerce
+  .number({ message: "Must be a number" })
+  .finite()
+  .min(MIN_ESCROW_INR, `Must be at least ₹${MIN_ESCROW_INR}`)
+  .max(MONEY_MAX, `Must be at most ${MONEY_MAX}`)
+  .transform(roundMoney);
+export const optionalEscrowMoney = z.preprocess(blankToUndefined, escrowMoney.optional());
 export const optionalNonNegativeMoney = z.preprocess(
   blankToUndefined,
   z.coerce.number().finite().min(0).max(MONEY_MAX).transform(roundMoney).optional()

@@ -17,6 +17,7 @@ import { viewer } from "./jobController";
 import { filesOf } from "../middleware/upload";
 import { discardFiles, fileRef, storeUploads } from "../services/files";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors";
+import { MilestoneStatus, PaymentMilestone } from "../entities/PaymentMilestone";
 
 export const DISPUTE_WINDOW_DAYS = 14;
 
@@ -138,6 +139,19 @@ export async function resolveDispute(req: Request, res: Response) {
         ? "completed"
         : "restore");
 
+  // A ruling for one side can't move the money the other way.
+  if (
+    (resolution === DisputeResolution.FAVOR_HOMEOWNER && outcome === "completed") ||
+    (resolution === DisputeResolution.FAVOR_TRADESPERSON && outcome === "cancelled")
+  ) {
+    throw badRequest(
+      resolution === DisputeResolution.FAVOR_HOMEOWNER
+        ? "A ruling for the client can't complete the job and release the payment to the professional"
+        : "A ruling for the professional can't cancel the job and refund the client",
+      "RESOLUTION_MISMATCH"
+    );
+  }
+
   const notices: NotificationInput[] = [];
   const result = await AppDataSource.transaction(async (m) => {
     const claimed = await m.update(
@@ -170,6 +184,11 @@ export async function resolveDispute(req: Request, res: Response) {
       notices.push(...(await grantReferralRewards(m, job.id)));
       finalStatus = JobStatus.COMPLETED;
     } else {
+      // Work can't carry on with nothing left in escrow: a fully refunded job may only end cancelled.
+      const milestones = await m.find(PaymentMilestone, { where: { jobId: job.id }, select: { id: true, status: true } });
+      if (milestones.length && milestones.every((x) => x.status === MilestoneStatus.REFUNDED)) {
+        throw conflict("Every payment on this job is refunded, so it can only be closed as cancelled", "FULLY_REFUNDED");
+      }
       const previous = (existing.previousJobStatus as JobStatus) || JobStatus.IN_PROGRESS;
       finalStatus = await restoreJobStatus(m, job.id, previous);
     }

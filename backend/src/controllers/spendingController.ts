@@ -16,7 +16,8 @@ type JobRow = {
   proId: string | null;
   proName: string | null;
 };
-type LedgerRow = { jobId: string; type: "hold" | "release" | "refund"; amount: string; createdAt: Date };
+/** Only client-funded movements: credit-funded rows (credit_*) never count as the client's money. */
+type LedgerRow = { jobId: string; type: "hold" | "release" | "refund" | "clawback" | `credit_${string}`; amount: string; createdAt: Date };
 
 /**
  * A client's spending and job history, derived from the escrow ledger (simulated payments):
@@ -49,6 +50,13 @@ export async function getMySpending(req: Request, res: Response) {
     const amt = Number(l.amount);
     if (l.type === "hold") row.held += amt;
     if (l.type === "refund") row.refunded += amt;
+    if (l.type === "clawback") {
+      // A released deposit the professional gave back: no longer paid, now refunded.
+      row.paid -= amt;
+      row.refunded += amt;
+      const key = monthKeyInZone(new Date(l.createdAt), user.timezone);
+      byMonth.set(key, (byMonth.get(key) || 0) - amt);
+    }
     if (l.type === "release") {
       row.paid += amt;
       row.lastPaidAt = !row.lastPaidAt || l.createdAt > row.lastPaidAt ? l.createdAt : row.lastPaidAt;

@@ -14,7 +14,7 @@ import { slaMapForPros } from "../utils/proSlaBatch";
 import { buildAvailabilityHeat, DAY_KEYS } from "../utils/availabilityHeat";
 import { createNotifications } from "../utils/notifications";
 import { toProfile, toPublicReview, toReview } from "../serializers";
-import { releasedTotalsByJob } from "../domain/escrow";
+import { payoutRows, releasedTotalsByJob } from "../domain/escrow";
 import { median, mean, rate } from "../domain/analytics";
 import { localDatesAhead, monthKeyInZone } from "../domain/time";
 import { filesOf } from "../middleware/upload";
@@ -429,12 +429,14 @@ export async function getMyAnalytics(req: Request, res: Response) {
     const row = mix.get(cat) || { category: cat, count: 0, earned: 0 };
     row.count += 1;
     const r = released.get(b.jobId);
-    if (r) {
-      row.earned += r.total;
-      const key = monthKeyInZone(r.lastAt, tz);
-      byMonth.set(key, (byMonth.get(key) || 0) + r.total);
-    }
+    if (r) row.earned += r.total;
     mix.set(cat, row);
+  }
+  // Each payment counts in the month it was released (as on the client's spending page), not all in
+  // the month of the job's last release.
+  for (const p of await payoutRows(AppDataSource.manager, proId)) {
+    const key = monthKeyInZone(p.createdAt, tz);
+    byMonth.set(key, (byMonth.get(key) || 0) + p.amount);
   }
   const months: { month: string; amount: number }[] = [];
   const now = new Date();

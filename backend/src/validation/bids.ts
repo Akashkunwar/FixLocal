@@ -1,15 +1,15 @@
 import { z } from "zod";
-import { boolish, id, money, optionalDate, optionalInt, optionalMoney, optionalText } from "./common";
+import { boolish, escrowMoney, id, money, optionalDate, optionalEscrowMoney, optionalInt, optionalMoney, optionalText } from "./common";
 
 export const bidIdParams = z.object({ id });
 
 export const placeBidBody = z.object({
-  amount: money,
+  amount: escrowMoney,
   message: optionalText(2000),
   etaDays: optionalInt(0, 365),
   proposedVisitStart: optionalDate,
   proposedVisitEnd: optionalDate,
-  quoteAmount: optionalMoney,
+  quoteAmount: optionalEscrowMoney,
   quoteNotes: optionalText(4000),
 });
 
@@ -19,7 +19,7 @@ export const acceptBidBody = z.object({
 });
 
 export const updateQuoteBody = z.object({
-  quoteAmount: optionalMoney,
+  quoteAmount: optionalEscrowMoney,
   quoteNotes: z.preprocess((v) => (v === null ? "" : v), z.string().trim().max(4000).optional()),
   clearQuoteAttachment: boolish.optional(),
 });

@@ -3,7 +3,7 @@ import type { EntityManager } from "typeorm";
 import { In } from "typeorm";
 import { Bid } from "../entities/Bid";
 import { Job, JobStatus, PaymentStatus } from "../entities/Job";
-import { LedgerEntry, LedgerType } from "../entities/LedgerEntry";
+import { LedgerEntry, LedgerType, PAYOUT_TYPES } from "../entities/LedgerEntry";
 import { MilestoneStatus, PaymentMilestone } from "../entities/PaymentMilestone";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { paymentProvider } from "../services/payments";
@@ -85,10 +85,34 @@ async function payeeFor(manager: EntityManager, job: Pick<Job, "acceptedBidId">)
   return bid?.tradespersonId ?? null;
 }
 
+type Movement = "hold" | "release" | "refund";
+const CREDIT_TYPE: Record<Movement, LedgerType> = {
+  hold: LedgerType.CREDIT_HOLD,
+  release: LedgerType.CREDIT_RELEASE,
+  refund: LedgerType.CREDIT_REFUND,
+};
+const CLIENT_TYPE: Record<Movement, LedgerType> = { hold: LedgerType.HOLD, release: LedgerType.RELEASE, refund: LedgerType.REFUND };
+
+/**
+ * Ledger rows for moving milestones: the client-funded part and the credit-funded part are separate
+ * rows, so client totals only ever show what the client paid and payouts still add up to the milestone.
+ */
+function milestoneEntries(milestones: PaymentMilestone[], movement: Movement, note?: string) {
+  return milestones.flatMap((m) => {
+    const credit = round2(Number(m.creditAmount || 0));
+    const client = round2(Number(m.amount) - credit);
+    const label = note ?? m.label;
+    return [
+      { type: CLIENT_TYPE[movement], amount: client, milestoneId: m.id, note: label },
+      { type: CREDIT_TYPE[movement], amount: credit, milestoneId: m.id, note: `${label} (FixLocal credit)`, payerUserId: null },
+    ].filter((e) => e.amount > 0);
+  });
+}
+
 async function ledger(
   manager: EntityManager,
   job: Pick<Job, "id" | "homeownerId">,
-  entries: { type: LedgerType; amount: number; milestoneId?: string | null; note?: string }[],
+  entries: { type: LedgerType; amount: number; milestoneId?: string | null; note?: string; payerUserId?: string | null }[],
   actorUserId: string | null,
   payeeUserId: string | null
 ) {
@@ -97,6 +121,7 @@ async function ledger(
   const rows = [];
   for (const e of entries) {
     const amount = round2(e.amount);
+    const payerUserId = e.payerUserId === undefined ? job.homeownerId : e.payerUserId;
     // Milestone + movement type is unique (a milestone is held, then released or refunded once).
     const { reference } = await provider.record({
       type: e.type,
@@ -104,7 +129,7 @@ async function ledger(
       milestoneId: e.milestoneId ?? null,
       amount,
       currency: "INR",
-      payerUserId: job.homeownerId,
+      payerUserId,
       payeeUserId,
       idempotencyKey: `${job.id}:${e.milestoneId ?? "job"}:${e.type}`,
     });
@@ -113,7 +138,7 @@ async function ledger(
       milestoneId: e.milestoneId ?? null,
       type: e.type,
       amount,
-      payerUserId: job.homeownerId,
+      payerUserId,
       payeeUserId,
       actorUserId,
       note: e.note ?? null,
@@ -123,33 +148,36 @@ async function ledger(
   await manager.insert(LedgerEntry, rows);
 }
 
-/** Called inside the accept transaction. Unique (jobId, sequence) blocks double escrow. */
+/**
+ * Called inside the accept transaction. Unique (jobId, sequence) blocks double escrow.
+ * `creditAmount` is the client's referral credit used at this hire: it funds the earliest milestones
+ * first, and the client funds the rest.
+ */
 export async function createEscrow(
   manager: EntityManager,
   job: Job,
   proId: string,
   amount: number,
-  actorUserId: string
+  actorUserId: string,
+  creditAmount = 0
 ): Promise<PaymentMilestone[]> {
   const split = splitEscrow(amount);
-  const rows = split.milestones.map((m, i) =>
-    manager.create(PaymentMilestone, {
+  let creditLeft = round2(Math.max(0, Math.min(creditAmount, split.amount)));
+  const rows = split.milestones.map((m, i) => {
+    const credit = round2(Math.min(creditLeft, m.amount));
+    creditLeft = round2(creditLeft - credit);
+    return manager.create(PaymentMilestone, {
       jobId: job.id,
       label: m.label,
       sequence: m.sequence,
       amount: m.amount,
+      creditAmount: credit,
       percent: m.percent,
       status: i === 0 ? MilestoneStatus.HELD : MilestoneStatus.PENDING,
-    })
-  );
+    });
+  });
   const saved = await manager.save(rows);
-  await ledger(
-    manager,
-    job,
-    saved.map((m) => ({ type: LedgerType.HOLD, amount: Number(m.amount), milestoneId: m.id, note: m.label })),
-    actorUserId,
-    proId
-  );
+  await ledger(manager, job, milestoneEntries(saved, "hold"), actorUserId, proId);
   return saved;
 }
 
@@ -221,8 +249,8 @@ export async function releaseMilestone(manager: EntityManager, job: Job, milesto
     .execute();
 
   const payee = await payeeFor(manager, job);
-  await ledger(manager, job, [{ type: LedgerType.RELEASE, amount: Number(released.amount), milestoneId: released.id, note: released.label }], actorUserId, payee);
-  const creditAdded = payee ? await applyProCredit(manager, payee, job.id) : 0;
+  await ledger(manager, job, milestoneEntries([released], "release"), actorUserId, payee);
+  const creditAdded = payee ? await payProCredit(manager, job, payee, released.id, actorUserId) : 0;
   const paymentStatus = await syncPaymentStatus(manager, job);
   return { milestone: released, paymentStatus, payeeUserId: payee, creditAdded };
 }
@@ -240,14 +268,8 @@ export async function releaseRemaining(manager: EntityManager, job: Job, actorUs
     if (row) released.push(row);
   }
   const payee = await payeeFor(manager, job);
-  await ledger(
-    manager,
-    job,
-    released.map((m) => ({ type: LedgerType.RELEASE, amount: Number(m.amount), milestoneId: m.id, note: m.label })),
-    actorUserId,
-    payee
-  );
-  const creditAdded = payee && released.length ? await applyProCredit(manager, payee, job.id) : 0;
+  await ledger(manager, job, milestoneEntries(released, "release"), actorUserId, payee);
+  const creditAdded = payee && released.length ? await payProCredit(manager, job, payee, released[released.length - 1].id, actorUserId) : 0;
   const paymentStatus = await syncPaymentStatus(manager, job);
   return { released, paymentStatus, payeeUserId: payee, creditAdded };
 }
@@ -296,29 +318,82 @@ export async function refundMilestones(
     if (res.affected) refunded.push(manager.create(PaymentMilestone, res.raw[0]) as PaymentMilestone);
   }
   const payee = await payeeFor(manager, job);
-  await ledger(
-    manager,
-    job,
-    refunded.map((m) => ({ type: LedgerType.REFUND, amount: Number(m.amount), milestoneId: m.id, note })),
-    actorUserId,
-    payee
-  );
+  await ledger(manager, job, milestoneEntries(refunded, "refund", note), actorUserId, payee);
   const paymentStatus = await syncPaymentStatus(manager, job);
-  const totalRefunded = round2(refunded.reduce((s, m) => s + Number(m.amount), 0));
-  // Credit follows the money: a refund takes back referral credit earned on this job, and a hire
-  // that ends fully refunded gives the client back the credit it used.
+  // The client gets back what they paid; the credit-funded part goes back to their credit balance.
+  const totalRefunded = round2(refunded.reduce((s, m) => s + Number(m.amount) - Number(m.creditAmount || 0), 0));
+  const creditReturned = round2(refunded.reduce((s, m) => s + Number(m.creditAmount || 0), 0));
+  // Credit follows the money: a refund takes back referral credit earned on this job.
   const creditNotices = refunded.length ? await reverseReferralRewards(manager, job.id, "refunded", actorUserId) : [];
-  if (paymentStatus === PaymentStatus.REFUNDED) await restoreClientCredit(manager, job.homeownerId, job.id);
-  return { refunded, notRefundable, totalRefunded, paymentStatus, creditNotices };
+  if (creditReturned > 0) await restoreClientCredit(manager, job.homeownerId, job.id, creditReturned);
+  return { refunded, notRefundable, totalRefunded, creditReturned, paymentStatus, creditNotices };
 }
 
-/** Sum of released escrow per professional (ledger is the source of truth). */
+/**
+ * The hired professional called off the booking before starting: money already released to them
+ * (the deposit) goes back. The client-funded part is returned to the client and the credit-funded
+ * part to the client's credit balance.
+ */
+export async function clawBackReleased(manager: EntityManager, job: Job, actorUserId: string, note: string) {
+  await lockJob(manager, job.id);
+  const res = await manager
+    .createQueryBuilder()
+    .update(PaymentMilestone)
+    .set({ status: MilestoneStatus.REFUNDED, refundedAt: () => "now()", refundedByUserId: actorUserId, refundNote: note.slice(0, 500) })
+    .where(`"jobId" = :jobId AND "status" = :released`, { jobId: job.id, released: MilestoneStatus.RELEASED })
+    .returning("*")
+    .execute();
+  const rows = (res.raw as PaymentMilestone[]).map((r) => manager.create(PaymentMilestone, r));
+  if (!rows.length) return { clawedBack: 0, creditReturned: 0 };
+  const payee = await payeeFor(manager, job);
+  const entries = milestoneEntries(rows, "refund", note).map((e) => (e.type === LedgerType.REFUND ? { ...e, type: LedgerType.CLAWBACK } : e));
+  await ledger(manager, job, entries, actorUserId, payee);
+  const clawedBack = round2(rows.reduce((s, m) => s + Number(m.amount) - Number(m.creditAmount || 0), 0));
+  const credit = round2(rows.reduce((s, m) => s + Number(m.creditAmount || 0), 0));
+  const creditReturned = credit > 0 ? await restoreClientCredit(manager, job.homeownerId, job.id, credit) : 0;
+  await syncPaymentStatus(manager, job);
+  return { clawedBack, creditReturned };
+}
+
+/** A professional's referral credit is paid out with a release, through the provider and the ledger. */
+async function payProCredit(manager: EntityManager, job: Job, proId: string, milestoneId: string, actorUserId: string | null) {
+  const amount = await applyProCredit(manager, proId, job.id);
+  if (amount > 0) {
+    await ledger(
+      manager,
+      job,
+      [{ type: LedgerType.CREDIT_PAYOUT, amount, milestoneId, note: "Your FixLocal credit", payerUserId: null }],
+      actorUserId,
+      proId
+    );
+  }
+  return amount;
+}
+
+/**
+ * Ledger rows that change what a professional has been paid, signed: payouts are positive; money paid
+ * back (clawback, or the credit part of a released milestone that was clawed back) is negative.
+ */
+const EARNINGS_SQL = `
+  SELECT l."jobId", l."createdAt",
+         CASE WHEN l."type" IN ('clawback', 'credit_refund') THEN -l."amount" ELSE l."amount" END AS amount
+    FROM "ledger_entries" l
+   WHERE l."payeeUserId" = $1
+     AND (l."type" = ANY($2) OR l."type" = 'clawback'
+          OR (l."type" = 'credit_refund' AND EXISTS (
+                SELECT 1 FROM "ledger_entries" r WHERE r."milestoneId" = l."milestoneId" AND r."type" = 'credit_release')))`;
+
+/** Every payment to a professional, one row per ledger movement. */
+export async function payoutRows(manager: EntityManager, payeeUserId: string) {
+  const rows: { amount: string; createdAt: Date }[] = await manager.query(EARNINGS_SQL, [payeeUserId, [...PAYOUT_TYPES]]);
+  return rows.map((r) => ({ amount: Number(r.amount), createdAt: new Date(r.createdAt) }));
+}
+
+/** Sum of everything paid to a professional per job (ledger is the source of truth). */
 export async function releasedTotalsByJob(manager: EntityManager, payeeUserId: string) {
   const rows: { jobId: string; total: string; lastAt: Date }[] = await manager.query(
-    `SELECT "jobId", SUM("amount") AS total, MAX("createdAt") AS "lastAt"
-     FROM "ledger_entries" WHERE "payeeUserId" = $1 AND "type" = 'release'
-     GROUP BY "jobId"`,
-    [payeeUserId]
+    `SELECT e."jobId", SUM(e.amount) AS total, MAX(e."createdAt") AS "lastAt" FROM (${EARNINGS_SQL}) e GROUP BY e."jobId"`,
+    [payeeUserId, [...PAYOUT_TYPES]]
   );
   return new Map(rows.map((r) => [r.jobId, { total: Number(r.total), lastAt: new Date(r.lastAt) }]));
 }
