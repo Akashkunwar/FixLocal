@@ -149,11 +149,48 @@ describe("sessions (H-3)", () => {
     const second = cookieOf(r1)!.split(";")[0];
     expect(second).not.toBe(first);
 
+    // Past the grace window (a few seconds), reusing a rotated token is treated as theft.
+    await rows(`UPDATE "refresh_tokens" SET "revokedAt" = now() - interval '1 minute' WHERE "replacedById" IS NOT NULL AND "userId" = $1`, [c.user.id]);
     const reuse = await api().post("/api/auth/refresh").set("Cookie", first);
     expect(reuse.status).toBe(401);
     // The legitimate newer token is now revoked too.
     const after = await api().post("/api/auth/refresh").set("Cookie", second);
     expect(after.status).toBe(401);
+  });
+
+  it("re-sending a just-rotated refresh token within the grace window gets the same new token", async () => {
+    const c = await client();
+    const login = await api().post("/api/auth/login").send({ email: c.user.email, password: PASSWORD });
+    const first = cookieOf(login)!.split(";")[0];
+    const r1 = await api().post("/api/auth/refresh").set("Cookie", first);
+    expect(r1.status).toBe(200);
+    const second = cookieOf(r1)!.split(";")[0];
+    // A second tab sends the old cookie a moment later: same new token, session intact.
+    const r2 = await api().post("/api/auth/refresh").set("Cookie", first);
+    expect(r2.status).toBe(200);
+    expect(cookieOf(r2)!.split(";")[0]).toBe(second);
+    expect((await api().post("/api/auth/refresh").set("Cookie", second)).status).toBe(200);
+  });
+
+  it("two refreshes racing with the same token both keep the session", async () => {
+    const c = await client();
+    const login = await api().post("/api/auth/login").send({ email: c.user.email, password: PASSWORD });
+    const first = cookieOf(login)!.split(";")[0];
+    const both = await Promise.all([0, 1].map(() => api().post("/api/auth/refresh").set("Cookie", first)));
+    for (const r of both) expect([200, 409]).toContain(r.status);
+    const winner = both.find((r) => r.status === 200)!;
+    const next = cookieOf(winner)!.split(";")[0];
+    expect((await api().post("/api/auth/refresh").set("Cookie", next)).status).toBe(200);
+    const [{ n }] = await rows<{ n: number }>(
+      `SELECT COUNT(*)::int n FROM "refresh_tokens" WHERE "userId" = $1 AND "revokedAt" IS NULL`,
+      [c.user.id]
+    );
+    expect(n).toBe(1);
+  });
+
+  it("refresh with no cookie is a quiet 204, not an error", async () => {
+    const res = await api().post("/api/auth/refresh");
+    expect(res.status).toBe(204);
   });
 
   it("logout revokes the refresh token", async () => {

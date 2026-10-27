@@ -35,7 +35,7 @@ import {
 } from "../auth/tokens";
 import { invalidateAuthState } from "../auth/authState";
 import { mailSuppressed } from "../middleware/rateLimit";
-import { badRequest, conflict, forbidden, unauthorized } from "../http/errors";
+import { HttpError, badRequest, conflict, forbidden, unauthorized } from "../http/errors";
 import { toSelfUser } from "../serializers";
 import { appLink, sendMail } from "../services/mailer";
 import { writeAudit } from "../utils/audit";
@@ -223,12 +223,14 @@ export async function login(req: Request, res: Response) {
 
 export async function refresh(req: Request, res: Response) {
   const raw = req.cookies?.[REFRESH_COOKIE];
-  if (!raw) throw unauthorized("Session expired", "SESSION_EXPIRED");
+  // Not signed in is a normal state for a visitor, not an error: nothing to refresh.
+  if (!raw) return res.status(204).end();
   let rotated;
   try {
     rotated = await rotateRefreshToken(raw, req.get("user-agent"));
   } catch (err) {
-    clearRefreshCookie(res);
+    // A 409 (another tab refreshed a moment ago) keeps the cookie: the browser already has the new one.
+    if (!(err instanceof HttpError) || err.status !== 409) clearRefreshCookie(res);
     throw err;
   }
   const user = await users().findOne({ where: { id: rotated.userId } });
