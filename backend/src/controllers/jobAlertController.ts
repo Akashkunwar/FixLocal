@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { JobAlert } from "../entities/JobAlert";
-import { badRequest, conflict, notFound } from "../http/errors";
+import { badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { MAX_ALERTS_PER_PRO, previewMatches } from "../utils/jobAlerts";
 
 const repo = () => AppDataSource.getRepository(JobAlert);
@@ -68,5 +68,6 @@ export async function deleteJobAlert(req: Request, res: Response) {
 
 export async function previewJobAlert(req: Request, res: Response) {
   const body = req.valid.body;
+  if (!req.user!.proVerified) throw forbidden("Your professional account must be verified to preview matching jobs", "NOT_VERIFIED");
   return res.json(await previewMatches({ ...body, categories: body.categories ?? [] }, req.user!.id));
 }

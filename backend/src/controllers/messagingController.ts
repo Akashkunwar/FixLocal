@@ -15,8 +15,9 @@ const CODE_TTL_MS = 10 * 60_000;
 const RESEND_AFTER_MS = 60_000;
 const MAX_TRIES = 5;
 
-const hashCode = (userId: string, code: string) =>
-  crypto.createHmac("sha256", config().jwtSecret).update(`phone:${userId}:${code}`).digest("hex");
+/** Bound to the number the code was sent to: a code for one number can never verify another. */
+const hashCode = (userId: string, e164: string, code: string) =>
+  crypto.createHmac("sha256", config().jwtSecret).update(`phone:${userId}:${e164}:${code}`).digest("hex");
 
 /** What the Settings card needs: is texting switched on, which channels, and the user's state. */
 export async function getMessagingSettings(req: Request, res: Response) {
@@ -56,7 +57,7 @@ export async function sendPhoneCode(req: Request, res: Response) {
     { id: user.id },
     {
       ...(changed ? { phone: phone!, phoneVerifiedAt: null, smsOptIn: false, whatsappOptIn: false } : {}),
-      phoneCodeHash: hashCode(user.id, code),
+      phoneCodeHash: hashCode(user.id, e164, code),
       phoneCodeExpiresAt: new Date(Date.now() + CODE_TTL_MS),
       phoneCodeSentAt: new Date(),
       phoneCodeAttempts: 0,
@@ -90,7 +91,9 @@ export async function verifyPhoneCode(req: Request, res: Response) {
     .execute();
   if (!counted.affected) throw invalid();
   const expected = Buffer.from(user.phoneCodeHash, "hex");
-  const given = Buffer.from(hashCode(user.id, String(req.valid.body.code)), "hex");
+  const e164 = toE164(user.phone);
+  if (!e164) throw invalid();
+  const given = Buffer.from(hashCode(user.id, e164, String(req.valid.body.code)), "hex");
   if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) throw invalid();
   await users().update({ id: user.id }, { phoneVerifiedAt: new Date(), phoneCodeHash: null, phoneCodeExpiresAt: null });
   const fresh = await users().findOneOrFail({ where: { id: user.id } });

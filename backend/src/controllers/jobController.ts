@@ -48,6 +48,11 @@ export async function listJobs(req: Request, res: Response) {
   const limitNum = query.limit ?? 10;
   const mine = query.scope === "mine";
   const proBrowse = role === UserRole.TRADESPERSON && !mine;
+  // Same gate as a single job page: only verified professionals see open listings (checked before the shared cache).
+  // An empty page (not an error) so the browse screen can show its "get verified" state.
+  if (proBrowse && !req.user!.proVerified) {
+    return res.json({ jobs: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0, verificationRequired: true });
+  }
 
   const cacheKey = proBrowse
     ? await openJobsCacheKey({ ...query, page: pageNum, limit: limitNum, from: query.from?.toISOString(), to: query.to?.toISOString() })

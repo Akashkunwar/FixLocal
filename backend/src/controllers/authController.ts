@@ -14,7 +14,8 @@ import { AppDataSource } from "../data-source";
 import { config } from "../config";
 import { User, UserRole } from "../entities/User";
 import { TradespersonProfile, VerificationStatus } from "../entities/TradespersonProfile";
-import { EmailToken, type EmailTokenType } from "../entities/EmailToken";
+import { EmailToken, type EmailTokenType, type PendingSignup } from "../entities/EmailToken";
+import { RefreshToken } from "../entities/RefreshToken";
 import { UserTemplate, TEMPLATE_KINDS, type TemplateKind } from "../entities/UserTemplate";
 import { JobAlert } from "../entities/JobAlert";
 import { AuditAction } from "../entities/AuditLog";
@@ -33,6 +34,7 @@ import {
   signAccessToken,
 } from "../auth/tokens";
 import { invalidateAuthState } from "../auth/authState";
+import { mailSuppressed } from "../middleware/rateLimit";
 import { badRequest, conflict, forbidden, unauthorized } from "../http/errors";
 import { toSelfUser } from "../serializers";
 import { appLink, sendMail } from "../services/mailer";
@@ -75,13 +77,13 @@ async function startSession(req: Request, res: Response, user: User, status = 20
   });
 }
 
-async function sendEmailToken(user: User, type: EmailTokenType) {
+async function sendEmailToken(user: User, type: EmailTokenType, pending: PendingSignup | null = null) {
   const raw = randomToken(32);
   const ttlMs = type === "verify" ? 48 * 3600_000 : 3600_000;
   const repo = AppDataSource.getRepository(EmailToken);
   await repo.update({ userId: user.id, type, usedAt: IsNull() }, { usedAt: new Date() });
   await repo.save(
-    repo.create({ userId: user.id, type, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + ttlMs) })
+    repo.create({ userId: user.id, type, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + ttlMs), pending })
   );
   // Mail goes out in the background so response time doesn't reveal whether an account exists.
   const lang = asLang(user.language);
@@ -101,7 +103,7 @@ async function consumeEmailToken(raw: string, type: EmailTokenType) {
   if (!token) throw badRequest("This link is invalid or has expired", "TOKEN_INVALID");
   const res = await repo.update({ id: token.id, usedAt: IsNull() }, { usedAt: new Date() });
   if (!res.affected) throw badRequest("This link is invalid or has expired", "TOKEN_INVALID");
-  return token.userId;
+  return token;
 }
 
 /** The one answer sign-up ever gives, so it can't be used to find out who has an account. */
@@ -111,11 +113,12 @@ export const REGISTER_RESPONSE = {
 } as const;
 
 /** Someone tried to sign up with an address that already has an account: tell the owner, not the requester. */
-async function notifyExistingOwner(existing: User) {
+async function notifyExistingOwner(existing: User, pending: PendingSignup | null = null) {
   if (existing.deletedAt) return;
   if (!existing.emailVerifiedAt && !existing.isSuspended) {
-    // A genuine user retrying a sign-up they never confirmed: send a fresh confirmation link.
-    await sendEmailToken(existing, "verify");
+    // Someone retrying a sign-up that was never confirmed: a fresh link that carries *this* sign-up's
+    // password and role, so confirming it can't leave an earlier sign-up's password in place.
+    await sendEmailToken(existing, "verify", pending);
     return;
   }
   void sendMail({
@@ -142,9 +145,11 @@ export async function register(req: Request, res: Response) {
   const referrer = referralCode
     ? await users().findOne({ where: { referralCode }, select: { id: true, deletedAt: true } })
     : null;
+  const pending: PendingSignup = { passwordHash, role, name: name || null, language: language ?? "en" };
   const existing = await users().findOne({ where: { email } });
+  const quiet = mailSuppressed(res);
   if (existing) {
-    await notifyExistingOwner(existing);
+    if (!quiet) await notifyExistingOwner(existing, pending);
     return res.status(202).json(REGISTER_RESPONSE);
   }
 
@@ -157,10 +162,10 @@ export async function register(req: Request, res: Response) {
     if (!isUniqueViolation(err)) throw err;
     // Lost a race with a concurrent sign-up for the same address: same answer as any existing account.
     const winner = await users().findOne({ where: { email } });
-    if (winner) await notifyExistingOwner(winner);
+    if (winner && !quiet) await notifyExistingOwner(winner, pending);
     return res.status(202).json(REGISTER_RESPONSE);
   }
-  if (!user.emailVerifiedAt) await sendEmailToken(user, "verify");
+  if (!user.emailVerifiedAt && !quiet) await sendEmailToken(user, "verify");
   return res.status(202).json(REGISTER_RESPONSE);
 
   async function createAccount() {
@@ -276,6 +281,9 @@ export async function updateMe(req: Request, res: Response) {
       user.phoneVerifiedAt = null;
       user.smsOptIn = false;
       user.whatsappOptIn = false;
+      // A code sent to the old number must not verify the new one.
+      user.phoneCodeHash = null;
+      user.phoneCodeExpiresAt = null;
     }
     user.phone = body.phone || undefined;
   }
@@ -339,7 +347,23 @@ export async function changePassword(req: Request, res: Response) {
 }
 
 export async function verifyEmail(req: Request, res: Response) {
-  const userId = await consumeEmailToken(req.valid.body.token, "verify");
+  const token = await consumeEmailToken(req.valid.body.token, "verify");
+  const userId = token.userId;
+  const p = token.pending;
+  if (p) {
+    // The confirmed sign-up is the one whose link was used: its password, role and name replace any
+    // earlier unconfirmed sign-up's, and sessions opened with the old password end.
+    await AppDataSource.transaction(async (m) => {
+      const u = await m.findOneOrFail(User, { where: { id: userId } });
+      if (u.emailVerifiedAt) return;
+      const role = p.role === UserRole.TRADESPERSON ? UserRole.TRADESPERSON : UserRole.HOMEOWNER;
+      await m.update(User, { id: userId }, { passwordHash: p.passwordHash, role, name: p.name ?? u.name, language: p.language ?? u.language });
+      if (role === UserRole.TRADESPERSON && !(await m.findOne(TradespersonProfile, { where: { userId } }))) {
+        await m.save(m.create(TradespersonProfile, { userId, galleryUrls: [] }));
+      }
+      await m.update(RefreshToken, { userId, revokedAt: IsNull() }, { revokedAt: new Date() });
+    });
+  }
   await users().update({ id: userId, emailVerifiedAt: IsNull() }, { emailVerifiedAt: new Date() });
   await invalidateAuthState(userId);
   return res.json({ ok: true, message: "Email verified" });
@@ -355,20 +379,20 @@ export async function resendVerification(req: Request, res: Response) {
 /** Public "send the confirmation link again" (from the login page). Same answer whatever the address. */
 export async function resendVerificationPublic(req: Request, res: Response) {
   const user = await users().findOne({ where: { email: req.valid.body.email } });
-  if (user && !user.deletedAt && !user.isSuspended && !user.emailVerifiedAt) await sendEmailToken(user, "verify");
+  if (user && !user.deletedAt && !user.isSuspended && !user.emailVerifiedAt && !mailSuppressed(res)) await sendEmailToken(user, "verify");
   return res.json({ ok: true, message: "If that address has an unconfirmed account, a new link is on its way." });
 }
 
 export async function forgotPassword(req: Request, res: Response) {
   const user = await users().findOne({ where: { email: req.valid.body.email } });
-  if (user && !user.deletedAt && !user.isSuspended) await sendEmailToken(user, "reset");
+  if (user && !user.deletedAt && !user.isSuspended && !mailSuppressed(res)) await sendEmailToken(user, "reset");
   // Same answer either way so the endpoint can't be used to discover accounts.
   return res.json({ ok: true, message: "If that email has an account, a reset link is on its way." });
 }
 
 export async function resetPassword(req: Request, res: Response) {
   const { token, password } = req.valid.body;
-  const userId = await consumeEmailToken(token, "reset");
+  const { userId } = await consumeEmailToken(token, "reset");
   await users().increment({ id: userId }, "tokenVersion", 1);
   await users().update(
     { id: userId },
