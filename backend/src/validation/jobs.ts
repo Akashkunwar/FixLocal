@@ -45,6 +45,7 @@ export const createJobBody = z
     siteType: z.preprocess((v) => (v === "" ? undefined : v), z.enum(SITE_TYPES).optional()),
     cadence: z.preprocess((v) => (v === "" ? undefined : v), z.enum(CADENCES).default("one_time")),
     cadenceNote: nullableText(500),
+    urgent: boolish.optional(),
     preferredStart: optionalDate,
     preferredEnd: optionalDate,
     maxBids: z.preprocess((v) => (v === "" || v == null ? 5 : v), z.coerce.number().int().min(1).max(50)),
@@ -71,6 +72,7 @@ export const updateJobBody = z
     siteType: nullable(z.enum(SITE_TYPES)),
     cadence: z.preprocess((v) => (v === "" ? undefined : v), z.enum(CADENCES).optional()),
     cadenceNote: nullableText(500),
+    urgent: boolish.optional(),
     preferredStart: nullable(z.coerce.date()),
     preferredEnd: nullable(z.coerce.date()),
     maxBids: optionalInt(1, 50),
@@ -87,11 +89,16 @@ export const updateJobBody = z
   .refine(budgetOrder, { message: "Minimum budget can't be above the maximum", path: ["budgetMin"] })
   .refine(dateOrder, { message: "End date must be after the start date", path: ["preferredEnd"] });
 
+export const jobQuestionParams = z.object({ id, questionId: id });
+export const askQuestionBody = z.object({ question: requiredText(500) });
+export const answerQuestionBody = z.object({ answer: requiredText(1000) });
+
 export const listJobsQuery = z.object({
   q: optionalText(100),
   keyword: optionalText(100),
   category: z.preprocess((v) => (v === "" ? undefined : v), enumOf(JobCategory, "Invalid category").optional()),
   siteType: z.preprocess((v) => (v === "" ? undefined : v), z.enum(SITE_TYPES, { message: "Invalid siteType" }).optional()),
+  urgent: z.preprocess((v) => (v === "" || v === undefined ? undefined : v), boolish.optional()),
   status: z.preprocess((v) => (v === "" ? undefined : v), enumOf(JobStatus, "Invalid status").optional()),
   from: optionalDate,
   to: optionalDate,

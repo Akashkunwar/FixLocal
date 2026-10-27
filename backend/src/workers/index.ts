@@ -19,6 +19,7 @@ import { sendJobAlertDigests } from "../utils/jobAlertDigest";
 import { flushOutbound } from "../utils/outbound";
 import { JobAlertDigest } from "../entities/JobAlertDigest";
 import { HttpError } from "../http/errors";
+import { expireOpenJobs, warnExpiringJobs } from "./jobExpiry";
 
 const LOCK_KEY = 7_140_291;
 
@@ -146,9 +147,11 @@ export async function runWorkersOnce(now = new Date()) {
       const autoConfirmed = await autoConfirmJobs(now);
       const nudges = await sendQuoteViewNudges(now);
       const digests = await sendJobAlertDigests(now);
+      const expiryWarnings = await warnExpiringJobs(now);
+      const expired = await expireOpenJobs(now);
       const texts = await flushOutbound(now);
       await cleanupExpired(now);
-      return { skipped: false, autoConfirmed, nudges, digests, texts };
+      return { skipped: false, autoConfirmed, nudges, digests, expiryWarnings, expired, texts };
     } finally {
       await runner.query(`SELECT pg_advisory_unlock($1)`, [LOCK_KEY]);
     }

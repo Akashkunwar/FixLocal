@@ -95,6 +95,13 @@ export class User {
   signupDeviceHash?: string | null;
 
   /** Interface and email language ("en" or "hi"); synced across the user's devices. */
+  /** Optional business details printed on payment summaries (offices, GST-registered pros). */
+  @Column({ type: "varchar", length: 120, nullable: true })
+  businessName?: string | null;
+
+  @Column({ type: "varchar", length: 15, nullable: true })
+  gstin?: string | null;
+
   @Column({ type: "varchar", length: 5, default: "en" })
   language!: string;
 

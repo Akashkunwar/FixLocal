@@ -74,7 +74,8 @@ export async function notifyJobAlerts(job: Job): Promise<number> {
   for (const a of candidates) {
     if (!alertMatchesJob(a, job)) continue;
     matchedAlertIds.push(a.id);
-    if (a.frequency === "instant") {
+    // Urgent jobs can't wait for tomorrow's digest.
+    if (a.frequency === "instant" || job.urgent) {
       if (!firstMatchPerPro.has(a.userId)) firstMatchPerPro.set(a.userId, a);
     } else if (!digestPerPro.has(a.userId)) {
       digestPerPro.set(a.userId, a);
@@ -108,7 +109,7 @@ export async function notifyJobAlerts(job: Job): Promise<number> {
       userId: a.userId,
       type: NotificationType.JOB_ALERT,
       title: `New job: ${job.title}`,
-      body: `${job.category.replace(/_/g, " ")}${where ? ` in ${where}` : ""}${budgetText(job)}. Matches your alert "${a.name}".`,
+      body: `${job.urgent ? "Urgent: needed within 24 hours. " : ""}${job.category.replace(/_/g, " ")}${where ? ` in ${where}` : ""}${budgetText(job)}. Matches your alert "${a.name}".`,
       link: `/professional/jobs/${job.id}`,
       meta: { jobId: job.id, alertId: a.id },
       text: true,

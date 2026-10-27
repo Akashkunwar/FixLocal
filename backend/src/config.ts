@@ -42,6 +42,7 @@ const schema = z
     COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
     APP_URL: z.string().default("http://localhost:5173"),
     AUTO_CONFIRM_DAYS: int(3),
+    JOB_EXPIRY_DAYS: int(30),
     WORKERS_ENABLED: bool(true),
     WORKER_INTERVAL_SEC: int(60),
     TRUST_PROXY: bool(false),
@@ -151,6 +152,8 @@ export type AppConfig = {
   cookieSameSite: "lax" | "strict" | "none";
   appUrl: string;
   autoConfirmDays: number;
+  /** Open jobs with no hire close after this many days unless the client keeps them open. */
+  jobExpiryDays: number;
   workersEnabled: boolean;
   workerIntervalSec: number;
   trustProxy: boolean;
@@ -206,6 +209,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     cookieSameSite: e.COOKIE_SAMESITE,
     appUrl: e.APP_URL.replace(/\/$/, ""),
     autoConfirmDays: e.AUTO_CONFIRM_DAYS,
+    jobExpiryDays: e.JOB_EXPIRY_DAYS,
     workersEnabled: e.WORKERS_ENABLED,
     workerIntervalSec: e.WORKER_INTERVAL_SEC,
     trustProxy: e.TRUST_PROXY,

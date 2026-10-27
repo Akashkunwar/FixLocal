@@ -60,6 +60,12 @@ export enum ScheduleStatus {
   CONFIRMED = "confirmed",
 }
 
+/** A job counts as urgent for this long after it is posted. */
+export const URGENT_WINDOW_HOURS = 48;
+
+export const isUrgentNow = (job: Pick<Job, "urgent" | "createdAt">, now = new Date()) =>
+  !!job.urgent && now.getTime() - new Date(job.createdAt).getTime() < URGENT_WINDOW_HOURS * 3600_000;
+
 @Entity("jobs")
 @Index(["category"])
 @Index(["status"])
@@ -236,11 +242,23 @@ export class Job {
   pendingConfirmationAt?: Date | null;
 
   /** Client allowed completion photos to be published on the pro's portfolio. */
+  /** "Needed within 24 hours": badged and pushed to matching pros at once (see URGENT_WINDOW_HOURS). */
+  @Column({ type: "boolean", default: false })
+  urgent!: boolean;
+
   @Column({ type: "boolean", default: false })
   photoConsent!: boolean;
 
   @Column({ type: "timestamptz", nullable: true })
   completedAt?: Date;
+
+  /** An open job with no hire closes itself at this time (the client can keep it open longer). */
+  @Column({ type: "timestamptz", nullable: true })
+  expiresAt?: Date | null;
+
+  /** When the "closing soon" reminder went out for the current expiresAt. */
+  @Column({ type: "timestamptz", nullable: true })
+  expiryWarnedAt?: Date | null;
 
   /** Who called off a hired job before work started ("client" | "professional"), and why. */
   @Column({ type: "varchar", length: 16, nullable: true })

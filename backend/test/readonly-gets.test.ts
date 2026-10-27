@@ -116,6 +116,7 @@ describe("GET routes are read-only (M-3)", () => {
       ["/api/jobs/:id/invite-analytics", `/api/jobs/${openJob.id}/invite-analytics`, owner],
       ["/api/jobs/:id/shortlist-invite-analytics", `/api/jobs/${openJob.id}/shortlist-invite-analytics`, owner],
       ["/api/jobs/:id/bids", `/api/jobs/${openJob.id}/bids`, owner],
+      ["/api/jobs/:id/questions", `/api/jobs/${openJob.id}/questions`, owner],
       ["/api/jobs/:id/bids", `/api/jobs/${openJob.id}/bids`, bidder],
       ["/api/jobs/:id/payments", `/api/jobs/${workJob.id}/payments`, owner],
       ["/api/jobs/:id/schedule", `/api/jobs/${workJob.id}/schedule`, worker],

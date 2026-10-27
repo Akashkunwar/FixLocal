@@ -18,6 +18,7 @@ export enum AuditAction {
   REPORT_RESOLVE = "report_resolve",
   USER_DELETE = "user_delete",
   AUTO_CONFIRM = "auto_confirm",
+  JOB_EXPIRE = "job_expire",
   REFERRAL_REWARD = "referral_reward",
   REFERRAL_BLOCKED = "referral_blocked",
   REFERRAL_REVERSED = "referral_reversed",

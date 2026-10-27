@@ -292,6 +292,8 @@ export async function updateMe(req: Request, res: Response) {
   }
   if (body.quoteViewNudgeHours !== undefined) user.quoteViewNudgeHours = body.quoteViewNudgeHours;
   if (body.language !== undefined) user.language = body.language;
+  if (body.businessName !== undefined) user.businessName = body.businessName || null;
+  if (body.gstin !== undefined) user.gstin = body.gstin || null;
   for (const key of ["smsOptIn", "whatsappOptIn"] as const) {
     if (body[key] === undefined) continue;
     if (body[key] && !config().messaging.enabled) throw conflict("Text messages aren't switched on yet", "MESSAGING_OFF");
@@ -418,7 +420,7 @@ export async function deleteAccount(req: Request, res: Response) {
       }
     );
     await m.query(
-      `UPDATE "users" SET "phone" = NULL, "avatarUrl" = NULL, "phoneVerifiedAt" = NULL, "smsOptIn" = false, "whatsappOptIn" = false,
+      `UPDATE "users" SET "phone" = NULL, "avatarUrl" = NULL, "businessName" = NULL, "gstin" = NULL, "phoneVerifiedAt" = NULL, "smsOptIn" = false, "whatsappOptIn" = false,
               "phoneCodeHash" = NULL, "phoneCodeExpiresAt" = NULL, "signupDeviceHash" = NULL WHERE "id" = $1`,
       [user.id]
     );
@@ -514,7 +516,7 @@ export async function exportMyData(req: Request, res: Response) {
   const q = <T = Record<string, unknown>>(sql: string) => AppDataSource.query(sql, [id]) as Promise<T[]>;
   const [account] = await q(
     `SELECT "id", "email", "role", "name", "phone", "avatarUrl", "timezone", "isSuspended", "emailVerifiedAt",
-            "termsAcceptedAt", "termsVersion", "language", "phoneVerifiedAt", "smsOptIn", "whatsappOptIn", "referralCode", "referredById", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
+            "termsAcceptedAt", "termsVersion", "language", "businessName", "gstin", "phoneVerifiedAt", "smsOptIn", "whatsappOptIn", "referralCode", "referredById", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
        FROM "users" WHERE "id" = $1`
   );
   const [

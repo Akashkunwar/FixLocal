@@ -33,6 +33,8 @@ export const createReviewBody = z.object({
   comment: optionalText(2000),
 });
 export const userIdParams = z.object({ userId: id });
+/** An empty reply removes it. */
+export const reviewReplyBody = z.object({ reply: z.string().trim().max(1000) });
 export const jobIdOnlyParams = z.object({ jobId: id });
 
 // ---- messages ----
