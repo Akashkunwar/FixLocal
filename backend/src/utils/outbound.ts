@@ -65,9 +65,10 @@ const MAX_ATTEMPTS = 3;
  */
 export async function flushOutbound(now = new Date(), limit = 50): Promise<number> {
   // A sender that died mid-send leaves rows in "sending"; give them back after 10 minutes.
+  // Measured on the database clock, the same one that stamped "updatedAt" at claim time: a caller's
+  // `now` (later in tests, or a skewed app server) must not hand back rows another flush is sending.
   await AppDataSource.query(
-    `UPDATE "outbound_messages" SET "status" = 'queued' WHERE "status" = 'sending' AND "updatedAt" < $1`,
-    [new Date(now.getTime() - 10 * 60_000)]
+    `UPDATE "outbound_messages" SET "status" = 'queued' WHERE "status" = 'sending' AND "updatedAt" < now() - interval '10 minutes'`
   );
   // Postgres UPDATE ... RETURNING comes back from TypeORM as [rows, affectedCount].
   const [claimed]: [OutboundMessage[], number] = await AppDataSource.query(
