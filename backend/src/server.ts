@@ -70,9 +70,10 @@ async function start() {
     if (closing) return;
     closing = true;
     logger.info({ signal }, "shutting down");
-    stopWorkers();
+    const workersDone = stopWorkers().catch(() => undefined);
     closeAllStreams();
     server.close(async () => {
+      await workersDone;
       await closeCache();
       await AppDataSource.destroy().catch(() => undefined);
       process.exit(0);

@@ -118,12 +118,14 @@ export function assertAwardedProOrAdmin(ctx: JobContext, v: Viewer, message = "O
 export async function threadAccess(
   ctx: JobContext,
   v: Viewer,
-  threadProId: string
+  threadProId: string,
+  /** Bids already loaded for this job, by pro (saves a query per thread). */
+  knownBids?: Map<string, Pick<Bid, "status">>
 ): Promise<"write" | "read" | "none"> {
   if (isAdmin(v)) return "read";
   if (isOwner(ctx, v)) {
     if (ctx.acceptedProId === threadProId) return "write";
-    const bid = await bidOf(ctx.job.id, threadProId);
+    const bid = knownBids ? (knownBids.get(threadProId) ?? null) : await bidOf(ctx.job.id, threadProId);
     if (!bid) return "none";
     return ctx.job.status === JobStatus.OPEN && bid.status === BidStatus.ACTIVE ? "write" : "read";
   }

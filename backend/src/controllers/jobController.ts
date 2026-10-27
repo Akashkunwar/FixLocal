@@ -2,7 +2,7 @@ import { config } from "../config";
 import type { Request, Response } from "express";
 import { In } from "typeorm";
 import { AppDataSource } from "../data-source";
-import { Job, JobStatus, URGENT_WINDOW_HOURS } from "../entities/Job";
+import { Job, JobStatus, URGENT_WINDOW_HOURS, isUrgentNow } from "../entities/Job";
 import { Bid, BidStatus } from "../entities/Bid";
 import { UserRole } from "../entities/User";
 import { NotificationType } from "../entities/Notification";
@@ -82,7 +82,7 @@ export async function listJobs(req: Request, res: Response) {
   if (query.category) qb.andWhere("job.category = :category", { category: query.category });
   if (query.siteType) qb.andWhere("job.siteType = :siteType", { siteType: query.siteType });
   if (query.urgent) {
-    qb.andWhere(`job.urgent = true AND job.createdAt > :urgentSince`, {
+    qb.andWhere(`job.urgent = true AND COALESCE(job.urgentSince, job.createdAt) > :urgentSince`, {
       urgentSince: new Date(Date.now() - URGENT_WINDOW_HOURS * 3600_000),
     });
   }
@@ -268,6 +268,8 @@ export async function updateJob(req: Request, res: Response) {
   for (const key of editable) {
     if (b[key] !== undefined) (patch as Record<string, unknown>)[key] = b[key];
   }
+  // Switching urgent on later starts a fresh urgency window (otherwise an old job's toggle did nothing).
+  if (patch.urgent !== undefined && !!patch.urgent !== isUrgentNow(job)) patch.urgentSince = patch.urgent ? new Date() : null;
   const nextMin = patch.budgetMin !== undefined ? patch.budgetMin : job.budgetMin;
   const nextMax = patch.budgetMax !== undefined ? patch.budgetMax : job.budgetMax;
   if (nextMin != null && nextMax != null && Number(nextMin) > Number(nextMax)) {

@@ -421,6 +421,13 @@ async function seed() {
     await profileRepo.save(p);
   }
 
+  // Open demo jobs expire like real ones (the expiry worker skips jobs with no expiresAt).
+  const expiryDays = Number(process.env.JOB_EXPIRY_DAYS) > 0 ? Number(process.env.JOB_EXPIRY_DAYS) : 30;
+  await AppDataSource.query(
+    `UPDATE "jobs" SET "expiresAt" = "createdAt" + make_interval(days => $1) WHERE "status" = 'open' AND "expiresAt" IS NULL`,
+    [expiryDays]
+  );
+
   console.log("\nDemo accounts (password: " + (process.env.SEED_PASSWORD ? "from SEED_PASSWORD" : SEED_PASSWORD) + ")");
   console.log("  admin@fixlocal.local  — Admin");
   console.log("  home@fixlocal.local   — Client (Priya)");

@@ -28,7 +28,7 @@ export interface MessagingProvider {
   send(m: TextMessage): Promise<{ reference: string }>;
 }
 
-type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{
+type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<{
   ok: boolean;
   status: number;
   json(): Promise<unknown>;
@@ -52,6 +52,9 @@ export class LogMessagingProvider implements MessagingProvider {
   }
 }
 
+/** A provider call that hangs must fail well before the outbound queue reclaims the row (10 minutes). */
+export const SEND_TIMEOUT_MS = 10_000;
+
 /** MSG91 Flow API: https://docs.msg91.com/reference/send-sms (template variable "message"). */
 export class Msg91SmsProvider implements MessagingProvider {
   readonly name = "msg91";
@@ -63,6 +66,7 @@ export class Msg91SmsProvider implements MessagingProvider {
   async send(m: TextMessage) {
     const res = await this.fetchImpl("https://control.msg91.com/api/v5/flow", {
       method: "POST",
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       headers: { authkey: this.opts.authKey, "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({
         template_id: this.opts.templateId,
@@ -88,6 +92,7 @@ export class WhatsAppCloudProvider implements MessagingProvider {
   async send(m: TextMessage) {
     const res = await this.fetchImpl(`https://graph.facebook.com/${this.opts.apiVersion}/${this.opts.phoneNumberId}/messages`, {
       method: "POST",
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       headers: { authorization: `Bearer ${this.opts.token}`, "content-type": "application/json" },
       body: JSON.stringify({
         messaging_product: "whatsapp",

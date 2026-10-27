@@ -4,9 +4,9 @@ import { JobStatus } from "../entities/Job";
 import { JobQuestion } from "../entities/JobQuestion";
 import { NotificationType } from "../entities/Notification";
 import { UserRole } from "../entities/User";
-import { badRequest, conflict, forbidden, notFound } from "../http/errors";
+import { conflict, forbidden, notFound } from "../http/errors";
 import { assertJobAccess, isAdmin, isOwner, loadJobContext, type JobContext, type Viewer } from "../policies/jobPolicy";
-import { containsContactInfo } from "../domain/contactInfo";
+import { assertNoContactInfo } from "../domain/contactInfo";
 import { createNotification } from "../utils/notifications";
 import { isBlockedBetween } from "../utils/blocks";
 import { viewer } from "./jobController";
@@ -30,11 +30,7 @@ function toQuestion(q: JobQuestion, ctx: JobContext, v: Viewer) {
   };
 }
 
-function assertNoContact(text: string) {
-  if (containsContactInfo(text)) {
-    throw badRequest("Please don't share phone numbers or emails here. Contact details unlock in chat once someone is hired.", "CONTACT_INFO");
-  }
-}
+const assertNoContact = (text: string) => assertNoContactInfo(text);
 
 export async function listQuestions(req: Request, res: Response) {
   const ctx = await loadJobContext(req.valid.params.id);

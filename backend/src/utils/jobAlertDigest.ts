@@ -16,15 +16,19 @@ const DAY_MS = 24 * 3600_000;
 type PendingRow = { userId: string };
 type ClaimedMatch = { jobId: string; alertName: string; title: string; city: string | null; area: string | null; status: string };
 
+/** Unsent matches older than this are dropped (the job is stale by then). */
+const KEEP_UNSENT_MS = 3 * DAY_MS;
+
 /**
- * Send each professional one digest of the daily-alert matches from the last 24 hours.
+ * Send each professional one digest of every daily-alert match not yet sent (from the last 3 days):
+ * a match that lands just after today's digest goes in tomorrow's, whatever time the worker runs.
  * Idempotent: the (userId, IST day) digest row is claimed with INSERT … ON CONFLICT DO NOTHING
  * before anything is sent, and each match is stamped with the digest that carried it.
  */
 export async function sendJobAlertDigests(now = new Date()): Promise<number> {
   const ist = istParts(now);
   if (ist.hour < DIGEST_HOUR_IST) return 0;
-  const since = new Date(now.getTime() - DAY_MS);
+  const since = new Date(now.getTime() - KEEP_UNSENT_MS);
   const pending: PendingRow[] = await AppDataSource.query(
     `SELECT DISTINCT m."userId" FROM "job_alert_matches" m
       WHERE m."digestId" IS NULL AND m."createdAt" >= $1
@@ -40,7 +44,7 @@ export async function sendJobAlertDigests(now = new Date()): Promise<number> {
       logger.warn({ err, userId }, "job alert digest failed");
     }
   }
-  // Matches that missed their window (older than a day, never sent) are dropped.
+  // Matches never sent within 3 days are dropped.
   await AppDataSource.query(`DELETE FROM "job_alert_matches" WHERE "digestId" IS NULL AND "createdAt" < $1`, [since]);
   return sent;
 }

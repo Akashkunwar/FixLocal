@@ -62,12 +62,12 @@ export async function createNotifications(
     select: { id: true, notificationPrefs: true, deletedAt: true, email: true, emailVerifiedAt: true, language: true },
   });
   const byId = new Map(users.map((u) => [u.id, u]));
-  const rows = inputs
-    .filter((i) => {
-      const u = byId.get(i.userId);
-      return u && !u.deletedAt && isNotificationEnabled(u.notificationPrefs, i.type);
-    })
-    .map((i) =>
+  // Kept in input order: saved[k] belongs to kept[k] (one user may get several in one batch).
+  const kept = inputs.filter((i) => {
+    const u = byId.get(i.userId);
+    return u && !u.deletedAt && isNotificationEnabled(u.notificationPrefs, i.type);
+  });
+  const rows = kept.map((i) =>
       manager.create(Notification, {
         userId: i.userId,
         type: i.type,
@@ -81,8 +81,7 @@ export async function createNotifications(
   if (!rows.length) return out;
   // One multi-row INSERT is atomic on its own; skip TypeORM's extra BEGIN/COMMIT round trips.
   const saved = await manager.save(rows, { transaction: false });
-  const inputFor = new Map(inputs.map((i) => [i.userId, i]));
-  const texts = saved.filter((n) => inputFor.get(n.userId)?.text);
+  const texts = saved.filter((_n, k) => kept[k]?.text);
   if (texts.length) {
     try {
       await queueTexts(texts, manager);
@@ -90,10 +89,10 @@ export async function createNotifications(
       logger.warn({ err }, "queueing text messages failed");
     }
   }
-  for (const n of saved) {
-    out.set(n.userId, n);
+  for (const [k, n] of saved.entries()) {
+    if (!out.has(n.userId)) out.set(n.userId, n);
     const u = byId.get(n.userId);
-    const input = inputFor.get(n.userId);
+    const input = kept[k];
     if (u?.emailVerifiedAt && input?.email !== false && EMAIL_NOTIFICATION_TYPES.has(n.type) && wantsEmail(u.notificationPrefs)) {
       void sendMail({
         to: u.email,

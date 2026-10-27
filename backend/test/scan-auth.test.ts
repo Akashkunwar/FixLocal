@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { admin, api, awardedJob, client, createJob, png, pro, rows, uniqueEmail } from "./helpers";
+import { admin, api, awardedJob, client, png, pro, rows, uniqueEmail } from "./helpers";
 import { consoleMailer } from "../src/services/mailer";
 import { config, overrideConfig } from "../src/config";
 import { logSms, setMessagingProvider } from "../src/services/messaging";

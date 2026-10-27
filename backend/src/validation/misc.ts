@@ -37,10 +37,16 @@ export const userIdParams = z.object({ userId: id });
 export const reviewReplyBody = z.object({ reply: z.string().trim().max(1000) });
 export const jobIdOnlyParams = z.object({ jobId: id });
 
+/**
+ * "Older than" cursor: the id of the last item seen (exact, ties broken by id), or a date for older
+ * clients (dates lose the database's microseconds, so prefer the id the API returns as nextBefore).
+ */
+const pageCursor = z.preprocess((v) => (v === "" ? undefined : v), z.union([z.string().uuid(), isoDate]).optional());
+
 // ---- messages ----
 export const threadQuery = z.object({
   pro: z.preprocess((v) => (v === "" ? undefined : v), id.optional()),
-  before: z.preprocess((v) => (v === "" ? undefined : v), isoDate.optional()),
+  before: pageCursor,
   limit: limit(100),
   ticket: z.string().max(200).optional(),
 });
@@ -79,7 +85,7 @@ export const listNotificationsQuery = z.object({
     z.array(enumOf(NotificationType, "Invalid notification type")).max(20).optional()
   ),
   limit: limit(50),
-  before: z.preprocess((v) => (v === "" ? undefined : v), isoDate.optional()),
+  before: pageCursor,
   ticket: z.string().max(200).optional(),
 });
 
