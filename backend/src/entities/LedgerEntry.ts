@@ -42,6 +42,10 @@ export class LedgerEntry {
   @Column({ type: "text", nullable: true })
   note?: string | null;
 
+  /** Reference returned by the payment provider for this movement ("sim_…" while simulated). */
+  @Column({ type: "varchar", length: 80, nullable: true })
+  providerRef?: string | null;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

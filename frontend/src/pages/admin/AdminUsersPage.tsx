@@ -63,7 +63,7 @@ export function AdminUsersPage() {
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
         />
-        <select className="input w-auto" value={role} onChange={(e) => setRole(e.target.value)}>
+        <select className="input w-auto" aria-label="Filter by role" value={role} onChange={(e) => setRole(e.target.value)}>
           <option value="">All roles</option>
           <option value="HOMEOWNER">Clients</option>
           <option value="TRADESPERSON">Professionals</option>
@@ -95,7 +95,7 @@ export function AdminUsersPage() {
                   <Badge status={u.role.toLowerCase()} />
                   {u.verificationStatus && <Badge status={u.verificationStatus} />}
                   {u.isSuspended && <Badge status="suspended" />}
-                  <span className="text-xs text-slate-400">Joined {fmtDate(u.createdAt)}</span>
+                  <span className="text-xs text-slate-500">Joined {fmtDate(u.createdAt)}</span>
                 </div>
               </div>
               {u.role !== "ADMIN" && (

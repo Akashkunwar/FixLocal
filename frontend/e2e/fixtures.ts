@@ -56,13 +56,13 @@ export async function mailLink(request: APIRequestContext, to: string, kind: "ve
 
 export async function registerViaApi(request: APIRequestContext, role: Role, name: string) {
   const email = uniqueEmail(role === "HOMEOWNER" ? "client" : "pro");
-  const res = await request.post("/api/auth/register", { data: { email, password: PASSWORD, role, name } });
-  expect(res.status(), await res.text()).toBe(201);
-  const body = await res.json();
+  const res = await request.post("/api/auth/register", { data: { email, password: PASSWORD, role, name, acceptTerms: true } });
+  expect(res.status(), await res.text()).toBe(202);
   const path = await mailLink(request, email, "verify-email");
   const token = new URLSearchParams(path.split("?")[1]).get("token");
   expect((await request.post("/api/auth/verify-email", { data: { token } })).status()).toBe(200);
-  return { id: body.user.id as string, email, token: body.token as string, role };
+  const session = await apiLogin(request, email);
+  return { id: session.id, email, token: session.token, role };
 }
 
 export async function login(page: Page, email: string, password = PASSWORD) {

@@ -291,7 +291,7 @@ export function AmcProposalCard({
                   onClick={() => applyPackage(p)}
                 >
                   {p.label}
-                  <span className="ml-1 text-slate-400">
+                  <span className="ml-1 text-slate-500">
                     · {money(p.amountMin)}
                     {p.source === "soft" ? " ≈" : ""}
                   </span>
@@ -454,7 +454,7 @@ export function AmcProposalCard({
             <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" aria-hidden />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-sky-950">Soft next-visit reminder</p>
-              <p className="text-xs text-sky-800/90">
+              <p className="text-xs text-sky-800">
                 Suggested around <span className="font-medium">{nextVisitLabel}</span> based on{" "}
                 {cadenceLabel(proposal?.cadence)} cadence. Hint only — confirm the real window in chat.
               </p>
@@ -502,7 +502,7 @@ export function AmcProposalCard({
 
       {showProForm && (
         <form onSubmit={onPropose} className="space-y-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {proposal ? "Send updated proposal" : "Propose to client"}
           </p>
           {packageFormFields("amc")}
@@ -517,7 +517,7 @@ export function AmcProposalCard({
           onSubmit={onRequest}
           className="space-y-3 rounded-xl bg-sky-50/60 p-4 ring-1 ring-sky-100"
         >
-          <p className="text-xs font-semibold uppercase tracking-wide text-sky-700/80">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
             {proposal ? "Send updated AMC request" : "Request AMC from professional"}
           </p>
           <p className="text-xs text-slate-600">
@@ -560,7 +560,7 @@ export function AmcProposalCard({
                     onClick={() => applyPackage(p)}
                   >
                     {p.label}
-                    <span className="ml-1 text-slate-400">· {money(p.amountMin)}</span>
+                    <span className="ml-1 text-slate-500">· {money(p.amountMin)}</span>
                   </button>
                 ))}
               </div>

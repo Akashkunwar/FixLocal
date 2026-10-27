@@ -84,12 +84,12 @@ export function OnboardingChecklist({
                 className="flex items-center gap-3 px-4 py-2.5 text-sm no-underline text-inherit hover:bg-slate-50 sm:px-5"
               >
                 <ItemIcon done={item.done} />
-                <span className={clsx(item.done && "text-slate-400 line-through")}>{item.label}</span>
+                <span className={clsx(item.done && "text-slate-500 line-through")}>{item.label}</span>
               </Link>
             ) : (
               <div className="flex items-center gap-3 px-4 py-2.5 text-sm sm:px-5">
                 <ItemIcon done={item.done} />
-                <span className={clsx(item.done && "text-slate-400 line-through")}>{item.label}</span>
+                <span className={clsx(item.done && "text-slate-500 line-through")}>{item.label}</span>
               </div>
             )}
           </li>

@@ -1,7 +1,10 @@
+import { useEffect } from "react";
 import { Link, Navigate } from "react-router-dom";
+import { setPageMeta } from "../lib/site";
 import { ArrowRight, BadgeCheck, Briefcase, MessageSquare, Shield, Star, Wrench } from "lucide-react";
 import { CATEGORIES, categoryGroups } from "../lib/format";
 import { useAuth } from "../auth/AuthContext";
+import { SiteFooter } from "../components/SiteFooter";
 import { dashboardPath } from "../api/client";
 import { clientPath } from "../lib/paths";
 import {
@@ -18,6 +21,7 @@ const STEPS = [
 
 export function LandingPage() {
   const { user, loading } = useAuth();
+  useEffect(() => setPageMeta(null), []);
   if (!loading && user) return <Navigate to={dashboardPath(user.role)} replace />;
 
   const leadCats = LEAD_GROUPS.map((g) => {
@@ -71,7 +75,7 @@ export function LandingPage() {
             </div>
           </div>
           <div className="card relative p-6 shadow-lift">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">How it works</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">How it works</p>
             <ol className="mt-4 space-y-4">
               {STEPS.map((s) => (
                 <li key={s.n} className="flex gap-4">
@@ -139,7 +143,7 @@ export function LandingPage() {
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {categoryGroups().map(([group, cats]) => (
               <div key={group}>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{group}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{group}</p>
                 <ul className="mt-1 space-y-0.5 text-sm text-slate-700">
                   {cats.map((c) => (
                     <li key={c.value}>
@@ -158,9 +162,7 @@ export function LandingPage() {
         </details>
       </section>
 
-      <footer className="border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-500">
-        FixLocal · App Dev Lab project · Simulated payments only
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

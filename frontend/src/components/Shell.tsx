@@ -3,6 +3,10 @@ import { useAuth } from "../auth/AuthContext";
 import { dashboardPath } from "../api/client";
 import { NotificationBell } from "./NotificationBell";
 import { EmailVerifyBanner } from "./EmailVerifyBanner";
+import { TermsBanner } from "./TermsBanner";
+import { SiteFooter } from "./SiteFooter";
+import { useEffect } from "react";
+import { setPageMeta } from "../lib/site";
 import {
   BarChart3,
   Bookmark,
@@ -80,16 +84,20 @@ const adminLinks: NavItem[] = [
 export function Shell({
   title,
   subtitle,
+  description,
   actions,
   children,
 }: {
   title?: string;
   subtitle?: string;
+  /** Meta description for search results and link previews (defaults to the site description). */
+  description?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  useEffect(() => setPageMeta(title, description), [title, description]);
 
   const links =
     user?.role === "ADMIN"
@@ -145,6 +153,16 @@ export function Shell({
           )}
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {!user && (
+              <>
+                <Link to="/login" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-700 no-underline hover:bg-slate-100">
+                  Log in
+                </Link>
+                <Link to="/register" className="btn-primary btn-sm no-underline">
+                  Sign up
+                </Link>
+              </>
+            )}
             {user && <NotificationBell />}
             {user && (
               <>
@@ -156,7 +174,7 @@ export function Shell({
                     <p className="text-xs font-semibold text-slate-800 max-w-40 truncate">
                       {user.name || user.email}
                     </p>
-                    <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500">
                       {roleLabel(user.role)}
                     </p>
                   </div>
@@ -175,6 +193,7 @@ export function Shell({
           </div>
         </div>
       </header>
+      <TermsBanner />
       <EmailVerifyBanner />
 
       <main className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8">
@@ -199,6 +218,7 @@ export function Shell({
         )}
         {children}
       </main>
+      <SiteFooter className={user ? "pb-24 md:pb-6" : ""} />
 
       {user && (
         <nav

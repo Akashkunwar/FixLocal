@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { blockMapTiles, mailLink, PASSWORD, pngBytes, uniqueEmail } from "./fixtures";
+import { blockMapTiles, login, mailLink, PASSWORD, pngBytes, uniqueEmail } from "./fixtures";
 
 test("client registers, verifies email, and posts a job with photos and a map pin (journey 1)", async ({ page, request }) => {
   await blockMapTiles(page);
@@ -10,16 +10,22 @@ test("client registers, verifies email, and posts a job with photos and a map pi
   await page.getByLabel("Full name").fill("Asha Client");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/client$/);
-
-  // Unverified: the banner is shown and posting is refused by the server.
-  await expect(page.getByText(/Verify your email/)).toBeVisible();
+  // No session until the email is confirmed (sign-up can't be used to discover accounts).
+  await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
+  await page.getByRole("link", { name: "Go to log in" }).click();
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: /sign in/i }).click();
+  await expect(page.getByText("Just signed up? Confirm your email first.")).toBeVisible();
 
   const link = await mailLink(request, email, "verify-email");
   await page.goto(link);
   await expect(page.getByRole("heading", { name: "Email verified" })).toBeVisible();
-  await page.getByRole("link", { name: "Continue" }).click();
+  await page.getByRole("link", { name: "Sign in" }).click();
+  await login(page, email);
+  await expect(page).toHaveURL(/\/client$/);
   await expect(page.getByText(/Verify your email/)).toHaveCount(0);
 
   // Wizard step 1: basics.

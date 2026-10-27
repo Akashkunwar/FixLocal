@@ -226,7 +226,7 @@ export function BrowseJobsPage() {
       <div className="mb-5 space-y-3">
         <div className="flex flex-wrap gap-2">
           <div className="relative flex-1 min-w-[180px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input
               className="input pl-9"
               placeholder="Search…"
@@ -305,7 +305,7 @@ export function BrowseJobsPage() {
           role="group"
           aria-label="Site type filter"
         >
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400" id="site-type-label">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500" id="site-type-label">
             Site
           </span>
           <button

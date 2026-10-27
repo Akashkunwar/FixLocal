@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { dashboardPath } from "../api/client";
+import { dashboardPath, resendConfirmation } from "../api/client";
 import { ApiError } from "../api/client";
 import { Wrench } from "lucide-react";
 import { safeNext } from "../lib/paths";
@@ -18,6 +18,7 @@ export function LoginPage() {
   const demoMode = import.meta.env.VITE_DEMO_MODE === "true";
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
 
   const pendingNext =
     safeNext(params.get("next")) ||
@@ -70,7 +71,30 @@ export function LoginPage() {
               Password updated. Sign in with your new password.
             </div>
           )}
-          {err && <div className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200" role="alert">{err}</div>}
+          {err && (
+            <div className="space-y-1 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200" role="alert">
+              <p>{err}</p>
+              <p className="text-rose-800">
+                Just signed up? Confirm your email first.{" "}
+                {resent ? (
+                  <span>If that address needs confirming, a new link is on its way.</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="font-semibold underline"
+                    disabled={!email.trim()}
+                    onClick={() =>
+                      resendConfirmation(email.trim())
+                        .then(() => setResent(true))
+                        .catch((e) => error((e as Error).message))
+                    }
+                  >
+                    Resend the confirmation link
+                  </button>
+                )}
+              </p>
+            </div>
+          )}
           <div>
             <label className="label" htmlFor="email">Email</label>
             <input id="email" className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />

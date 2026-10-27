@@ -119,7 +119,7 @@ export function AnalyticsPage() {
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-                  <p className="text-[10px] uppercase tracking-wide text-slate-400">7 days</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">7 days</p>
                   <div className="mt-1.5">
                     <ResponseSlaBadge sla={data.slaTrends.d7} />
                   </div>
@@ -129,7 +129,7 @@ export function AnalyticsPage() {
                   </p>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-                  <p className="text-[10px] uppercase tracking-wide text-slate-400">30 days</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">30 days</p>
                   <div className="mt-1.5">
                     <ResponseSlaBadge sla={data.slaTrends.d30} />
                   </div>
@@ -140,7 +140,7 @@ export function AnalyticsPage() {
                 </div>
               </div>
               <div className="mt-4">
-                <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-2">
+                <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-2">
                   Response hours trend (lower is better)
                 </p>
                 <SlaSparkline
@@ -341,7 +341,7 @@ function Stat({
 }) {
   return (
     <div className="card p-4">
-      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 font-display text-2xl font-semibold text-brand-800">{value}</p>
       {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
     </div>

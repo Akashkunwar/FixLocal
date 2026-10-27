@@ -130,7 +130,7 @@ export function HomeownerDashboard() {
             { label: "Bid after invite", value: inviteStats.bidAfterInvite, sub: `${inviteStats.bidRate}%` },
           ].map((c) => (
             <div key={c.label} className="card px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wide text-slate-400">{c.label}</p>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">{c.label}</p>
               <p className="text-xl font-bold text-slate-900">{c.value}</p>
               {"sub" in c && c.sub ? <p className="text-[11px] text-slate-500">{c.sub}</p> : null}
             </div>
@@ -139,13 +139,13 @@ export function HomeownerDashboard() {
       )}
       {shortlistFunnel && shortlistFunnel.ranked > 0 && (
         <div className="mb-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             Shortlist funnel (rank → invite → bid)
           </p>
           <div className="grid grid-cols-3 gap-2">
             {shortlistFunnel.funnel.map((s) => (
               <div key={s.stage} className="card px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-slate-400">{s.label}</p>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">{s.label}</p>
                 <p className="text-xl font-bold text-slate-900">{s.count}</p>
                 <p className="text-[11px] text-slate-500">
                   {s.stage === "ranked" ? "saved pros" : `${s.rate}%`}
@@ -158,7 +158,7 @@ export function HomeownerDashboard() {
 
       {counterStats && counterStats.sent > 0 && (
         <div className="mb-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             Counter-offer analytics · time-to-address SLA
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -179,7 +179,7 @@ export function HomeownerDashboard() {
               },
             ].map((c) => (
               <div key={c.label} className="card px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-slate-400">{c.label}</p>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">{c.label}</p>
                 <p className="text-xl font-bold text-slate-900">{c.value}</p>
                 {"sub" in c && c.sub ? <p className="text-[11px] text-slate-500">{c.sub}</p> : null}
               </div>
@@ -195,7 +195,7 @@ export function HomeownerDashboard() {
       )}
       <div className="mb-5 flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
             className="input pl-9"
             placeholder="Search jobs…"
@@ -204,13 +204,13 @@ export function HomeownerDashboard() {
             onKeyDown={(e) => e.key === "Enter" && load()}
           />
         </div>
-        <select className="input w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
+        <select className="input w-auto" aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All statuses</option>
           {["open", "awarded", "in_progress", "pending_confirmation", "completed", "cancelled", "disputed"].map((s) => (
             <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
           ))}
         </select>
-        <select className="input w-auto" value={category} onChange={(e) => setCategory(e.target.value)}>
+        <select className="input w-auto" aria-label="Filter by category" value={category} onChange={(e) => setCategory(e.target.value)}>
           <option value="">All categories</option>
           {categoryGroups().map(([group, cats]) => (
             <optgroup key={group} label={group}>

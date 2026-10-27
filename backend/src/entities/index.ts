@@ -19,6 +19,7 @@ export { RefreshToken } from "./RefreshToken";
 export { EmailToken } from "./EmailToken";
 export { Report } from "./Report";
 export { UserTemplate, TEMPLATE_KINDS } from "./UserTemplate";
+export { UserBlock } from "./UserBlock";
 
 import { User } from "./User";
 import { TradespersonProfile } from "./TradespersonProfile";
@@ -41,6 +42,7 @@ import { RefreshToken } from "./RefreshToken";
 import { EmailToken } from "./EmailToken";
 import { Report } from "./Report";
 import { UserTemplate } from "./UserTemplate";
+import { UserBlock } from "./UserBlock";
 
 export const ALL_ENTITIES = [
   User,
@@ -64,4 +66,5 @@ export const ALL_ENTITIES = [
   EmailToken,
   Report,
   UserTemplate,
+  UserBlock,
 ];

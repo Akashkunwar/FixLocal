@@ -39,7 +39,7 @@ export function StatusTimeline({ status }: { status: string }) {
           Step {Math.max(0, idx) + 1} of {JOB_TIMELINE.length} ·{" "}
           <strong className="text-slate-900">{labels[current]}</strong>
           {idx + 1 < JOB_TIMELINE.length && (
-            <span className="text-slate-400">
+            <span className="text-slate-500">
               {" "}
               · next: {labels[JOB_TIMELINE[idx + 1]]}
             </span>
@@ -57,7 +57,7 @@ export function StatusTimeline({ status }: { status: string }) {
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold",
                   done
                     ? "bg-brand-700 text-white"
-                    : "bg-slate-100 text-slate-400",
+                    : "bg-slate-100 text-slate-500",
                   current && "ring-4 ring-brand-100",
                 )}
               >
@@ -66,7 +66,7 @@ export function StatusTimeline({ status }: { status: string }) {
               <span
                 className={clsx(
                   "text-sm",
-                  done ? "font-semibold text-slate-900" : "text-slate-400",
+                  done ? "font-semibold text-slate-900" : "text-slate-500",
                 )}
               >
                 {labels[step]}

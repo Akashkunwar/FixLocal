@@ -259,7 +259,7 @@ export function ProfilePage() {
           </label>
         </div>
         {gallery.length === 0 ? (
-          <p className="text-sm text-slate-400 py-8 text-center border border-dashed border-slate-200 rounded-xl">
+          <p className="text-sm text-slate-500 py-8 text-center border border-dashed border-slate-200 rounded-xl">
             No gallery photos yet — upload examples of your work.
           </p>
         ) : (
@@ -292,7 +292,7 @@ export function ProfilePage() {
           />
         </div>
         <div>
-          <label className="label">Skills / specialties</label>
+          <p className="label">Skills / specialties</p>
           <p className="text-xs text-slate-500 mb-2">
             Select the lead specialties you offer (saved as your skills list).
           </p>
@@ -332,8 +332,8 @@ export function ProfilePage() {
               );
             })}
           </div>
-          <label className="label">Extra skills (optional)</label>
-          <input
+          <label className="label" htmlFor="extra-skills">Extra skills (optional)</label>
+          <input id="extra-skills"
             className="input"
             placeholder="Freeform extras beyond the chips above"
             value={form.skills}
@@ -341,7 +341,7 @@ export function ProfilePage() {
           />
         </div>
         <div>
-          <label className="label">Not interested categories</label>
+          <p className="label">Not interested categories</p>
           <p className="text-xs text-slate-500 mb-2">
             Soft-skip: clients won’t see you in suggested professionals for these categories (direct invites still possible).
           </p>
@@ -371,7 +371,7 @@ export function ProfilePage() {
           </div>
         </div>
         <div>
-          <label className="label">Service areas</label>
+          <p className="label">Service areas</p>
           <p className="mb-2 text-xs text-slate-500">
             Multi-select neighborhoods you cover (saved as a comma-separated list).
           </p>
@@ -406,8 +406,8 @@ export function ProfilePage() {
               );
             })}
           </div>
-          <label className="label">Extra areas (optional)</label>
-          <input
+          <label className="label" htmlFor="extra-areas">Extra areas (optional)</label>
+          <input id="extra-areas"
             className="input"
             placeholder="Add any areas not listed above"
             value={form.serviceAreas}
@@ -461,7 +461,7 @@ export function ProfilePage() {
 
         {softRatePackages(form.hourlyRateMin, form.hourlyRateMax).length > 0 && (
           <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Soft package preview
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500">
@@ -484,7 +484,7 @@ export function ProfilePage() {
 
         <div className="rounded-xl bg-white p-3 ring-1 ring-slate-200 space-y-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Custom rate packages
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500">
@@ -633,7 +633,7 @@ export function ProfilePage() {
 
         <div className="rounded-xl bg-white p-3 ring-1 ring-slate-200 space-y-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Past work case studies
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500">
@@ -828,7 +828,7 @@ export function ProfilePage() {
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <p className="flex h-full items-center justify-center text-[11px] text-slate-400">
+                          <p className="flex h-full items-center justify-center text-[11px] text-slate-500">
                             Before
                           </p>
                         )}
@@ -841,7 +841,7 @@ export function ProfilePage() {
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <p className="flex h-full items-center justify-center text-[11px] text-slate-400">
+                          <p className="flex h-full items-center justify-center text-[11px] text-slate-500">
                             After
                           </p>
                         )}
@@ -916,6 +916,7 @@ export function ProfilePage() {
                         <input
                           type="time"
                           className="input py-2"
+                          aria-label={`${DAY_LABELS[day]} slot ${idx + 1} start`}
                           value={slot.start}
                           onChange={(e) => {
                             const next = slots.map((s, i) =>
@@ -932,10 +933,11 @@ export function ProfilePage() {
                             });
                           }}
                         />
-                        <span className="text-xs text-slate-400">to</span>
+                        <span className="text-xs text-slate-500">to</span>
                         <input
                           type="time"
                           className="input py-2"
+                          aria-label={`${DAY_LABELS[day]} slot ${idx + 1} end`}
                           value={slot.end}
                           onChange={(e) => {
                             const next = slots.map((s, i) =>
@@ -987,8 +989,9 @@ export function ProfilePage() {
           </p>
           <div className="flex flex-wrap items-end gap-2 mb-3">
             <div>
-              <label className="label">Add date</label>
+              <label className="label" htmlFor="block-date">Add date</label>
               <input
+                id="block-date"
                 type="date"
                 className="input"
                 value={blockDateInput}
@@ -1009,7 +1012,7 @@ export function ProfilePage() {
             </button>
           </div>
           {blockedDates.length === 0 ? (
-            <p className="text-xs text-slate-400">No blocked dates</p>
+            <p className="text-xs text-slate-500">No blocked dates</p>
           ) : (
             <ul className="flex flex-wrap gap-2">
               {blockedDates.map((d) => (

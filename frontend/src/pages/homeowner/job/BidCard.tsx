@@ -173,7 +173,7 @@ export function BidCard({
                     </span>
                   </Fact>
                 ) : (
-                  <span className="text-slate-400">No reviews yet</span>
+                  <span className="text-slate-500">No reviews yet</span>
                 )}
                 {p?.completedJobs != null && (
                   <Fact>
@@ -195,7 +195,7 @@ export function BidCard({
               </div>
               {b.matchScore != null &&
                 Number.isFinite(Number(b.matchScore)) && (
-                  <p className="mt-1 text-[11px] text-slate-400">
+                  <p className="mt-1 text-[11px] text-slate-500">
                     Match score {(b.rankedScore ?? b.matchScore).toFixed(0)} for
                     this job
                     {b.heatBoost ? ` · +${b.heatBoost} availability` : ""}
@@ -265,7 +265,7 @@ export function BidCard({
                 />
                 <span className="line-clamp-2">{p.latestReview.comment}</span>
               </blockquote>
-              <figcaption className="mt-1 text-[11px] text-slate-400">
+              <figcaption className="mt-1 text-[11px] text-slate-500">
                 Latest review · {p.latestReview.rating}★
               </figcaption>
             </figure>
@@ -367,14 +367,14 @@ export function BidCard({
             </div>
           )}
           {canAct && (
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-500">
               {money(price)} goes into escrow; you release it in 3 steps.
             </p>
           )}
           {b.counterOffer && (
             <p className="text-[11px] text-slate-600">
               Your counter {money(b.counterOffer.suggestedAmount)}
-              <span className="text-slate-400"> · {b.counterOffer.status}</span>
+              <span className="text-slate-500"> · {b.counterOffer.status}</span>
             </p>
           )}
           {b.counterOffer?.status === "addressed" &&
@@ -458,7 +458,7 @@ export function BidCard({
                               </span>
                             ) : null}
                             {prev.at && (
-                              <span className="text-slate-400">
+                              <span className="text-slate-500">
                                 {new Date(prev.at).toLocaleString()}
                               </span>
                             )}
@@ -466,11 +466,11 @@ export function BidCard({
                           {notesChanged && (
                             <div className="mt-0.5 space-y-0.5 text-slate-500">
                               <p className="truncate">
-                                <span className="text-slate-400">was:</span>{" "}
+                                <span className="text-slate-500">was:</span>{" "}
                                 {prev.notes ? `“${prev.notes}”` : "—"}
                               </p>
                               <p className="truncate">
-                                <span className="text-slate-400">now:</span>{" "}
+                                <span className="text-slate-500">now:</span>{" "}
                                 {cur.notes ? `“${cur.notes}”` : "—"}
                               </p>
                             </div>
@@ -495,7 +495,7 @@ export function BidCard({
                     .map((h, i) => (
                       <li key={`${h.requestedAt}-${i}`}>
                         {money(h.suggestedAmount)} · {h.status}
-                        <span className="text-slate-400">
+                        <span className="text-slate-500">
                           {" "}
                           · {new Date(h.requestedAt).toLocaleString()}
                         </span>
@@ -525,7 +525,7 @@ export function BidCard({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-xs font-semibold text-emerald-950">
                         Escrow what-if{" "}
-                        <span className="font-normal text-emerald-800/80">
+                        <span className="font-normal text-emerald-800">
                           (simulated · {money(hold)})
                         </span>
                       </p>
@@ -554,13 +554,13 @@ export function BidCard({
                           key={m.label}
                           className="rounded-lg bg-white/80 px-2 py-1.5 text-center ring-1 ring-emerald-100"
                         >
-                          <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                          <p className="text-[10px] uppercase tracking-wide text-slate-500">
                             {m.label}
                           </p>
                           <p className="text-sm font-bold text-slate-900">
                             {money(m.amount)}
                           </p>
-                          <p className="text-[10px] text-slate-400">
+                          <p className="text-[10px] text-slate-500">
                             {m.percent}%
                           </p>
                         </div>
@@ -664,7 +664,7 @@ export function BidCard({
               )}
             </div>
             {peerBestValueCounterHint && (
-              <p className="mt-1.5 text-[10px] text-sky-800/80">
+              <p className="mt-1.5 text-[10px] text-sky-800">
                 Soft hint from clean peer best-value holds
                 {peerBestValueCounterHint.isBestPeer
                   ? ` — ${peerBestValueCounterHint.peerName}`

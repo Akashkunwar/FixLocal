@@ -28,6 +28,15 @@ const schema = z
     REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
     REDIS_ENABLED: bool(true),
     UPLOADS_DIR: z.string().default("uploads"),
+    // Uploaded files: "local" (UPLOADS_DIR on this host) or "s3" (any S3-compatible bucket; needed for several API instances).
+    STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
+    S3_BUCKET: z.string().optional(),
+    S3_REGION: z.string().default("auto"),
+    S3_ENDPOINT: z.string().optional(),
+    S3_ACCESS_KEY_ID: z.string().optional(),
+    S3_SECRET_ACCESS_KEY: z.string().optional(),
+    S3_FORCE_PATH_STYLE: bool(false),
+    S3_PREFIX: z.string().default(""),
     CORS_ORIGINS: z.string().default("http://localhost:5173,http://127.0.0.1:5173"),
     COOKIE_SECURE: bool(false),
     COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
@@ -38,14 +47,46 @@ const schema = z
     TRUST_PROXY: bool(false),
     RATE_LIMIT_ENABLED: bool(true),
     SEED_RESET: bool(false),
+    MAIL_PROVIDER: z.enum(["console", "smtp"]).default("console"),
+    SMTP_URL: z.string().optional(),
+    MAIL_FROM: z.string().default("FixLocal <no-reply@fixlocal.local>"),
+    ALLOW_CONSOLE_MAIL: bool(false),
   })
   .superRefine((env, ctx) => {
+    if (env.STORAGE_DRIVER === "s3" && !env.S3_BUCKET) {
+      ctx.addIssue({ code: "custom", path: ["S3_BUCKET"], message: "S3_BUCKET is required when STORAGE_DRIVER=s3" });
+    }
+    if (!!env.S3_ACCESS_KEY_ID !== !!env.S3_SECRET_ACCESS_KEY) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["S3_SECRET_ACCESS_KEY"],
+        message: "Set both S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY, or neither (to use the default AWS credential chain)",
+      });
+    }
+    if (env.MAIL_PROVIDER === "smtp" && !env.SMTP_URL) {
+      ctx.addIssue({ code: "custom", path: ["SMTP_URL"], message: "SMTP_URL is required when MAIL_PROVIDER=smtp" });
+    }
     if (env.NODE_ENV === "production") {
       if (env.JWT_SECRET.length < 32 || WEAK_SECRETS.has(env.JWT_SECRET)) {
         ctx.addIssue({
           code: "custom",
           path: ["JWT_SECRET"],
           message: "JWT_SECRET must be a random string of at least 32 characters in production",
+        });
+      }
+      if (env.MAIL_PROVIDER === "console" && !env.ALLOW_CONSOLE_MAIL) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["MAIL_PROVIDER"],
+          message:
+            "Set MAIL_PROVIDER=smtp with SMTP_URL so verification and password-reset emails are delivered (or ALLOW_CONSOLE_MAIL=true for a private test deployment)",
+        });
+      }
+      if (env.APP_URL.startsWith("https://") && !env.COOKIE_SECURE) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["COOKIE_SECURE"],
+          message: "COOKIE_SECURE must be true when the app is served over HTTPS",
         });
       }
       if (!env.FILE_URL_SECRET || env.FILE_URL_SECRET.length < 32) {
@@ -70,6 +111,16 @@ export type AppConfig = {
   redisUrl: string;
   redisEnabled: boolean;
   uploadsDir: string;
+  storageDriver: "local" | "s3";
+  s3: {
+    bucket: string;
+    region: string;
+    endpoint: string | null;
+    accessKeyId: string | null;
+    secretAccessKey: string | null;
+    forcePathStyle: boolean;
+    prefix: string;
+  } | null;
   corsOrigins: string[];
   cookieSecure: boolean;
   cookieSameSite: "lax" | "strict" | "none";
@@ -80,6 +131,9 @@ export type AppConfig = {
   trustProxy: boolean;
   rateLimitEnabled: boolean;
   seedReset: boolean;
+  mailProvider: "console" | "smtp";
+  smtpUrl: string | null;
+  mailFrom: string;
 };
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -101,6 +155,19 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     redisUrl: e.REDIS_URL,
     redisEnabled: e.REDIS_ENABLED,
     uploadsDir: path.resolve(process.cwd(), e.UPLOADS_DIR),
+    storageDriver: e.STORAGE_DRIVER,
+    s3:
+      e.STORAGE_DRIVER === "s3" && e.S3_BUCKET
+        ? {
+            bucket: e.S3_BUCKET,
+            region: e.S3_REGION,
+            endpoint: e.S3_ENDPOINT || null,
+            accessKeyId: e.S3_ACCESS_KEY_ID || null,
+            secretAccessKey: e.S3_SECRET_ACCESS_KEY || null,
+            forcePathStyle: e.S3_FORCE_PATH_STYLE,
+            prefix: e.S3_PREFIX,
+          }
+        : null,
     corsOrigins: e.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
     cookieSecure: e.COOKIE_SECURE,
     cookieSameSite: e.COOKIE_SAMESITE,
@@ -111,6 +178,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     trustProxy: e.TRUST_PROXY,
     rateLimitEnabled: e.RATE_LIMIT_ENABLED,
     seedReset: e.SEED_RESET,
+    mailProvider: e.MAIL_PROVIDER,
+    smtpUrl: e.SMTP_URL || null,
+    mailFrom: e.MAIL_FROM,
   };
 }
 

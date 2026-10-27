@@ -200,7 +200,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
       <div ref={listRef} className="max-h-72 space-y-3 overflow-y-auto bg-slate-50/50 px-4 py-4" aria-live="polite">
         {messages.length === 0 && (
           <div className="py-4 text-center space-y-3">
-            <p className="text-sm text-slate-400">No messages yet. Say hello!</p>
+            <p className="text-sm text-slate-500">No messages yet. Say hello!</p>
             {canQuote && introChips.length > 0 && (
               <div
                 className="flex flex-wrap justify-center gap-2 px-2"
@@ -236,7 +236,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
                   mine ? "bg-brand-700 text-white" : "bg-white border border-slate-200 text-slate-800"
                 )}
               >
-                <p className={clsx("text-[11px] mb-0.5", mine ? "text-brand-100" : "text-slate-400")}>
+                <p className={clsx("text-[11px] mb-0.5", mine ? "text-brand-100" : "text-slate-500")}>
                   {m.sender.name || (m.sender.role === "TRADESPERSON" ? "Professional" : "Client")} · {fmtDateTime(m.createdAt)}
                 </p>
                 {m.quote && (
@@ -310,7 +310,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
               {f.name.length > 18 ? "…" : ""}
               <button
                 type="button"
-                className="text-slate-400 hover:text-slate-700"
+                className="text-slate-500 hover:text-slate-700"
                 onClick={() => setFiles((xs) => xs.filter((_, j) => j !== i))}
                 aria-label="Remove file"
               >

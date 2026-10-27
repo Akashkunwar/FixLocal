@@ -1,4 +1,5 @@
 import { Bid } from "../entities/Bid";
+import { TERMS_VERSION } from "../domain/legal";
 import { Dispute } from "../entities/Dispute";
 import { Job, JobStatus } from "../entities/Job";
 import { Message } from "../entities/Message";
@@ -40,8 +41,10 @@ export function toSelfUser(user: User) {
     avatarUrl: publicUrl(user.avatarUrl),
     isSuspended: !!user.isSuspended,
     emailVerified: !!user.emailVerifiedAt,
+    termsAccepted: user.termsVersion === TERMS_VERSION,
     timezone: user.timezone,
     notificationPrefs: mergedNotificationPrefs(user.notificationPrefs),
+    emailNotifications: user.notificationPrefs?.email !== false,
     quoteViewNudgeHours:
       user.quoteViewNudgeHours != null && Number.isFinite(Number(user.quoteViewNudgeHours))
         ? Number(user.quoteViewNudgeHours)
@@ -161,6 +164,8 @@ export function toJob(job: Job, access: Exclude<JobAccess, "none">) {
         ? new Date(new Date(job.pendingConfirmationAt).getTime() + config().autoConfirmDays * 86400_000)
         : null,
     completedAt: job.completedAt ?? null,
+    cancelledBy: job.cancelledBy ?? null,
+    cancellationReason: job.cancellationReason ?? null,
   };
 }
 

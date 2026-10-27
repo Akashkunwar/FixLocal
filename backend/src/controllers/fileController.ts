@@ -1,12 +1,12 @@
-import fs from "fs";
-import path from "path";
+import { pipeline } from "stream/promises";
 import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { Upload } from "../entities/Upload";
 import { verifyAccessToken } from "../auth/tokens";
 import { getAuthState } from "../auth/authState";
 import { canAccessUpload, type Viewer } from "../policies/jobPolicy";
-import { PUBLIC_KINDS, uploadsDir, verifySignedUrl } from "../services/files";
+import { PUBLIC_KINDS, verifySignedUrl } from "../services/files";
+import { blobStore } from "../services/storage";
 import { forbidden, notFound, unauthorized } from "../http/errors";
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/;
@@ -42,8 +42,8 @@ export async function serveFile(req: Request, res: Response) {
     if (!allowed) throw forbidden("You don't have access to this file");
   }
 
-  const filePath = path.join(uploadsDir(), name);
-  if (!fs.existsSync(filePath)) throw notFound("File not found");
+  const stored = await blobStore().open(name);
+  if (!stored) throw notFound("File not found");
 
   const isPdf = upload.mime === "application/pdf";
   const isImage = upload.mime.startsWith("image/") && upload.mime !== "image/svg+xml";
@@ -60,5 +60,9 @@ export async function serveFile(req: Request, res: Response) {
     "Content-Disposition",
     `${isImage ? "inline" : "attachment"}; filename="${downloadName}"`
   );
-  res.sendFile(filePath);
+  if (stored.size != null) res.setHeader("Content-Length", String(stored.size));
+  await pipeline(stored.body, res).catch((err: NodeJS.ErrnoException) => {
+    // A client that navigates away mid-download is not an error.
+    if (err.code !== "ERR_STREAM_PREMATURE_CLOSE") throw err;
+  });
 }

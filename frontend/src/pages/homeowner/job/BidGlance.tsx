@@ -11,13 +11,13 @@ const dash = <span className="text-slate-300">—</span>;
 
 function Rating({ b }: { b: Bid }) {
   const p = b.profile;
-  if (!p || !p.reviewCount) return <span className="text-slate-400">New</span>;
+  if (!p || !p.reviewCount) return <span className="text-slate-500">New</span>;
   return (
     <span>
       <span className="font-semibold text-slate-800">
         {p.averageRating.toFixed(1)}★
       </span>{" "}
-      <span className="text-slate-400">({p.reviewCount})</span>
+      <span className="text-slate-500">({p.reviewCount})</span>
     </span>
   );
 }
@@ -74,19 +74,19 @@ export function BidGlance({
                 <HighlightChips tags={highlights.get(b.id) ?? []} />
               </div>
               <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
-                <dt className="text-slate-400">Price</dt>
+                <dt className="text-slate-500">Price</dt>
                 <dd className="text-right">
                   <Price b={b} job={job} />
                 </dd>
-                <dt className="text-slate-400">Rating</dt>
+                <dt className="text-slate-500">Rating</dt>
                 <dd className="text-right">
                   <Rating b={b} />
                 </dd>
-                <dt className="text-slate-400">Jobs done</dt>
+                <dt className="text-slate-500">Jobs done</dt>
                 <dd className="text-right">
                   {b.profile?.completedJobs ?? dash}
                 </dd>
-                <dt className="text-slate-400">Done in</dt>
+                <dt className="text-slate-500">Done in</dt>
                 <dd className="text-right">
                   {b.etaDays != null ? `${b.etaDays} d` : dash}
                 </dd>

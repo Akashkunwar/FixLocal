@@ -242,6 +242,13 @@ export class Job {
   @Column({ type: "timestamptz", nullable: true })
   completedAt?: Date;
 
+  /** Who called off a hired job before work started ("client" | "professional"), and why. */
+  @Column({ type: "varchar", length: 16, nullable: true })
+  cancelledBy?: string | null;
+
+  @Column({ type: "text", nullable: true })
+  cancellationReason?: string | null;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 

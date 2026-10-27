@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth } from "../middleware/auth";
+import { optionalAuth, requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/rbac";
 import { validate } from "../middleware/validate";
 import { limiter } from "../middleware/rateLimit";
@@ -13,13 +13,14 @@ import { counterAnalyticsQuery } from "../validation/bids";
 
 const PRO = UserRole.TRADESPERSON;
 const router = Router();
+// Public pro profiles can be shared and indexed: no account needed (contact details stay hidden).
+router.get("/user/:userId", limiter("publicReads"), optionalAuth, validate({ params: userIdParams }), profile.getPublicProfile);
 router.use(requireAuth);
 
 router.get("/browse", validate({ query: s.browseQuery }), profile.browsePros);
 router.get("/earnings", requireRole(PRO), profile.getMyEarnings);
 router.get("/analytics", requireRole(PRO), profile.getMyAnalytics);
 router.get("/counter-analytics", requireRole(PRO, UserRole.ADMIN), validate({ query: counterAnalyticsQuery }), getCounterAnalytics);
-router.get("/user/:userId", validate({ params: userIdParams }), profile.getPublicProfile);
 router.get("/", requireRole(PRO), profile.getMyProfile);
 router.patch("/", requireRole(PRO), validate({ body: s.updateProfileBody }), profile.updateMyProfile);
 router.post("/gallery", requireRole(PRO), limiter("uploads"), uploadGalleryPhotos, profile.uploadGallery);

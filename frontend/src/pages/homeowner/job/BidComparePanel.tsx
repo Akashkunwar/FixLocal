@@ -82,7 +82,7 @@ export function BidComparePanel({
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-1.5 text-sm text-slate-600">
               <SlidersHorizontal
-                className="h-4 w-4 text-slate-400"
+                className="h-4 w-4 text-slate-500"
                 aria-hidden
               />
               <span className="sr-only sm:not-sr-only">Sort</span>
@@ -222,12 +222,12 @@ export function BidComparePanel({
                       key={`${p.bidId}-${p.t}-${i}`}
                       className="flex flex-wrap gap-x-2"
                     >
-                      <span className="text-slate-400">
+                      <span className="text-slate-500">
                         {new Date(p.t).toLocaleString()}
                       </span>
                       <span className="font-medium">{p.label}</span>
                       <span>{money(p.amount)}</span>
-                      <span className="text-slate-400">· {p.status}</span>
+                      <span className="text-slate-500">· {p.status}</span>
                     </li>
                   ))}
                 </ul>
@@ -263,7 +263,7 @@ export function BidComparePanel({
                           >
                             <span>
                               {m.label}{" "}
-                              <span className="text-slate-400">
+                              <span className="text-slate-500">
                                 ({m.percent}%)
                               </span>
                             </span>

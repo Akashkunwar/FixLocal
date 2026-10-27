@@ -10,6 +10,7 @@ import { config } from "../config";
 import { Upload, UploadKind } from "../entities/Upload";
 import { badRequest } from "../http/errors";
 import { UserRole } from "../entities/User";
+import { blobStore } from "./storage";
 
 export const PUBLIC_KINDS = new Set<UploadKind>([UploadKind.GALLERY, UploadKind.CASE_STUDY, UploadKind.AVATAR]);
 
@@ -112,7 +113,8 @@ export async function storeUploads(
     const rows: Upload[] = [];
     for (const { file, sniffed } of prepared) {
       const name = `${crypto.randomUUID()}.${sniffed.ext}`;
-      const dest = path.join(uploadsDir(), name);
+      // Finished bytes go to a temp file first, then into the configured store (local dir or S3).
+      const dest = path.join(tmpDir(), `final-${name}`);
       let size: number;
       if (sniffed.mime === "application/pdf") {
         await fsp.rename(file.path, dest);
@@ -133,7 +135,12 @@ export async function storeUploads(
         size = info.size;
         await fsp.rm(file.path, { force: true });
       }
-      written.push(dest);
+      try {
+        await blobStore().putFile(name, dest, sniffed.mime);
+      } finally {
+        await fsp.rm(dest, { force: true });
+      }
+      written.push(name);
       rows.push(
         manager.create(Upload, {
           name,
@@ -150,7 +157,7 @@ export async function storeUploads(
     }
     return await manager.save(rows);
   } catch (err) {
-    await Promise.all(written.map((p) => fsp.rm(p, { force: true })));
+    await Promise.all(written.map((n) => blobStore().remove(n).catch(() => undefined)));
     await removeTempFiles(list);
     throw err;
   }
@@ -167,7 +174,7 @@ export async function deleteUploadByRef(ref: string): Promise<void> {
   const name = nameFromRef(ref);
   if (!name) return;
   await AppDataSource.getRepository(Upload).delete({ name });
-  await fsp.rm(path.join(uploadsDir(), name), { force: true });
+  await blobStore().remove(name);
 }
 
 /** Remove files written during a transaction that was rolled back. */
@@ -175,7 +182,7 @@ export async function discardFiles(refs: string[]): Promise<void> {
   await Promise.all(
     refs.map(async (ref) => {
       const name = nameFromRef(ref);
-      if (name) await fsp.rm(path.join(uploadsDir(), name), { force: true });
+      if (name) await blobStore().remove(name).catch(() => undefined);
     })
   );
 }
@@ -186,7 +193,7 @@ export async function copyUploadAs(ref: string, kind: UploadKind, ownerUserId: s
   if (!src) return null;
   const ext = path.extname(src.name) || "";
   const name = `${crypto.randomUUID()}${ext}`;
-  await fsp.copyFile(path.join(uploadsDir(), src.name), path.join(uploadsDir(), name));
+  await blobStore().copy(src.name, name);
   await AppDataSource.getRepository(Upload).save(
     AppDataSource.getRepository(Upload).create({
       name,

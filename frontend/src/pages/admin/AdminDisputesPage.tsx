@@ -113,7 +113,7 @@ export function AdminDisputesPage() {
                   <Badge status={d.status} />
                   {d.resolution && <Badge status={d.resolution} />}
                   <span className="text-sm text-slate-500">Job: {d.job?.title || d.jobId}</span>
-                  {d.job?.status && <span className="text-xs text-slate-400">· job {d.job.status}</span>}
+                  {d.job?.status && <span className="text-xs text-slate-500">· job {d.job.status}</span>}
                 </div>
                 <p className="text-slate-800 whitespace-pre-wrap">{d.reason}</p>
                 <p className="text-xs text-slate-500">
@@ -122,7 +122,7 @@ export function AdminDisputesPage() {
 
                 {(d.evidenceUrls?.length ?? 0) > 0 && (
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Evidence</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Evidence</p>
                     <ul className="flex flex-wrap gap-2">
                       {d.evidenceUrls!.map((url) => {
                         const href = mediaUrl(url);
@@ -149,7 +149,7 @@ export function AdminDisputesPage() {
                   <>
                     {milestones.length > 0 && (
                       <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200 space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                           Escrow refund / reverse (simulated)
                         </p>
                         <ul className="space-y-1.5">
@@ -175,7 +175,7 @@ export function AdminDisputesPage() {
                             );
                           })}
                         </ul>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-slate-500">
                           Tick held or pending milestones to refund them. Money already released can't be refunded.
                           "Favor client" refunds everything not yet released; "Favor professional" releases it.
                         </p>
@@ -205,7 +205,7 @@ export function AdminDisputesPage() {
                           Back to {d.previousJobStatus ? d.previousJobStatus.replace(/_/g, " ") : "previous status"}
                         </option>
                       </select>
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="mt-1 text-xs text-slate-500">
                         Defaults: favor client → cancelled · favor professional → completed · no action → back to{" "}
                         {d.previousJobStatus ? d.previousJobStatus.replace(/_/g, " ") : "previous status"}
                       </p>

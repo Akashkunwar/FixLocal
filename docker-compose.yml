@@ -5,7 +5,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: fixlocal
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-fixlocal}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       POSTGRES_DB: fixlocal
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -23,6 +23,33 @@ services:
       timeout: 3s
       retries: 20
 
+  # Opt-in nightly database backup: `docker compose --profile backup up -d`.
+  # Dumps land in the db_backups volume; copy them off the host (S3, another server) as well.
+  backup:
+    image: postgres:16-alpine
+    profiles: ["backup"]
+    environment:
+      PGHOST: db
+      PGUSER: fixlocal
+      PGPASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      PGDATABASE: fixlocal
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          f=/backups/fixlocal-$$(date -u +%Y%m%dT%H%M%SZ).dump
+          pg_dump --format=custom --no-owner --file="$$f.tmp" && mv "$$f.tmp" "$$f" && echo "backup ok $$f"
+          find /backups -name 'fixlocal-*.dump' -mtime +$$BACKUP_KEEP_DAYS -delete
+          sleep 86400
+        done
+    volumes:
+      - db_backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   api:
     build: ./backend
     environment:
@@ -31,19 +58,34 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       DB_USERNAME: fixlocal
-      DB_PASSWORD: ${DB_PASSWORD:-fixlocal}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       DB_NAME: fixlocal
       MIGRATIONS_RUN: "true"
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (32+ random characters)}
       FILE_URL_SECRET: ${FILE_URL_SECRET:?Set FILE_URL_SECRET in .env (32+ random characters)}
       REDIS_URL: redis://redis:6379
       UPLOADS_DIR: /app/uploads
+      # Uploads: local (the uploads volume) or s3 (any S3-compatible bucket; needed for several API instances).
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-auto}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+      S3_PREFIX: ${S3_PREFIX:-}
       APP_URL: ${APP_URL:-http://localhost:8080}
       CORS_ORIGINS: ${APP_URL:-http://localhost:8080}
       # Set to true when the site is served over HTTPS.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       TRUST_PROXY: "true"
       LOG_LEVEL: info
+      # Email: smtp in real deployments (SMTP_URL=smtps://user:pass@smtp.example.com:465).
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-console}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-FixLocal <no-reply@fixlocal.local>}
+      ALLOW_CONSOLE_MAIL: ${ALLOW_CONSOLE_MAIL:-false}
+      ERROR_WEBHOOK_URL: ${ERROR_WEBHOOK_URL:-}
     volumes:
       - uploads:/app/uploads
     depends_on:
@@ -59,6 +101,11 @@ services:
       args:
         VITE_MAP_TILE_URL: ${VITE_MAP_TILE_URL:-}
         VITE_MAP_ATTRIBUTION: ${VITE_MAP_ATTRIBUTION:-}
+        VITE_SITE_URL: ${VITE_SITE_URL:-}
+        VITE_LEGAL_ENTITY: ${VITE_LEGAL_ENTITY:-}
+        VITE_SUPPORT_EMAIL: ${VITE_SUPPORT_EMAIL:-}
+        VITE_GRIEVANCE_OFFICER: ${VITE_GRIEVANCE_OFFICER:-}
+        VITE_GRIEVANCE_EMAIL: ${VITE_GRIEVANCE_EMAIL:-}
     ports:
       - "${WEB_PORT:-8080}:80"
     depends_on:
@@ -69,3 +116,4 @@ services:
 volumes:
   pgdata:
   uploads:
+  db_backups:

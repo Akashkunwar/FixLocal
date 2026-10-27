@@ -6,19 +6,22 @@ import { useAuth } from "./auth/AuthContext";
 import { dashboardPath, type Role } from "./api/client";
 import { Spinner } from "./components/ui/Spinner";
 import { LandingPage } from "./pages/LandingPage";
-import { LeadGroupHubPage } from "./pages/LeadGroupHubPage";
 import { LoginPage } from "./pages/LoginPage";
-import { RegisterPage } from "./pages/RegisterPage";
 import { CLIENT_ROOT, LEGACY_CLIENT_ROOT, LEGACY_PRO_ROOT, PRO_ROOT } from "./lib/paths";
 
 function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) {
   return lazy(() => load().then((m) => ({ default: m[name] })));
 }
 
+const RegisterPage = page(() => import("./pages/RegisterPage"), "RegisterPage");
+const LeadGroupHubPage = page(() => import("./pages/LeadGroupHubPage"), "LeadGroupHubPage");
 const ForgotPasswordPage = page(() => import("./pages/AccountPages"), "ForgotPasswordPage");
 const ResetPasswordPage = page(() => import("./pages/AccountPages"), "ResetPasswordPage");
 const VerifyEmailPage = page(() => import("./pages/AccountPages"), "VerifyEmailPage");
 const SettingsPage = page(() => import("./pages/SettingsPage"), "SettingsPage");
+const TermsPage = page(() => import("./pages/LegalPages"), "TermsPage");
+const PrivacyPage = page(() => import("./pages/LegalPages"), "PrivacyPage");
+const NotFoundPage = page(() => import("./pages/LegalPages"), "NotFoundPage");
 const FavoritesPage = page(() => import("./pages/FavoritesPage"), "FavoritesPage");
 const ProPublicPage = page(() => import("./pages/ProPublicPage"), "ProPublicPage");
 const AdminStatsPage = page(() => import("./pages/admin/AdminStatsPage"), "AdminStatsPage");
@@ -43,7 +46,6 @@ const ANY: Role[] = ["ADMIN", "HOMEOWNER", "TRADESPERSON"];
 
 const PROTECTED: { path: string; allow: Role[]; element: ReactNode }[] = [
   { path: "/settings", allow: ANY, element: <SettingsPage /> },
-  { path: "/pros/:userId", allow: ANY, element: <ProPublicPage /> },
   { path: "/admin", allow: ["ADMIN"], element: <AdminStatsPage /> },
   { path: "/admin/users", allow: ["ADMIN"], element: <AdminUsersPage /> },
   { path: "/admin/tradespeople", allow: ["ADMIN"], element: <AdminTradespeoplePage /> },
@@ -100,6 +102,10 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          {/* Public so profiles can be shared and indexed; contact details stay hidden server-side. */}
+          <Route path="/pros/:userId" element={<ProPublicPage />} />
           {PROTECTED.map((r) => (
             <Route
               key={r.path}
@@ -109,7 +115,7 @@ export default function App() {
           ))}
           <Route path={`${LEGACY_CLIENT_ROOT}/*`} element={<LegacyRedirect from={LEGACY_CLIENT_ROOT} to={CLIENT_ROOT} />} />
           <Route path={`${LEGACY_PRO_ROOT}/*`} element={<LegacyRedirect from={LEGACY_PRO_ROOT} to={PRO_ROOT} />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </ErrorBoundary>

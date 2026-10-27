@@ -77,7 +77,7 @@ export function AdminAuditPage() {
   return (
     <Shell title="Audit log" subtitle="Suspend, disputes, force-cancel, verification, match-weight + best-value blend changes (+ rollback), and notes">
       <div className="mb-4 flex flex-wrap gap-2">
-        <select className="input w-auto" value={action} onChange={(e) => setAction(e.target.value)}>
+        <select className="input w-auto" aria-label="Filter by action" value={action} onChange={(e) => setAction(e.target.value)}>
           {ACTIONS.map((a) => (
             <option key={a || "all"} value={a}>
               {a ? a.replace(/_/g, " ") : "All actions"}
@@ -107,8 +107,8 @@ export function AdminAuditPage() {
           }
         }}
       >
-        <label className="label">Optional admin note</label>
-        <textarea
+        <label className="label" htmlFor="audit-note">Optional admin note</label>
+        <textarea id="audit-note"
           className="input"
           rows={2}
           value={note}
@@ -135,7 +135,7 @@ export function AdminAuditPage() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge status={log.action} />
-                    <span className="text-xs text-slate-400">{fmtDateTime(log.createdAt)}</span>
+                    <span className="text-xs text-slate-500">{fmtDateTime(log.createdAt)}</span>
                   </div>
                   <p className="mt-2 text-sm font-medium text-slate-900">
                     {log.summary || log.action.replace(/_/g, " ")}

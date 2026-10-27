@@ -38,6 +38,9 @@ export type User = {
   phone?: string | null;
   avatarUrl?: string | null;
   emailVerified?: boolean;
+  /** False until the user accepts the current Terms of Service / Privacy Policy. */
+  termsAccepted?: boolean;
+  emailNotifications?: boolean;
   timezone?: string;
   notificationPrefs?: Record<string, boolean> | null;
   quoteViewNudgeHours?: number | null;
@@ -175,12 +178,19 @@ export async function register(
   role: "HOMEOWNER" | "TRADESPERSON",
   extras?: { name?: string; phone?: string }
 ) {
-  const r = await api<SessionResponse>("/api/auth/register", {
+  // Sign-up never starts a session: the same "check your inbox" answer comes back whether or not
+  // the address already has an account. The user confirms their email, then logs in.
+  return api<{ ok: boolean; message: string }>("/api/auth/register", {
     method: "POST",
-    body: JSON.stringify({ email, password, role, ...extras }),
+    body: JSON.stringify({ email, password, role, ...extras, acceptTerms: true }),
   });
-  accessToken = r.token;
-  return r;
+}
+
+export function resendConfirmation(email: string) {
+  return api<{ ok: boolean; message: string }>("/api/auth/resend-confirmation", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
 }
 
 export async function logout() {
@@ -251,6 +261,38 @@ export function resendVerification() {
 
 export function deleteAccount(password: string) {
   return api<{ ok: boolean }>("/api/auth/me", { method: "DELETE", body: JSON.stringify({ password }) });
+}
+
+export function acceptTerms() {
+  return api<{ user: User }>("/api/auth/accept-terms", { method: "POST" });
+}
+
+/** Everything FixLocal holds about the signed-in user, as a JSON download. */
+export async function downloadMyData() {
+  const data = await api<Record<string, unknown>>("/api/auth/me/export");
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `fixlocal-data-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export type BlockedUser = { userId: string; name: string; role: Role; createdAt: string };
+
+export function listBlocks() {
+  return api<{ blocks: BlockedUser[] }>("/api/blocks");
+}
+
+export function blockUser(userId: string) {
+  return api<{ blocked: true }>("/api/blocks", { method: "POST", body: JSON.stringify({ userId }) });
+}
+
+export function unblockUser(userId: string) {
+  return api<{ blocked: false }>(`/api/blocks/${userId}`, { method: "DELETE" });
 }
 
 export function getSseTicket() {

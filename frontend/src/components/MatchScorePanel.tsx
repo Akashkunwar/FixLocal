@@ -99,7 +99,7 @@ export function MatchScorePanel({ open, onClose, name, score, breakdown }: Props
       <aside className="relative z-10 flex h-full w-full max-w-md flex-col bg-white shadow-xl">
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Match explainability</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Match explainability</p>
             <h2 className="text-lg font-semibold text-slate-900">
               {name || "Verified pro"} · {score.toFixed(0)}/{maxTotal.toFixed(0)}
             </h2>
@@ -133,7 +133,7 @@ export function MatchScorePanel({ open, onClose, name, score, breakdown }: Props
                   </div>
                   <p className="shrink-0 font-mono text-sm font-semibold text-brand-800">
                     {v.toFixed(0)}
-                    <span className="text-slate-400">/{p.max}</span>
+                    <span className="text-slate-500">/{p.max}</span>
                   </p>
                 </div>
                 <Bar value={v} max={p.max} />

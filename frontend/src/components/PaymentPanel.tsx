@@ -145,19 +145,19 @@ export function PaymentPanel({
 
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="rounded-xl bg-slate-50 p-2.5 sm:p-3 ring-1 ring-slate-100">
-          <p className="text-[10px] uppercase tracking-wide text-slate-400">Escrow</p>
+          <p className="text-[10px] uppercase tracking-wide text-slate-500">Escrow</p>
           <p className="mt-1 text-sm sm:text-base font-semibold text-slate-900">
             {money(data.escrowAmount)}
           </p>
         </div>
         <div className="rounded-xl bg-emerald-50 p-2.5 sm:p-3 ring-1 ring-emerald-100">
-          <p className="text-[10px] uppercase tracking-wide text-emerald-700/70">Released</p>
+          <p className="text-[10px] uppercase tracking-wide text-emerald-700">Released</p>
           <p className="mt-1 text-sm sm:text-base font-semibold text-emerald-900">
             {money(data.releasedTotal)}
           </p>
         </div>
         <div className="rounded-xl bg-amber-50 p-2.5 sm:p-3 ring-1 ring-amber-100">
-          <p className="text-[10px] uppercase tracking-wide text-amber-800/70">Held</p>
+          <p className="text-[10px] uppercase tracking-wide text-amber-800">Held</p>
           <p className="mt-1 text-sm sm:text-base font-semibold text-amber-950">
             {money(data.remainingHeld)}
           </p>
@@ -177,7 +177,7 @@ export function PaymentPanel({
       {(data.parties?.homeowner || data.parties?.tradesperson) && (
         <div className="grid gap-2 sm:grid-cols-2 text-xs text-slate-600">
           <div className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">Client</p>
+            <p className="text-[10px] uppercase tracking-wide text-slate-500">Client</p>
             <p className="font-medium text-slate-800">
               {data.parties?.homeowner?.name || "—"}
             </p>
@@ -186,7 +186,7 @@ export function PaymentPanel({
             )}
           </div>
           <div className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">Professional</p>
+            <p className="text-[10px] uppercase tracking-wide text-slate-500">Professional</p>
             <p className="font-medium text-slate-800">
               {data.parties?.tradesperson?.name || "—"}
             </p>
@@ -199,11 +199,11 @@ export function PaymentPanel({
 
       {data.auditNotes && data.auditNotes.length > 0 && (
         <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-600">
-          <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">Audit notes</p>
+          <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Audit notes</p>
           <p className="line-clamp-2">
             {data.auditNotes[0].snippet || data.auditNotes[0].summary}
           </p>
-          <p className="mt-0.5 text-[10px] text-slate-400">
+          <p className="mt-0.5 text-[10px] text-slate-500">
             Included on printable invoice
             {data.auditNotes.length > 1 ? ` · +${data.auditNotes.length - 1} more` : ""}
           </p>
@@ -221,7 +221,7 @@ export function PaymentPanel({
               <div>
                 <p className="text-sm font-medium text-slate-900">
                   {m.sequence}. {m.label}{" "}
-                  <span className="text-slate-400 font-normal">({m.percent}%)</span>
+                  <span className="text-slate-500 font-normal">({m.percent}%)</span>
                 </p>
                 <p className="text-xs text-slate-500">
                   {money(m.amount)}

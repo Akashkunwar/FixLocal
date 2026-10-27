@@ -62,7 +62,7 @@ export function CounterAmountSparkline({
           </circle>
         ))}
       </svg>
-      <p className="text-[10px] text-slate-400">
+      <p className="text-[10px] text-slate-500">
         ₹{Math.round(minA)} → ₹{Math.round(maxA)} · {points.length} counters
       </p>
     </div>

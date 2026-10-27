@@ -16,6 +16,7 @@ export const registerBody = z.object({
     .max(20)
     .regex(/^[+0-9 ()-]*$/, "Enter a valid phone number")
     .optional(),
+  acceptTerms: z.literal(true, { message: "Please accept the Terms of Service and Privacy Policy" }),
 });
 
 export const loginBody = z.object({
@@ -36,6 +37,7 @@ export const updateMeBody = z.object({
     .refine((tz) => timezones.has(tz) || tz === "UTC", "Unknown time zone")
     .optional(),
   notificationPrefs: z.record(z.string().max(40), z.boolean()).optional(),
+  emailNotifications: z.boolean().optional(),
   quoteViewNudgeHours: z.preprocess((v) => (v === "" ? null : v), optionalInt(1, 168).nullable()),
 });
 

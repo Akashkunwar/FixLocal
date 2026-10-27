@@ -5,6 +5,22 @@ import { User } from "../entities/User";
 import { publishNotification } from "./sse";
 import { toNotification } from "../serializers";
 import { logger } from "../logger";
+import { appLink, sendMail } from "../services/mailer";
+
+/** Notification types that also go out by email (when the user hasn't turned email off). */
+export const EMAIL_NOTIFICATION_TYPES: ReadonlySet<string> = new Set([
+  NotificationType.NEW_BID,
+  NotificationType.BID_ACCEPTED,
+  NotificationType.JOB_STATUS,
+  NotificationType.DISPUTE,
+]);
+
+/** The account-level email switch lives in notificationPrefs under this key (default on). */
+export const EMAIL_PREF_KEY = "email";
+
+export function wantsEmail(prefs: Record<string, boolean> | null | undefined) {
+  return prefs?.[EMAIL_PREF_KEY] !== false;
+}
 
 export type NotificationInput = {
   userId: string;
@@ -36,7 +52,7 @@ export async function createNotifications(
   const userIds = [...new Set(inputs.map((i) => i.userId))];
   const users = await manager.find(User, {
     where: { id: In(userIds) },
-    select: { id: true, notificationPrefs: true, deletedAt: true },
+    select: { id: true, notificationPrefs: true, deletedAt: true, email: true, emailVerifiedAt: true },
   });
   const byId = new Map(users.map((u) => [u.id, u]));
   const rows = inputs
@@ -60,6 +76,14 @@ export async function createNotifications(
   const saved = await manager.save(rows, { transaction: false });
   for (const n of saved) {
     out.set(n.userId, n);
+    const u = byId.get(n.userId);
+    if (u?.emailVerifiedAt && EMAIL_NOTIFICATION_TYPES.has(n.type) && wantsEmail(u.notificationPrefs)) {
+      void sendMail({
+        to: u.email,
+        subject: `FixLocal: ${n.title}`.slice(0, 200),
+        text: `${n.body}\n\n${n.link ? `Open FixLocal: ${appLink(n.link)}\n\n` : ""}You can turn these emails off in Settings: ${appLink("/settings")}`,
+      });
+    }
     try {
       await publishNotification(n.userId, { notification: toNotification(n), unreadBump: true });
     } catch (err) {

@@ -1,4 +1,6 @@
 import type { Request, Response } from "express";
+import { EMAIL_PREF_KEY } from "../utils/notifications";
+import { TERMS_VERSION } from "../domain/legal";
 import { In, IsNull, MoreThan } from "typeorm";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
@@ -25,7 +27,7 @@ import {
 import { invalidateAuthState } from "../auth/authState";
 import { badRequest, conflict, forbidden, unauthorized } from "../http/errors";
 import { toSelfUser } from "../serializers";
-import { appLink, mailer } from "../services/mailer";
+import { appLink, sendMail } from "../services/mailer";
 import { writeAudit } from "../utils/audit";
 import { isNotificationType } from "../domain/notificationTypes";
 import { deleteUploadByRef, discardFiles, fileRef, storeUploads } from "../services/files";
@@ -70,15 +72,18 @@ async function sendEmailToken(user: User, type: EmailTokenType) {
   const ttlMs = type === "verify" ? 48 * 3600_000 : 3600_000;
   const repo = AppDataSource.getRepository(EmailToken);
   await repo.update({ userId: user.id, type, usedAt: IsNull() }, { usedAt: new Date() });
-  await repo.save(repo.create({ userId: user.id, type, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + ttlMs) }));
+  await repo.save(
+    repo.create({ userId: user.id, type, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + ttlMs) })
+  );
+  // Mail goes out in the background so response time doesn't reveal whether an account exists.
   if (type === "verify") {
-    await mailer().send({
+    void sendMail({
       to: user.email,
       subject: "Verify your FixLocal email",
       text: `Hi ${user.name || "there"},\n\nConfirm your email to start using FixLocal:\n${appLink(`/verify-email?token=${raw}`)}\n\nThis link expires in 48 hours.`,
     });
   } else {
-    await mailer().send({
+    void sendMail({
       to: user.email,
       subject: "Reset your FixLocal password",
       text: `Someone asked to reset the password for this account.\n\nChoose a new password here:\n${appLink(`/reset-password?token=${raw}`)}\n\nThis link expires in 1 hour. If this wasn't you, you can ignore this email.`,
@@ -98,32 +103,78 @@ async function consumeEmailToken(raw: string, type: EmailTokenType) {
   return token.userId;
 }
 
+/** The one answer sign-up ever gives, so it can't be used to find out who has an account. */
+export const REGISTER_RESPONSE = {
+  ok: true,
+  message: "Check your inbox: we've sent a link to confirm your email. Confirm it, then log in.",
+} as const;
+
+/** Someone tried to sign up with an address that already has an account: tell the owner, not the requester. */
+async function notifyExistingOwner(existing: User) {
+  if (existing.deletedAt) return;
+  if (!existing.emailVerifiedAt && !existing.isSuspended) {
+    // A genuine user retrying a sign-up they never confirmed: send a fresh confirmation link.
+    await sendEmailToken(existing, "verify");
+    return;
+  }
+  void sendMail({
+    to: existing.email,
+    subject: "Someone tried to sign up with your email",
+    text:
+      `Hi ${existing.name || "there"},\n\nSomeone just tried to create a FixLocal account with this email address, ` +
+      `but you already have one.\n\nIf it was you, log in here:\n${appLink("/login")}\n\n` +
+      `Forgot your password? Reset it here:\n${appLink("/forgot-password")}\n\nIf it wasn't you, you can ignore this email; nothing has changed.`,
+  });
+}
+
+const isUniqueViolation = (err: unknown) => (err as { code?: string } | null)?.code === "23505";
+
 export async function register(req: Request, res: Response) {
   const { email, password, role, name, phone } = req.valid.body;
-  const exists = await users().exists({ where: { email } });
-  if (exists) throw conflict("That email is already registered", "EMAIL_TAKEN");
+  // Hash first in every case so new and existing addresses take the same time.
+  const passwordHash = await hashPassword(password);
+  const existing = await users().findOne({ where: { email } });
+  if (existing) {
+    await notifyExistingOwner(existing);
+    return res.status(202).json(REGISTER_RESPONSE);
+  }
 
   const cfg = config();
   const autoVerify = !cfg.isProd && process.env.DEV_AUTO_VERIFY_EMAIL === "true";
-  const user = await AppDataSource.transaction(async (m) => {
-    const u = await m.save(
-      m.create(User, {
-        email,
-        passwordHash: await hashPassword(password),
-        role,
-        name: name || undefined,
-        phone: phone || undefined,
-        isSuspended: false,
-        emailVerifiedAt: autoVerify ? new Date() : null,
-      })
-    );
-    if (role === UserRole.TRADESPERSON) {
-      await m.save(m.create(TradespersonProfile, { userId: u.id, galleryUrls: [] }));
-    }
-    return u;
-  });
+  let user: User;
+  try {
+    user = await createAccount();
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    // Lost a race with a concurrent sign-up for the same address: same answer as any existing account.
+    const winner = await users().findOne({ where: { email } });
+    if (winner) await notifyExistingOwner(winner);
+    return res.status(202).json(REGISTER_RESPONSE);
+  }
   if (!user.emailVerifiedAt) await sendEmailToken(user, "verify");
-  return startSession(req, res, user, 201);
+  return res.status(202).json(REGISTER_RESPONSE);
+
+  async function createAccount() {
+    return AppDataSource.transaction(async (m) => {
+      const u = await m.save(
+        m.create(User, {
+          email,
+          passwordHash,
+          role,
+          name: name || undefined,
+          phone: phone || undefined,
+          isSuspended: false,
+          emailVerifiedAt: autoVerify ? new Date() : null,
+          termsAcceptedAt: new Date(),
+          termsVersion: TERMS_VERSION,
+        })
+      );
+      if (role === UserRole.TRADESPERSON) {
+        await m.save(m.create(TradespersonProfile, { userId: u.id, galleryUrls: [] }));
+      }
+      return u;
+    });
+  }
 }
 
 export async function login(req: Request, res: Response) {
@@ -140,6 +191,9 @@ export async function login(req: Request, res: Response) {
   if (!(await comparePassword(password, user.passwordHash))) {
     throw unauthorized("Invalid email or password", "INVALID_CREDENTIALS");
   }
+  // An unconfirmed sign-up gets exactly the same answer as a wrong password; otherwise
+  // "register, then log in" would reveal whether the address already had an account.
+  if (!user.emailVerifiedAt) throw unauthorized("Invalid email or password", "INVALID_CREDENTIALS");
   if (user.isSuspended) throw forbidden("Your account has been suspended. Contact support.", "ACCOUNT_SUSPENDED");
   if (user.role === UserRole.TRADESPERSON) {
     const profile = await AppDataSource.getRepository(TradespersonProfile).findOne({ where: { userId: user.id } });
@@ -213,6 +267,9 @@ export async function updateMe(req: Request, res: Response) {
     }
     user.notificationPrefs = merged;
   }
+  if (body.emailNotifications !== undefined) {
+    user.notificationPrefs = { ...(user.notificationPrefs || {}), [EMAIL_PREF_KEY]: body.emailNotifications };
+  }
   if (body.quoteViewNudgeHours !== undefined) user.quoteViewNudgeHours = body.quoteViewNudgeHours;
   await users().save(user);
   return res.json({ user: toSelfUser(user) });
@@ -264,6 +321,13 @@ export async function resendVerification(req: Request, res: Response) {
   return res.json({ ok: true, message: "Verification email sent" });
 }
 
+/** Public "send the confirmation link again" (from the login page). Same answer whatever the address. */
+export async function resendVerificationPublic(req: Request, res: Response) {
+  const user = await users().findOne({ where: { email: req.valid.body.email } });
+  if (user && !user.deletedAt && !user.isSuspended && !user.emailVerifiedAt) await sendEmailToken(user, "verify");
+  return res.json({ ok: true, message: "If that address has an unconfirmed account, a new link is on its way." });
+}
+
 export async function forgotPassword(req: Request, res: Response) {
   const user = await users().findOne({ where: { email: req.valid.body.email } });
   if (user && !user.deletedAt && !user.isSuspended) await sendEmailToken(user, "reset");
@@ -312,18 +376,24 @@ export async function deleteAccount(req: Request, res: Response) {
   // Profile files (avatar, portfolio, licence) go with the account; job files stay with the job record.
   const profileKinds = [UploadKind.AVATAR, UploadKind.GALLERY, UploadKind.CASE_STUDY, UploadKind.LICENSE];
   const removed = await AppDataSource.transaction(async (m) => {
-    await m.update(User, { id: user.id }, {
-      email: `deleted-${user.id}@deleted.fixlocal.invalid`,
-      name: "Deleted user",
-      passwordHash: await hashPassword(randomToken(24)),
-      notificationPrefs: null,
-      deletedAt: new Date(),
-      tokenVersion: user.tokenVersion + 1,
-    });
+    await m.update(
+      User,
+      { id: user.id },
+      {
+        email: `deleted-${user.id}@deleted.fixlocal.invalid`,
+        name: "Deleted user",
+        passwordHash: await hashPassword(randomToken(24)),
+        notificationPrefs: null,
+        deletedAt: new Date(),
+        tokenVersion: user.tokenVersion + 1,
+      }
+    );
     await m.query(`UPDATE "users" SET "phone" = NULL, "avatarUrl" = NULL WHERE "id" = $1`, [user.id]);
     await m.delete(UserTemplate, { userId: user.id });
     await m.query(`UPDATE "jobs" SET "status" = 'cancelled' WHERE "homeownerId" = $1 AND "status" = 'open'`, [user.id]);
-    await m.query(`UPDATE "bids" SET "status" = 'withdrawn' WHERE "tradespersonId" = $1 AND "status" = 'active'`, [user.id]);
+    await m.query(`UPDATE "bids" SET "status" = 'withdrawn' WHERE "tradespersonId" = $1 AND "status" = 'active'`, [
+      user.id,
+    ]);
     if (user.role === UserRole.TRADESPERSON) {
       await m.query(
         `UPDATE "tradesperson_profiles" SET "bio" = NULL, "lat" = NULL, "lng" = NULL, "galleryUrls" = '[]',
@@ -331,7 +401,10 @@ export async function deleteAccount(req: Request, res: Response) {
         [user.id]
       );
     }
-    const files = await m.find(Upload, { where: { ownerUserId: user.id, kind: In(profileKinds) }, select: { name: true } });
+    const files = await m.find(Upload, {
+      where: { ownerUserId: user.id, kind: In(profileKinds) },
+      select: { name: true },
+    });
     await m.delete(Upload, { ownerUserId: user.id, kind: In(profileKinds) });
     return files.map((f) => fileRef(f.name));
   });
@@ -382,4 +455,95 @@ export async function replaceTemplates(req: Request, res: Response) {
     }
   });
   return res.json({ kind, items });
+}
+
+/** Existing users accept the current Terms / Privacy Policy (shown after an update). */
+export async function acceptTerms(req: Request, res: Response) {
+  await users().update({ id: req.user!.id }, { termsAcceptedAt: new Date(), termsVersion: TERMS_VERSION });
+  const user = await users().findOneOrFail({ where: { id: req.user!.id } });
+  return res.json({ user: toSelfUser(user) });
+}
+
+/**
+ * Download everything FixLocal holds about the signed-in user as JSON (DPDP Act 2023 "right to
+ * access"). Secrets (password hash, token hashes) are never included; other people's personal
+ * details are reduced to ids.
+ */
+export async function exportMyData(req: Request, res: Response) {
+  const id = req.user!.id;
+  const q = <T = Record<string, unknown>>(sql: string) => AppDataSource.query(sql, [id]) as Promise<T[]>;
+  const [account] = await q(
+    `SELECT "id", "email", "role", "name", "phone", "avatarUrl", "timezone", "isSuspended", "emailVerifiedAt",
+            "termsAcceptedAt", "termsVersion", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
+       FROM "users" WHERE "id" = $1`
+  );
+  const [
+    profile,
+    jobs,
+    bids,
+    messages,
+    reviewsWritten,
+    reviewsReceived,
+    notifications,
+    favorites,
+    blocks,
+    reports,
+    disputes,
+    ledger,
+    uploads,
+    templates,
+  ] = await Promise.all([
+    q(`SELECT * FROM "tradesperson_profiles" WHERE "userId" = $1`),
+    q(`SELECT "id", "title", "description", "category", "status", "budgetMin", "budgetMax", "address", "area", "city",
+              "pincode", "lat", "lng", "paymentStatus", "photoUrls", "createdAt", "completedAt"
+         FROM "jobs" WHERE "homeownerId" = $1 ORDER BY "createdAt"`),
+    q(`SELECT "id", "jobId", "amount", "message", "etaDays", "quoteAmount", "quoteNotes", "quoteHistory", "status", "createdAt"
+         FROM "bids" WHERE "tradespersonId" = $1 ORDER BY "createdAt"`),
+    q(`SELECT "id", "jobId", "threadTradespersonId", "body", "attachmentUrls", "quote", "createdAt"
+         FROM "messages" WHERE "senderId" = $1 ORDER BY "createdAt"`),
+    q(
+      `SELECT "id", "jobId", "direction", "rating", "comment", "revieweeId", "createdAt" FROM "reviews" WHERE "reviewerId" = $1`
+    ),
+    q(`SELECT "id", "jobId", "direction", "rating", "comment", "createdAt" FROM "reviews" WHERE "revieweeId" = $1`),
+    q(`SELECT "id", "type", "title", "body", "link", "read", "createdAt" FROM "notifications" WHERE "userId" = $1
+         ORDER BY "createdAt" DESC LIMIT 1000`),
+    q(`SELECT "targetType", "targetId", "notes", "tags", "createdAt" FROM "favorites" WHERE "userId" = $1`),
+    q(`SELECT "blockedId", "createdAt" FROM "user_blocks" WHERE "blockerId" = $1`),
+    q(`SELECT "id", "targetType", "targetId", "reason", "status", "createdAt" FROM "reports" WHERE "reporterId" = $1`),
+    q(`SELECT "id", "jobId", "reason", "status", "resolution", "resolutionNotes", "createdAt", "resolvedAt"
+         FROM "disputes" WHERE "raisedByUserId" = $1`),
+    q(`SELECT "id", "jobId", "milestoneId", "type", "amount", "note", "createdAt",
+              CASE WHEN "payeeUserId" = $1 THEN 'received' ELSE 'paid' END AS "direction"
+         FROM "ledger_entries" WHERE "payeeUserId" = $1 OR "payerUserId" = $1 ORDER BY "createdAt"`),
+    q(
+      `SELECT "name", "kind", "jobId", "mime", "size", "originalName", "createdAt" FROM "uploads" WHERE "ownerUserId" = $1`
+    ),
+    q(`SELECT "kind", "position", "data", "createdAt" FROM "user_templates" WHERE "userId" = $1`),
+  ]);
+  const body = {
+    exportedAt: new Date().toISOString(),
+    format: "fixlocal-export-v1",
+    note: "Payments on FixLocal are simulated; ledger amounts are not real money movements.",
+    account,
+    professionalProfile: profile[0] ?? null,
+    jobsPosted: jobs,
+    bids,
+    messagesSent: messages,
+    reviewsWritten,
+    reviewsReceived,
+    notifications,
+    favorites,
+    blockedUsers: blocks,
+    reportsFiled: reports,
+    disputesRaised: disputes,
+    escrowLedger: ledger,
+    files: uploads,
+    templates,
+  };
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="fixlocal-data-${new Date().toISOString().slice(0, 10)}.json"`
+  );
+  res.setHeader("Cache-Control", "no-store");
+  return res.json(body);
 }

@@ -126,7 +126,7 @@ export function SuggestedProsPanel({
                               {[p.city, p.skills].filter(Boolean).join(" · ") ||
                                 "—"}
                             </p>
-                            <p className="mt-1 text-[11px] text-slate-400">
+                            <p className="mt-1 text-[11px] text-slate-500">
                               ★ {p.averageRating.toFixed(1)} ({p.reviewCount})
                               {p.breakdown.distanceKm != null && (
                                 <> · ~{p.breakdown.distanceKm} km</>
@@ -164,7 +164,7 @@ export function SuggestedProsPanel({
                             <p className="text-2xl font-bold text-brand-800">
                               {(p.rankedScore ?? p.score).toFixed(0)}
                             </p>
-                            <p className="text-[10px] uppercase tracking-wide text-slate-400 flex items-center justify-end gap-0.5">
+                            <p className="text-[10px] uppercase tracking-wide text-slate-500 flex items-center justify-end gap-0.5">
                               match <Info className="h-3 w-3" />
                             </p>
                             {(p.heatBoost != null && p.heatBoost > 0) ||
@@ -230,9 +230,9 @@ export function SuggestedProsPanel({
                     ) : (
                       <>
                         <div>
-                          <label className="label">
+                          <p className="label">
                             Optional shared message
-                          </label>
+                          </p>
                           <div className="mb-2 flex flex-wrap gap-1.5">
                             {inviteTemplates.slice(0, 6).map((tpl) => (
                               <button
@@ -246,6 +246,7 @@ export function SuggestedProsPanel({
                             ))}
                           </div>
                           <textarea
+                            aria-label="Optional shared message"
                             className="input min-h-[72px]"
                             maxLength={500}
                             placeholder="Optional note for all selected pros"
@@ -289,7 +290,7 @@ export function SuggestedProsPanel({
                       to bid?
                     </p>
                     <div>
-                      <label className="label">Optional message</label>
+                      <p className="label">Optional message</p>
                       <div className="mb-2 flex flex-wrap gap-1.5">
                         {inviteTemplates.slice(0, 8).map((tpl) => (
                           <button
@@ -304,6 +305,7 @@ export function SuggestedProsPanel({
                         ))}
                       </div>
                       <textarea
+                        aria-label="Optional message"
                         className="input min-h-[72px]"
                         maxLength={500}
                         placeholder="e.g. Flexible on timing, need someone this week"
@@ -312,6 +314,7 @@ export function SuggestedProsPanel({
                       />
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <input
+                          aria-label="Template label"
                           className="input py-1.5! text-xs max-w-[140px]"
                           placeholder="Template label"
                           value={tplLabel}
@@ -414,7 +417,7 @@ export function SuggestedProsPanel({
                       key={c.label}
                       className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200"
                     >
-                      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">
                         {c.label}
                       </p>
                       <p className="text-xl font-bold text-slate-900">
@@ -426,7 +429,7 @@ export function SuggestedProsPanel({
                     </div>
                   ))}
                 </div>
-                <p className="mt-2 text-[11px] text-slate-400">
+                <p className="mt-2 text-[11px] text-slate-500">
                   Opened ≈ notification read or deep-link visit · Click-ish
                   tracked when pros open the invite job link
                 </p>

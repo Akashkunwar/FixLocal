@@ -150,7 +150,7 @@ export function SchedulePanel({
             {fmtDateTime(job.scheduledStart)}
             {job.scheduledEnd ? ` – ${fmtDateTime(job.scheduledEnd)}` : ""}
           </p>
-          {job.scheduleNote && <p className="mt-1 text-xs text-brand-800/80">{job.scheduleNote}</p>}
+          {job.scheduleNote && <p className="mt-1 text-xs text-brand-800">{job.scheduleNote}</p>}
           {existingConflict && (
             <p className="mt-2 text-xs font-medium text-amber-800 bg-amber-50 rounded-lg px-2 py-1.5 ring-1 ring-amber-200">
               {existingConflict}

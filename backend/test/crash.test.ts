@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { admin, api, client, pro } from "./helpers";
+import { admin, api, client, pro, rows } from "./helpers";
 
 /** C-1: malformed input must never take the process down. */
 describe("C-1 crash resistance", () => {
@@ -56,16 +56,17 @@ describe("C-1 crash resistance", () => {
     await healthy();
   });
 
-  it("handles concurrent duplicate registrations with one 201 and 409s", async () => {
+  it("handles concurrent duplicate registrations: one account, the same answer for all", async () => {
     const email = `race-${Date.now()}@test.fixlocal`;
     const results = await Promise.all(
       Array.from({ length: 5 }, () =>
-        api().post("/api/auth/register").send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER" })
+        api().post("/api/auth/register").send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true })
       )
     );
-    const statuses = results.map((r) => r.status).sort();
-    expect(statuses.filter((s) => s === 201)).toHaveLength(1);
-    expect(statuses.filter((s) => s === 409)).toHaveLength(4);
+    expect(results.map((r) => r.status)).toEqual([202, 202, 202, 202, 202]);
+    expect(new Set(results.map((r) => JSON.stringify(r.body))).size).toBe(1);
+    const [row] = await rows<{ n: string }>(`SELECT count(*) AS n FROM "users" WHERE "email" = $1`, [email]);
+    expect(Number(row.n)).toBe(1);
     await healthy();
   });
 

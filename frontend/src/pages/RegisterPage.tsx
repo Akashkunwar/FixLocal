@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { ApiError, dashboardPath } from "../api/client";
+import { ApiError, dashboardPath, resendConfirmation } from "../api/client";
 import { useToast } from "../components/Toast";
 import { Wrench } from "lucide-react";
 import { safeNext } from "../lib/paths";
@@ -24,14 +24,16 @@ const ROLE_CARDS = [
 
 export function RegisterPage() {
   const { user, register, loading } = useAuth();
-  const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { success, error } = useToast();
+  const { error } = useToast();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"HOMEOWNER" | "TRADESPERSON">("HOMEOWNER");
+  const [agreed, setAgreed] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -52,24 +54,19 @@ export function RegisterPage() {
       setErr("Password must be at least 10 characters");
       return;
     }
+    if (!agreed) {
+      setErr("Please accept the Terms of Service and Privacy Policy to continue");
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
-      const u = await register(email.trim(), password, role, {
+      await register(email.trim(), password, role, {
         name: name.trim() || undefined,
         phone: phone.trim() || undefined,
       });
-      success(
-        u.emailVerified === false
-          ? "Account created! Check your inbox for a link to verify your email."
-          : "Account created!"
-      );
-      const next = safeNext(params.get("next"));
-      if (next) {
-        navigate(next, { replace: true });
-      } else {
-        navigate(dashboardPath(u.role), { replace: true });
-      }
+      setPassword("");
+      setSentTo(email.trim());
     } catch (ex) {
       const msg = ex instanceof ApiError ? ex.message : "Registration failed";
       setErr(msg);
@@ -77,6 +74,46 @@ export function RegisterPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (sentTo) {
+    const next = safeNext(params.get("next"));
+    const loginTo = `/login${next ? `?next=${encodeURIComponent(next)}` : ""}`;
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <section className="card w-full max-w-lg p-8 space-y-4" aria-labelledby="check-inbox">
+          <div className="flex items-center gap-2 text-brand-800">
+            <Wrench className="h-5 w-5" aria-hidden />
+            <span className="font-display text-lg font-semibold">FixLocal</span>
+          </div>
+          <h1 id="check-inbox" className="font-display text-2xl font-semibold">Check your inbox</h1>
+          <p className="text-sm text-slate-600" role="status">
+            We&apos;ve sent a link to <strong>{sentTo}</strong>. Open it to confirm your email, then log in. If you
+            already have an account with this address, the email explains how to get back in.
+          </p>
+          <Link className="btn-primary w-full no-underline" to={loginTo}>
+            Go to log in
+          </Link>
+          <p className="text-center text-sm text-slate-500">
+            {resent ? (
+              "Sent again. It can take a minute to arrive; check spam too."
+            ) : (
+              <button
+                type="button"
+                className="font-semibold text-brand-700 underline"
+                onClick={() =>
+                  resendConfirmation(sentTo)
+                    .then(() => setResent(true))
+                    .catch((e) => error((e as Error).message))
+                }
+              >
+                Didn&apos;t get it? Send the link again
+              </button>
+            )}
+          </p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -135,6 +172,20 @@ export function RegisterPage() {
           <input id="password" className="input" type="password" required minLength={10} maxLength={128} aria-describedby="password-hint" value={password} onChange={(e) => setPassword(e.target.value)} />
           <p id="password-hint" className="mt-1 text-xs text-slate-500">At least 10 characters. Avoid common passwords.</p>
         </div>
+        <label className="flex items-start gap-2 text-sm text-slate-600" htmlFor="accept-terms">
+          <input
+            id="accept-terms"
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+          />
+          <span>
+            I am 18 or older and agree to the{" "}
+            <Link to="/terms" target="_blank" rel="noopener">Terms of Service</Link> and{" "}
+            <Link to="/privacy" target="_blank" rel="noopener">Privacy Policy</Link>.
+          </span>
+        </label>
         <button type="submit" className="btn-primary w-full" disabled={busy}>
           {busy ? "Creating…" : "Create account"}
         </button>

@@ -23,7 +23,7 @@ export function ShortlistFunnelPanel({
             key={s.stage}
             className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200"
           >
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">
+            <p className="text-[10px] uppercase tracking-wide text-slate-500">
               {s.label}
             </p>
             <p className="text-xl font-bold text-slate-900">{s.count}</p>

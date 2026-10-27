@@ -24,12 +24,19 @@ import {
 import { normalizeCaseStudies } from "../lib/caseStudies";
 import { useToast } from "../components/Toast";
 import { useAuth } from "../auth/AuthContext";
+import { BlockButton } from "../components/BlockButton";
 import { Heart, Send } from "lucide-react";
 import {
   DAY_KEYS,
   DAY_LABELS,
   normalizeWeeklyAvailability,
 } from "../lib/availability";
+
+function proDescription(p: TradespersonProfile) {
+  const name = p.name || "Professional";
+  const rating = p.reviewCount ? ` Rated ${Number(p.averageRating).toFixed(1)}/5 from ${p.reviewCount} reviews.` : "";
+  return `${name}${p.skills ? `: ${p.skills}` : ""}${p.city ? ` in ${p.city}` : ""}.${rating} Verified professional on FixLocal.`;
+}
 
 export function ProPublicPage() {
   const { userId } = useParams<{ userId: string }>();
@@ -121,6 +128,7 @@ export function ProPublicPage() {
     <Shell
       title={profile.name || "Professional"}
       subtitle={profile.city || "Local pro"}
+      description={proDescription(profile)}
       actions={
         <div className="flex flex-wrap gap-2">
           {canInvite && (
@@ -132,17 +140,28 @@ export function ProPublicPage() {
               <Send className="h-4 w-4" /> Invite to job
             </button>
           )}
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={() =>
-              addFavorite("pro", profile.userId)
-                .then(() => success("Saved"))
-                .catch((e) => error(e.message))
-            }
-          >
-            <Heart className="h-4 w-4" /> Save
-          </button>
+          {!user && (
+            <Link
+              className="btn-primary btn-sm no-underline"
+              to={`/register?next=${encodeURIComponent(`/pros/${profile.userId}`)}`}
+            >
+              <Send className="h-4 w-4" aria-hidden /> Sign up to get a quote
+            </Link>
+          )}
+          {user && (
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() =>
+                addFavorite("pro", profile.userId)
+                  .then(() => success("Saved"))
+                  .catch((e) => error(e.message))
+              }
+            >
+              <Heart className="h-4 w-4" /> Save
+            </button>
+          )}
+          {user?.role === "HOMEOWNER" && <BlockButton userId={profile.userId} name={profile.name} />}
         </div>
       }
     >
@@ -160,8 +179,9 @@ export function ProPublicPage() {
           ) : (
             <>
               <div>
-                <label className="label">Open job</label>
+                <label className="label" htmlFor="invite-job">Open job</label>
                 <select
+                  id="invite-job"
                   className="input"
                   value={inviteJobId}
                   onChange={(e) => setInviteJobId(e.target.value)}
@@ -174,8 +194,8 @@ export function ProPublicPage() {
                 </select>
               </div>
               <div>
-                <label className="label">Optional message</label>
-                <input
+                <label className="label" htmlFor="invite-message">Optional message</label>
+                <input id="invite-message"
                   className="input"
                   value={inviteMessage}
                   onChange={(e) => setInviteMessage(e.target.value)}
@@ -207,14 +227,14 @@ export function ProPublicPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
+        <div className="min-w-0 lg:col-span-2 space-y-6">
           <section className="card p-6">
             <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-100 text-lg font-bold text-brand-800">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand-100 text-lg font-bold text-brand-800">
                 {initials(profile.name, profile.email)}
               </div>
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <StarRating value={Math.round(Number(profile.averageRating))} readonly />
                   <span className="text-sm text-slate-500">({profile.reviewCount})</span>
                   <Badge status={profile.verificationStatus} />
@@ -252,7 +272,7 @@ export function ProPublicPage() {
             )}
             {normalizeCustomRatePackages(profile.customRatePackages).length > 0 && (
               <div className="mt-5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Custom rate packages
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-500">
@@ -276,7 +296,7 @@ export function ProPublicPage() {
             )}
             {softRatePackages(profile.hourlyRateMin, profile.hourlyRateMax).length > 0 && (
               <div className="mt-5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Soft rate packages
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-500">
@@ -315,7 +335,7 @@ export function ProPublicPage() {
                       className={`rounded-xl px-3 py-2.5 text-sm ring-1 ${
                         slot.enabled
                           ? "bg-emerald-50 text-emerald-950 ring-emerald-100"
-                          : "bg-slate-50 text-slate-400 ring-slate-100"
+                          : "bg-slate-50 text-slate-500 ring-slate-100"
                       }`}
                     >
                       <p className="font-semibold">{DAY_LABELS[day]}</p>
@@ -370,7 +390,7 @@ export function ProPublicPage() {
                               />
                             </a>
                           ) : (
-                            <figcaption className="flex h-full items-center justify-center text-[11px] text-slate-400">
+                            <figcaption className="flex h-full items-center justify-center text-[11px] text-slate-500">
                               Before
                             </figcaption>
                           )}
@@ -388,7 +408,7 @@ export function ProPublicPage() {
                               />
                             </a>
                           ) : (
-                            <figcaption className="flex h-full items-center justify-center text-[11px] text-slate-400">
+                            <figcaption className="flex h-full items-center justify-center text-[11px] text-slate-500">
                               After
                             </figcaption>
                           )}
@@ -399,7 +419,7 @@ export function ProPublicPage() {
                       </div>
                     )}
                     {(cs.beforeUrl || cs.afterUrl) && (
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                         Before · After
                       </p>
                     )}
@@ -437,7 +457,7 @@ export function ProPublicPage() {
                       <span className="text-sm font-medium">{r.reviewerName}</span>
                     </div>
                     {r.comment && <p className="mt-1 text-sm text-slate-600">{r.comment}</p>}
-                    {r.jobTitle && <p className="mt-1 text-xs text-slate-400">Job: {r.jobTitle}</p>}
+                    {r.jobTitle && <p className="mt-1 text-xs text-slate-500">Job: {r.jobTitle}</p>}
                   </li>
                 ))}
               </ul>

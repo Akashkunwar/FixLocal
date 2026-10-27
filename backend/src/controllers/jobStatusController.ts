@@ -5,7 +5,7 @@ import { NotificationType } from "../entities/Notification";
 import { createNotification } from "../utils/notifications";
 import { toJob } from "../serializers";
 import { transitionJob } from "../domain/jobStateMachine";
-import { releaseRemaining } from "../domain/escrow";
+import { refundMilestones, releaseRemaining } from "../domain/escrow";
 import { config } from "../config";
 import {
   assertAwardedProOrAdmin,
@@ -15,7 +15,8 @@ import {
   loadJobContext,
 } from "../policies/jobPolicy";
 import { viewer } from "./jobController";
-import { forbidden } from "../http/errors";
+import { conflict, forbidden } from "../http/errors";
+import { revokeThreadStreams } from "../utils/sse";
 
 const jobRepo = () => AppDataSource.getRepository(Job);
 
@@ -92,4 +93,43 @@ export async function completeJob(req: Request, res: Response) {
   if (isAwardedPro(ctx, v)) return markDone(req, res);
   if (isOwner(ctx, v) || isAdmin(v)) return confirmComplete(req, res);
   throw forbidden("You don't have access to this job");
+}
+
+/**
+ * Call off a hire before work starts (client or hired pro).
+ * Rules (simulated escrow): every milestone still held is refunded to the client; a deposit the
+ * client already released stays with the professional.
+ */
+export async function cancelBooking(req: Request, res: Response) {
+  const ctx = await loadJobContext(req.valid.params.id);
+  const v = viewer(req);
+  const byClient = isOwner(ctx, v);
+  const byPro = isAwardedPro(ctx, v);
+  if (!byClient && !byPro) throw forbidden("Only the client or the hired professional can cancel this booking");
+  if (ctx.job.status !== JobStatus.AWARDED) {
+    throw conflict("A booking can only be called off before work starts", "INVALID_STATUS", { status: ctx.job.status });
+  }
+  const reason = (req.valid.body?.reason as string | undefined)?.trim() || null;
+  const who = byClient ? "client" : "professional";
+  const refund = await AppDataSource.transaction(async (m) => {
+    await transitionJob(m, ctx.job.id, "cancel_booking", { cancellationReason: reason, cancelledBy: who });
+    const job = await m.findOneOrFail(Job, { where: { id: ctx.job.id } });
+    return refundMilestones(m, job, "all_unreleased", v.id, `Booking cancelled by the ${who}${reason ? `: ${reason}` : ""}`);
+  });
+  const otherParty = byClient ? ctx.acceptedProId : ctx.job.homeownerId;
+  if (otherParty) {
+    await createNotification({
+      userId: otherParty,
+      type: NotificationType.JOB_STATUS,
+      title: "Booking cancelled",
+      body: `The ${who} cancelled "${ctx.job.title}" before work started${reason ? `: ${reason.slice(0, 160)}` : "."}${
+        refund.totalRefunded ? ` ₹${refund.totalRefunded.toFixed(0)} of held escrow was refunded to the client.` : ""
+      }`,
+      link: byClient ? `/professional/jobs/${ctx.job.id}` : `/client/jobs/${ctx.job.id}`,
+      meta: { jobId: ctx.job.id, status: JobStatus.CANCELLED, cancelledBy: who, refunded: refund.totalRefunded },
+    });
+  }
+  await revokeThreadStreams(ctx.job.id, null).catch(() => undefined);
+  const job = await jobRepo().findOneOrFail({ where: { id: ctx.job.id } });
+  return res.json({ job: toJob(job, "private"), refunded: refund.totalRefunded, paymentStatus: refund.paymentStatus });
 }

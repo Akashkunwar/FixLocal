@@ -44,6 +44,15 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   next();
 }
 
+/**
+ * Public pages: anonymous visitors pass through with no req.user; a bearer token, if sent, is checked
+ * exactly like requireAuth (so an expired token still gets a 401 and the app refreshes it).
+ */
+export async function optionalAuth(req: Request, res: Response, next: NextFunction) {
+  if (!bearer(req)) return next();
+  return requireAuth(req, res, next);
+}
+
 /** SSE streams: a one-time ticket from POST /api/auth/sse-ticket, or a bearer header. */
 export async function requireStreamAuth(req: Request, res: Response, next: NextFunction) {
   const ticket = typeof req.query.ticket === "string" ? req.query.ticket : "";

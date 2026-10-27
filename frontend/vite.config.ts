@@ -1,13 +1,34 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { proShellHtml, robotsTxt, sitemapXml } from "./src/lib/seo";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   // The dev server proxies API calls so the app and API share an origin (cookies just work).
   const target = env.VITE_PROXY_TARGET || "http://localhost:3001";
   const port = Number(env.VITE_PORT || 5173);
+  // Public origin used for the sitemap, robots.txt and Open Graph URLs. Set VITE_SITE_URL for production builds.
+  const siteUrl = (env.VITE_SITE_URL || "https://fixlocal.example").replace(/\/+$/, "");
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: "fixlocal-seo",
+        transformIndexHtml: (html: string) => html.replace(/%SITE_URL%/g, siteUrl),
+        generateBundle() {
+          this.emitFile({ type: "asset", fileName: "sitemap.xml", source: sitemapXml(siteUrl) });
+          this.emitFile({ type: "asset", fileName: "robots.txt", source: robotsTxt(siteUrl) });
+        },
+        // dist/pro.html: the shell nginx serves for /pros/:id with the pro's own meta tags (SSI).
+        writeBundle(options: { dir?: string }) {
+          const dir = options.dir || "dist";
+          const index = readFileSync(join(dir, "index.html"), "utf8");
+          writeFileSync(join(dir, "pro.html"), proShellHtml(index));
+        },
+      },
+    ],
     define: {
       __BUILD_ID__: JSON.stringify(new Date().toISOString()),
     },
@@ -18,6 +39,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/api": { target, changeOrigin: false },
         "/uploads": { target, changeOrigin: false },
+        "/sitemap-pros.xml": { target, changeOrigin: false, rewrite: () => "/api/seo/sitemap-pros.xml" },
       },
     },
     preview: {
@@ -26,10 +48,22 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/api": { target, changeOrigin: false },
         "/uploads": { target, changeOrigin: false },
+        "/sitemap-pros.xml": { target, changeOrigin: false, rewrite: () => "/api/seo/sitemap-pros.xml" },
       },
     },
     build: {
-      sourcemap: true,
+      // Maps are generated for error-tracking uploads but not linked from the shipped bundles.
+      sourcemap: "hidden",
+      rollupOptions: {
+        output: {
+          // React rarely changes between releases: a separate chunk stays cached across deploys.
+          manualChunks(id: string) {
+            if (/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom)\//.test(id)) return "react-vendor";
+            if (id.includes("node_modules/leaflet/")) return "leaflet";
+            return undefined;
+          },
+        },
+      },
     },
   };
 });

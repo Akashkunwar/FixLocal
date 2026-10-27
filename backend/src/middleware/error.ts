@@ -4,6 +4,7 @@ import { QueryFailedError } from "typeorm";
 import { HttpError } from "../http/errors";
 import { ValidationFailure } from "./validate";
 import { logger } from "../logger";
+import { reportError } from "../services/errorReporter";
 
 type PgError = { code?: string; detail?: string; constraint?: string };
 
@@ -49,6 +50,8 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     }
   }
 
-  logger.error({ err, reqId: (req as Request & { id?: unknown }).id, path: req.path }, "unhandled error");
-  return res.status(500).json({ message: "Internal error", code: "INTERNAL" });
+  const requestId = (req as Request & { id?: unknown }).id;
+  logger.error({ err, reqId: requestId, path: req.path }, "unhandled error");
+  reportError(err, { requestId, method: req.method, path: req.route?.path ?? req.path, userId: req.user?.id ?? null });
+  return res.status(500).json({ message: "Something went wrong on our side. Please try again.", code: "INTERNAL", requestId });
 }

@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shell } from "../components/Shell";
 import { TemplateEditor } from "../components/TemplateEditor";
+import { PrivacySettings } from "../components/PrivacySettings";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/Toast";
 import { changePassword, deleteAccount, logoutEverywhere } from "../api/client";
@@ -412,6 +413,8 @@ export function SettingsPage() {
             </button>
           </div>
         </form>
+
+        <PrivacySettings />
 
         {user.role !== "ADMIN" && (
           <form
