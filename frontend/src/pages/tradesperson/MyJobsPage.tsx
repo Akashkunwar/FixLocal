@@ -11,6 +11,7 @@ export function MyJobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [earnings, setEarnings] = useState<EarningsSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -21,6 +22,7 @@ export function MyJobsPage() {
         setJobs(j.jobs);
         if (e) setEarnings(e.earnings);
       })
+      .catch((err: Error) => setLoadError(err.message || "Couldn't load your jobs"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -28,6 +30,10 @@ export function MyJobsPage() {
     <Shell title="My awarded jobs" subtitle="Jobs where your bid was accepted · earnings are simulated">
       {loading ? (
         <Spinner />
+      ) : loadError ? (
+        <p className="card p-6 text-sm text-slate-700" role="alert">
+          {loadError}
+        </p>
       ) : (
         <>
           {earnings && (

@@ -253,7 +253,7 @@ export function ProJobDetailPage() {
         quoteNotes: quoteNotes || undefined,
         quoteAttachment: quoteFile,
       });
-      success("Bid placed");
+      success(myBid?.status === "withdrawn" ? "Bid re-submitted" : "Bid placed");
       try {
         localStorage.setItem("fixlocal:onboarding:pro:bid", "1");
       } catch {
@@ -267,6 +267,7 @@ export function ProJobDetailPage() {
 
   async function onWithdraw() {
     if (!myBid) return;
+    if (!confirm("Withdraw your bid? You can bid again while the job is still open.")) return;
     try {
       await withdrawBid(myBid.id);
       success("Bid withdrawn");
@@ -345,6 +346,16 @@ export function ProJobDetailPage() {
       setDeclineBusy(false);
     }
   }
+
+  // Review prompts (dashboard / notifications) deep-link to #review once the job has loaded.
+  useEffect(() => {
+    if (job?.status !== "completed" || window.location.hash !== "#review") return;
+    const t = window.setTimeout(
+      () => document.getElementById("review")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      150,
+    );
+    return () => window.clearTimeout(t);
+  }, [job?.status]);
 
   if (loadError && !job) {
     return (
@@ -594,8 +605,16 @@ export function ProJobDetailPage() {
           )}
 
           {isAwardedToMe && job.status === "completed" && (
-            <section className="card p-6">
-              <h2 className="mb-3 text-lg font-semibold">Review the client</h2>
+            <section
+              id="review"
+              className={`card scroll-mt-24 p-6 ${clientReview ? "" : "ring-2 ring-brand-200"}`}
+            >
+              <h2 className="text-lg font-semibold">Review the client</h2>
+              <p className="mb-3 mt-1 text-sm text-slate-600">
+                {clientReview
+                  ? "Thanks — this helps other pros know what to expect."
+                  : "How was working with this client? Your rating helps other pros decide which jobs to take."}
+              </p>
               {clientReview ? (
                 <div>
                   <StarRating value={clientReview.rating} readonly />
@@ -620,15 +639,22 @@ export function ProJobDetailPage() {
             </section>
           )}
 
-          {job.status === "open" && !myBid && (
+          {job.status === "open" && (!myBid || myBid.status === "withdrawn") && (
             <form
               id="bid-form"
               ref={bidFormRef}
               onSubmit={onBid}
               className="card p-6 space-y-3 scroll-mt-24"
             >
-              <h2 className="font-semibold text-lg">Place a bid</h2>
-              <p className="text-xs text-slate-500">You must be admin-verified to bid.</p>
+              <h2 className="font-semibold text-lg">{myBid ? "Bid again" : "Place a bid"}</h2>
+              {myBid ? (
+                <p className="text-sm text-slate-600" data-testid="rebid-note">
+                  You withdrew your earlier bid of {money(myBid.quoteAmount ?? myBid.amount)}. A new bid replaces
+                  it, and the client can see your previous offer in the quote history.
+                </p>
+              ) : (
+                <p className="text-xs text-slate-500">You must be admin-verified to bid.</p>
+              )}
               {bidFillPackages.length > 0 && (
                 <div className="rounded-xl bg-violet-50/70 p-3 ring-1 ring-violet-100 space-y-2">
                   <p className="text-xs font-semibold text-violet-950">

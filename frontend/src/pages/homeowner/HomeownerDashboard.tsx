@@ -8,6 +8,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { categoryEmoji, categoryGroups, categoryLabel, fmtDate, money } from "../../lib/format";
 import { Plus, Search } from "lucide-react";
 import { OnboardingChecklist } from "../../components/OnboardingChecklist";
+import { PendingReviewsCard } from "../../components/PendingReviewsCard";
 import { useAuth } from "../../auth/AuthContext";
 import { clientPath } from "../../lib/paths";
 import { saveRepeatDraft } from "../../lib/repeatJob";
@@ -82,6 +83,7 @@ export function HomeownerDashboard() {
         </Link>
       }
     >
+      <PendingReviewsCard />
       <OnboardingChecklist
         variant="client"
         title="Client getting started"

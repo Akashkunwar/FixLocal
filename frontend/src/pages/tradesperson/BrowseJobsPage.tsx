@@ -11,6 +11,7 @@ import { useToast } from "../../components/Toast";
 import { Bookmark, MapPin, Search } from "lucide-react";
 import clsx from "clsx";
 import { OnboardingChecklist } from "../../components/OnboardingChecklist";
+import { PendingReviewsCard } from "../../components/PendingReviewsCard";
 import { proPath } from "../../lib/paths";
 
 const SAVED_KEY = "fixlocal:savedJobSearch";
@@ -191,6 +192,7 @@ export function BrowseJobsPage() {
           </p>
         </div>
       )}
+      <PendingReviewsCard />
       <OnboardingChecklist
         variant="pro"
         title="Professional getting started"

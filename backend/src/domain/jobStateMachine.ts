@@ -92,6 +92,10 @@ export async function restoreJobStatus(manager: EntityManager, jobId: string, st
   if (rows[0]?.status !== S.DISPUTED) {
     throw conflict("Job is not in dispute", "INVALID_STATUS", { status: rows[0]?.status ?? null });
   }
-  await manager.update(Job, { id: jobId }, { status: target });
+  // Back to "awaiting confirmation" means a fresh confirmation window: otherwise the
+  // auto-confirm worker would release the escrow on its next tick using the old timestamp.
+  const patch: Partial<Job> = { status: target };
+  if (target === S.PENDING_CONFIRMATION) patch.pendingConfirmationAt = new Date();
+  await manager.update(Job, { id: jobId }, patch);
   return target;
 }

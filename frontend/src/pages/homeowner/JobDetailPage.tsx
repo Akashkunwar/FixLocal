@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Shell } from "../../components/Shell";
 import { mediaUrl } from "../../api/jobs";
 import { Badge } from "../../components/ui/Badge";
@@ -44,6 +45,8 @@ export function JobDetailPage() {
     job,
     load,
     loading,
+    loadError,
+    reload,
     navigate,
     onCancel,
     onComplete,
@@ -65,6 +68,25 @@ export function JobDetailPage() {
     user,
   } = s;
 
+  if (loadError && !job) {
+    return (
+      <Shell title="Job">
+        <div className="card p-6 text-slate-700" role="alert">
+          <p className="font-medium">We couldn't open this job.</p>
+          <p className="mt-1 text-sm text-slate-600">{loadError}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" className="btn-secondary" onClick={() => reload()}>
+              Try again
+            </button>
+            <Link to={clientPath()} className="btn-ghost">
+              Back to dashboard
+            </Link>
+          </div>
+        </div>
+      </Shell>
+    );
+  }
+
   if (loading || !job) {
     return (
       <Shell title="Job">
@@ -72,6 +94,16 @@ export function JobDetailPage() {
       </Shell>
     );
   }
+
+  const reviewPanel = (
+    <ReviewPanel
+      jobId={job.id}
+      review={review}
+      proReview={proReview}
+      onSaved={load}
+      proName={bids.find((b) => b.id === job.acceptedBidId)?.tradesperson?.name}
+    />
+  );
 
   const sortedBids = [...bids].sort(
     (a, b) => Number(a.amount || 0) - Number(b.amount || 0),
@@ -131,6 +163,7 @@ export function JobDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
+          {job.status === "completed" && !review && reviewPanel}
           <section className="card p-6 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge status={job.status} />
@@ -236,7 +269,11 @@ export function JobDetailPage() {
                 </>
               )}
               {job.status === "open" && (
-                <button type="button" className="btn-danger" onClick={onCancel}>
+                <button
+                  type="button"
+                  className="btn-ghost text-red-700 hover:bg-red-50"
+                  onClick={onCancel}
+                >
                   Cancel job
                 </button>
               )}
@@ -257,8 +294,9 @@ export function JobDetailPage() {
               >
                 The professional marked this job as done. Confirm to release the
                 remaining payment, or open a dispute if something isn't right.
-                It will be confirmed automatically in a few days if you don't
-                respond.
+                {job.autoConfirmAt
+                  ? `If you don't respond, it will be confirmed automatically on ${fmtDateTime(job.autoConfirmAt)}.`
+                  : "It will be confirmed automatically in a few days if you don't respond."}
               </p>
             )}
             {showDispute && (
@@ -340,20 +378,20 @@ export function JobDetailPage() {
             </section>
           ) : null}
 
+          {/* Once bids arrive they are the decision in front of the client, so they come first. */}
+          {bids.length > 0 && (
+            <BidComparePanel s={s} job={job} sortedBids={sortedBids} />
+          )}
+
           <ShortlistInvitePanel s={s} job={job} />
 
           <SuggestedProsPanel s={s} job={job} />
 
-          <BidComparePanel s={s} job={job} sortedBids={sortedBids} />
-
-          {job.status === "completed" && (
-            <ReviewPanel
-              jobId={job.id}
-              review={review}
-              proReview={proReview}
-              onSaved={load}
-            />
+          {bids.length === 0 && (
+            <BidComparePanel s={s} job={job} sortedBids={sortedBids} />
           )}
+
+          {job.status === "completed" && review && reviewPanel}
 
           {canMessage && (
             <JobConversations

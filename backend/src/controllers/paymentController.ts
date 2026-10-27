@@ -1,26 +1,18 @@
 import type { Request, Response } from "express";
 import { In } from "typeorm";
 import { AppDataSource } from "../data-source";
-import { Job, JobStatus } from "../entities/Job";
+import { Job } from "../entities/Job";
 import { MilestoneStatus, PaymentMilestone } from "../entities/PaymentMilestone";
 import { User } from "../entities/User";
 import { AuditAction, AuditLog } from "../entities/AuditLog";
 import { NotificationType } from "../entities/Notification";
 import { createNotification } from "../utils/notifications";
 import { toContactUser, toJob, toMilestone } from "../serializers";
-import { releaseMilestone as releaseMilestoneTx } from "../domain/escrow";
+import { milestoneReleaseBlock, releaseMilestone as releaseMilestoneTx } from "../domain/escrow";
 import { assertOwnerOrAdmin, assertPrivateAccess, loadJobContext } from "../policies/jobPolicy";
 import { viewer } from "./jobController";
-import { conflict } from "../http/errors";
 
 export { splitEscrow as previewEscrowSplit } from "../domain/escrow";
-
-const RELEASABLE: JobStatus[] = [
-  JobStatus.AWARDED,
-  JobStatus.IN_PROGRESS,
-  JobStatus.PENDING_CONFIRMATION,
-  JobStatus.COMPLETED,
-];
 
 export async function listMilestones(req: Request, res: Response) {
   const ctx = await loadJobContext(req.valid.params.id);
@@ -55,7 +47,11 @@ export async function listMilestones(req: Request, res: Response) {
     releasedTotal: sum([MilestoneStatus.RELEASED]),
     refundedTotal: sum([MilestoneStatus.REFUNDED]),
     remainingHeld: sum([MilestoneStatus.HELD, MilestoneStatus.PENDING]),
-    milestones: milestones.map(toMilestone),
+    milestones: milestones.map((m) => {
+      const open = m.status === MilestoneStatus.HELD || m.status === MilestoneStatus.PENDING;
+      const block = open ? milestoneReleaseBlock(m.sequence, milestones.length, job.status) : null;
+      return { ...toMilestone(m), releaseBlockedReason: block?.message ?? null };
+    }),
     parties: {
       homeowner: toContactUser(byId.get(job.homeownerId)),
       tradesperson: ctx.acceptedProId ? toContactUser(byId.get(ctx.acceptedProId)) : null,
@@ -74,9 +70,7 @@ export async function listMilestones(req: Request, res: Response) {
 export async function releaseMilestone(req: Request, res: Response) {
   const ctx = await loadJobContext(req.valid.params.id);
   assertOwnerOrAdmin(ctx, viewer(req), "Only the client can release payments");
-  if (!RELEASABLE.includes(ctx.job.status)) {
-    throw conflict("Payments can't be released in the job's current status", "INVALID_STATUS");
-  }
+  // Stage checks (dispute freeze, "money follows the work") run inside the transaction under the job lock.
   const result = await AppDataSource.transaction((m) =>
     releaseMilestoneTx(m, ctx.job, req.valid.params.milestoneId, req.user!.id)
   );

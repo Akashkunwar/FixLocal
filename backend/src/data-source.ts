@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import "dotenv/config";
+import "./loadEnv";
 import path from "path";
 import { DataSource } from "typeorm";
 import { ALL_ENTITIES } from "./entities";

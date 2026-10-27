@@ -4,7 +4,7 @@ import { AppDataSource } from "../data-source";
 import { Job } from "../entities/Job";
 import { Favorite, FavoriteTargetType } from "../entities/Favorite";
 import { TradespersonProfile, VerificationStatus } from "../entities/TradespersonProfile";
-import { scoreProForJob, type ScoreablePro } from "../utils/matchScore";
+import { boostedScore, scoreProForJob, type ScoreablePro } from "../utils/matchScore";
 import { getMatchWeights, getHeatWeight, computeHeatBoost, getShortlistInviteMinHeat } from "../utils/matchWeights";
 import { buildResponseSla } from "../utils/responseSla";
 import { loadJobToBidSamples } from "../utils/proSlaBatch";
@@ -98,7 +98,7 @@ export async function suggestedProsForJob(req: Request, res: Response) {
       reviewCount: p.reviewCount || 0,
       score: breakdown.total,
       heatBoost,
-      rankedScore: Math.round((breakdown.total + heatBoost) * 10) / 10,
+      rankedScore: boostedScore(breakdown.total, heatBoost),
       breakdown,
       responseSla: buildResponseSla({ jobHours: h }),
       availabilityHeat,
@@ -164,7 +164,7 @@ export async function shortlistRankedForJob(req: Request, res: Response) {
       tagHits,
       tagBoost,
       score: breakdown.total,
-      smartScore: Math.round((breakdown.total + tagBoost) * 10) / 10,
+      smartScore: boostedScore(breakdown.total, tagBoost),
       breakdown,
       responseSla: buildResponseSla({ jobHours: h }),
       availabilityHeat: heat,

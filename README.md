@@ -39,6 +39,7 @@ Main ideas:
 - **Auth**: a short-lived access token (15 min) kept only in memory, plus a rotating refresh token in an `httpOnly` cookie (`fl_refresh`, path `/api/auth`). Reusing an old refresh token revokes the whole session family. Changing the password, "sign out everywhere", suspension and account deletion revoke everything at once.
 - **Authorization** lives in `backend/src/policies`: one place decides who can see a job (full details, listing only, or nothing), who can post in which chat thread, and who can act at each job stage. A table-driven test checks 840 action × state × actor combinations.
 - **Job lifecycle** is a state machine: `open → awarded → in_progress → pending_confirmation → completed`, plus `cancelled` and `disputed`. The pro marks work done; the client confirms (or it auto-confirms after `AUTO_CONFIRM_DAYS`), which releases any remaining escrow.
+- **Money follows the work**: the client can release the Deposit once a pro is hired, Progress once work has started, and Completion once the pro has marked the work done. Confirming completion (or an admin dispute ruling) releases whatever is left. Nothing can be released while a dispute is open; these checks run under the job's row lock. When a dispute is closed with "no action" and the job goes back to awaiting confirmation, the auto-confirm clock restarts.
 - **Money** is recorded in a ledger (`ledger_entries`); earnings and admin totals come from the ledger, not from bid amounts. Accepting a bid, releasing milestones and confirming completion use row locks and optional `Idempotency-Key` headers, so double clicks and races can't double-pay.
 - **Chat** is one private thread per (job, professional). Live updates use server-sent events with one-time tickets (no tokens in URLs), with polling as a fallback.
 - **Schema changes** go through migrations only (`synchronize` is off).
@@ -144,11 +145,11 @@ Frontend settings ([`frontend/.env.example`](frontend/.env.example)):
 
 | Command | What it covers |
 | --- | --- |
-| `cd backend && npm test` | 174 API tests on a throwaway database (`fixlocal_test`, Redis DB 15): every audit finding's repro, an 840-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), and a sweep proving no GET request changes any table |
+| `cd backend && npm test` | 186 API tests on a throwaway database (`fixlocal_test`, Redis DB 15; only DB connection settings are read from `backend/.env`): every audit finding's repro, escrow timing (stage gates, dispute freeze, auto-confirm after a dispute), an 840-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), and a sweep proving no GET request changes any table |
 | `cd backend && npm run test:coverage` | The same with a coverage report |
 | `cd backend && npm run test:tz` | Date logic under three server time zones (UTC, IST, US Pacific) |
-| `cd frontend && npm test` | UI unit tests: token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary |
-| `cd frontend && npm run test:e2e` | 28 Playwright tests in a real browser against a real API |
+| `cd frontend && npm test` | UI unit tests: bid comparison (highlights, sorting, budget fit), token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary |
+| `cd frontend && npm run test:e2e` | 31 Playwright tests in a real browser against a real API |
 | `npm run lint` / `npm run typecheck` | In both packages; lint fails on any warning |
 
 The end-to-end suite starts its own API on port **3101** with a fresh `fixlocal_e2e` database (Redis DB 14), and a Vite server on port **5174**. It never touches the development database or the servers on 3001/5173. The first run needs `npx playwright install chromium`.
@@ -157,11 +158,11 @@ The E2E journeys cover:
 
 1. Client sign-up, email verification, and the job wizard with photos and a map pin.
 2. Pro sign-up, pending verification, licence upload, admin verification, filters, saved search, and a bid with a quote PDF.
-3. Bid comparison, counter-offer, pro revision, and acceptance with the escrow split.
+3. Bid comparison (at-a-glance table, highlights, sorting), counter-offer, pro revision, and acceptance with the escrow split.
 4. A quote changing between page load and acceptance.
 5. Scheduling and calendar export.
 6. Private chat threads, attachments, live updates, and polling fallback.
-7. Start work, before/after photos, mark done, confirm, reviews both ways, and the invoice.
+7. Stage-gated milestone release, start work, before/after photos, mark done, the auto-confirm date, confirm, reviews both ways, and the invoice.
 8. A dispute with evidence and a refund.
 9. Admin tools: stats, suspension, force-cancel, and audit rollback.
 10. Invites and declines.
@@ -169,7 +170,7 @@ The E2E journeys cover:
 12. AMC (maintenance contract) proposals.
 13. Settings.
 14. Session expiry and logout.
-15. Mobile layout.
+15. Mobile layout, including comparing bids on a phone.
 16. Public pages and legacy URLs.
 
 Plus: each role is redirected away from other roles' pages, pending pros see why they can't bid, portfolio and case-study editing, bid withdrawal, server errors when posting a job, the admin availability gate, and the "schedule not published" label.
@@ -195,7 +196,8 @@ npm run legacy:smoke
 - Uploads: file type is checked from the file's content (JPG, PNG, WebP, PDF only). Images are re-encoded (removing EXIF/GPS) and stored under random names. Private files (job photos, chat attachments, dispute evidence, licences) are served only to people allowed to see them, through signed URLs that expire; portfolio images and avatars are public.
 - Contact details (email, phone, exact address, licence document) are only shown to people who need them: the hired pro, the client who hired them, and admins.
 - A professional awaiting verification can see the open-jobs list (title, category, area, budget, approximate location) so they know what the platform offers, but not job details, exact addresses or client contacts, and they can't bid until an admin verifies them.
-- helmet security headers, a CORS allowlist, request IDs in logs, and graceful shutdown.
+- The web app (nginx) sends a strict Content-Security-Policy (`script-src 'self'`, `frame-ancestors 'none'`), `X-Frame-Options: DENY` and a Permissions-Policy, so the hire and payment buttons can't be framed.
+- helmet security headers on the API, a CORS allowlist, request IDs in logs, and graceful shutdown.
 - Admin actions (verification, suspension, disputes, force-cancel, weight changes) are written to an audit log.
 
 ## Project layout

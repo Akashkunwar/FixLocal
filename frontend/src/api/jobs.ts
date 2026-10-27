@@ -55,6 +55,8 @@ export type Job = {
   acceptedBidId?: string | null;
   photoConsent?: boolean;
   pendingConfirmationAt?: string | null;
+  /** When the job confirms itself (and releases the rest of the escrow) if the client doesn't respond. */
+  autoConfirmAt?: string | null;
   completedAt?: string | null;
   createdAt: string;
   unavailable?: boolean;
@@ -160,6 +162,11 @@ export type Bid = {
     lng?: number | null;
     yearsExperience?: number | null;
     verificationStatus?: string;
+    bio?: string | null;
+    avatarUrl?: string | null;
+    galleryPreview?: string[];
+    completedJobs?: number;
+    latestReview?: { rating: number; comment: string; createdAt: string } | null;
   } | null;
 };
 
@@ -172,6 +179,8 @@ export type PaymentMilestone = {
   percent: number;
   status: string;
   releasedAt?: string | null;
+  /** Why this milestone can't be released yet (stage gate or dispute freeze); null when it can. */
+  releaseBlockedReason?: string | null;
 };
 
 export type JobPayments = {

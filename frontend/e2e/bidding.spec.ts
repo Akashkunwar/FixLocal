@@ -33,8 +33,18 @@ test("client compares bids, counters, pro revises, client accepts and escrow is 
 
   await login(page, SEEDED.client);
   await page.goto(`/client/jobs/${job.id}`);
+  // The at-a-glance comparison names the standout bids; deeper tools are one click away.
+  const glance = page.getByTestId("bid-glance");
+  await expect(glance.getByRole("table")).toBeVisible();
+  await expect(glance.getByRole("table").getByText("Lowest price")).toBeVisible();
+  await expect(glance.getByRole("table").getByText("Best value")).toBeVisible();
+  await expect(page.getByText("Escrow what-if · side-by-side")).toBeHidden();
+  await page.getByText("More comparison tools").click();
   await expect(page.getByText("Escrow what-if · side-by-side")).toBeVisible();
-  await expect(page.getByText("Best value").first()).toBeVisible();
+
+  // Sorting by price puts the cheaper bid first.
+  await page.getByLabel("Sort bids").selectOption("price");
+  await expect(page.locator('li[id^="bid-"]').first()).toHaveAttribute("id", `bid-${first.id}`);
 
   // Counter-offer with a template chip.
   const card = page.locator(`#bid-${first.id}`);

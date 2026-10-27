@@ -29,6 +29,7 @@ export function AdminStatsPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [match, setMatch] = useState<MatchQualitySummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([getAdminStats(), getMatchQuality().catch(() => null)])
@@ -36,12 +37,17 @@ export function AdminStatsPage() {
         setStats(s.stats);
         if (m) setMatch(m.summary);
       })
+      .catch((e: Error) => setLoadError(e.message || "Couldn't load stats"))
       .finally(() => setLoading(false));
   }, []);
 
   return (
     <Shell title="Admin overview" subtitle="Marketplace health at a glance">
-      {loading || !stats ? (
+      {loadError && !stats ? (
+        <p className="card p-6 text-sm text-slate-700" role="alert">
+          {loadError}
+        </p>
+      ) : loading || !stats ? (
         <Spinner />
       ) : (
         <div className="space-y-8">

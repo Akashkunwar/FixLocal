@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiCall, apiLogin, awardedJob, login, logout, registerViaApi, SEEDED } from "./fixtures";
+import { apiCall, apiLogin, awardedJob, login, logout, postJob, registerViaApi, SEEDED } from "./fixtures";
 
 test("AMC: pro proposes and the client counters; client requests and the pro accepts (journey 12)", async ({ page, browser, request }) => {
   const client = await apiLogin(request, SEEDED.client);
@@ -173,5 +173,28 @@ test.describe("mobile (journey 15)", () => {
     await expect(page.getByText("Mobile hello")).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeVisible();
     expect(await noSideScroll()).toBe(true);
+  });
+
+  test("comparing bids on a phone: swipeable summary, compact progress, no sideways scroll", async ({ page, request }) => {
+    const client = await apiLogin(request, SEEDED.client);
+    const pro = await apiLogin(request, SEEDED.pro);
+    const pro2 = await apiLogin(request, SEEDED.pro2);
+    const job = await postJob(request, client);
+    const a = await apiCall<{ bid: { id: string } }>(request, pro, "post", `/api/jobs/${job.id}/bids`, { amount: 2500, etaDays: 1 });
+    await apiCall(request, pro2, "post", `/api/jobs/${job.id}/bids`, { amount: 1800, etaDays: 3 });
+
+    await login(page, SEEDED.client);
+    await page.goto(`/client/jobs/${job.id}`);
+    await expect(page.getByText(/Step 1 of 5/)).toBeVisible();
+    const strip = page.getByRole("list", { name: "Bids at a glance" });
+    await expect(strip).toBeVisible();
+    await expect(strip.getByText("Lowest price")).toBeVisible();
+    await expect(strip.getByText("Fastest")).toBeVisible();
+    // The table is for wide screens only.
+    await expect(page.getByTestId("bid-glance").getByRole("table")).toBeHidden();
+    await expect(page.locator(`#bid-${a.bid.id}`).getByRole("button", { name: /Accept/ })).toBeVisible();
+    const nav = page.getByRole("navigation", { name: "Mobile primary" });
+    await expect(nav.getByRole("link", { name: "Find pros" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   });
 });

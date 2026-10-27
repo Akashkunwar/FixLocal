@@ -230,7 +230,12 @@ export function PaymentPanel({
               </div>
               <div className="flex items-center gap-2 self-stretch sm:self-auto">
                 <Badge status={m.status} />
-                {canRelease && isNext && m.status !== "released" && m.status !== "refunded" && (
+                {canRelease && isNext && m.status !== "released" && m.status !== "refunded" && m.releaseBlockedReason && (
+                  <span className="text-[11px] text-slate-500 sm:max-w-56 sm:text-right" data-testid="release-locked">
+                    {m.releaseBlockedReason}
+                  </span>
+                )}
+                {canRelease && isNext && m.status !== "released" && m.status !== "refunded" && !m.releaseBlockedReason && (
                   <button
                     type="button"
                     className="btn-primary btn-sm flex-1 sm:flex-none touch-target"

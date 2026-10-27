@@ -100,6 +100,16 @@ test("completion: start, photos, mark done, confirm, escrow release, two-way rev
   const pro = await apiLogin(request, SEEDED.pro);
   const { job } = await awardedJob(request, client, pro, 4000);
 
+  // Money follows the work: before work starts only the deposit can be released.
+  await login(page, SEEDED.client);
+  await page.goto(`/client/jobs/${job.id}`);
+  await expect(page.getByText("2. Progress")).toBeVisible();
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Release" }).click();
+  await expect(page.getByText("Deposit released")).toBeVisible();
+  await expect(page.getByTestId("release-locked")).toHaveText(/once the professional starts work/);
+  await expect(page.getByRole("button", { name: "Release" })).toHaveCount(0);
+
   const proPage = await (await browser.newContext()).newPage();
   await login(proPage, SEEDED.pro);
   await proPage.goto(`/professional/jobs/${job.id}`);
@@ -112,9 +122,9 @@ test("completion: start, photos, mark done, confirm, escrow release, two-way rev
   await proPage.getByRole("button", { name: "Mark work done" }).click();
   await expect(proPage.getByText(/waiting for the client|pending confirmation|Waiting for/i).first()).toBeVisible();
 
-  await login(page, SEEDED.client);
   await page.goto(`/client/jobs/${job.id}`);
   await expect(page.getByText("The professional marked this job as done")).toBeVisible();
+  await expect(page.getByText(/confirmed automatically on/)).toBeVisible();
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Confirm work is complete" }).click();
   await expect(page.getByText(/remaining payment milestone\(s\) released|Job marked completed/)).toBeVisible();
@@ -122,11 +132,18 @@ test("completion: start, photos, mark done, confirm, escrow release, two-way rev
   const pay = await apiCall<{ milestones: { status: string }[] }>(request, client, "get", `/api/jobs/${job.id}/payments`);
   expect(pay.milestones.map((m) => m.status)).toEqual(["released", "released", "released"]);
 
+  // The dashboard prompts for a review, and the deep link lands on the review form at the top.
+  await page.goto("/client");
+  await expect(page.getByTestId("pending-reviews")).toBeVisible();
+  await page.goto(`/client/jobs/${job.id}#review`);
+  await expect(page.getByRole("heading", { name: /How did it go/ })).toBeVisible();
+
   // Client reviews the pro.
   await page.getByRole("radio", { name: "4 stars" }).click();
   await page.getByLabel("Review comment").fill("Quick and tidy.");
   await page.getByRole("button", { name: "Submit review" }).click();
   await expect(page.getByText("Quick and tidy.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your review" })).toBeVisible();
 
   // Pro reviews the client.
   await proPage.reload();

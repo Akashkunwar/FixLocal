@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import markerIconUrl from "leaflet/dist/images/marker-icon.png";
+import markerIconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
+import markerShadowUrl from "leaflet/dist/images/marker-shadow.png";
 
 /** Bengaluru demo centre */
 export const BLR_CENTER = { lat: 12.9716, lng: 77.5946 };
@@ -14,11 +17,11 @@ const TILE_ATTRIBUTION =
 
 const DEFAULT_ZOOM = 12;
 
-// Fix default marker icons under Vite (broken relative paths)
+// Leaflet's default icon paths break under Vite; bundle the PNGs instead of loading them from a CDN.
 const markerIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconUrl: markerIconUrl,
+  iconRetinaUrl: markerIconRetinaUrl,
+  shadowUrl: markerShadowUrl,
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
@@ -87,9 +90,11 @@ export function MapPinPicker({ lat, lng, onChange, height = 260, className }: Pr
     }
 
     // Leaflet needs a paint before sizing correctly in some layouts
-    setTimeout(() => map.invalidateSize(), 80);
+    // (cleared on unmount: invalidating a removed map throws "_leaflet_pos" errors)
+    const sizeTimer = window.setTimeout(() => map.invalidateSize(), 80);
 
     return () => {
+      window.clearTimeout(sizeTimer);
       map.remove();
       mapRef.current = null;
       markerRef.current = null;

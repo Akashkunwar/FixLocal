@@ -102,3 +102,38 @@ export async function getJobReview(req: Request, res: Response) {
   const pro = rows.find((r) => r.direction === ReviewDirection.PRO_TO_CLIENT);
   return res.json({ review: client ? toReview(client) : null, proReview: pro ? toReview(pro) : null });
 }
+
+/**
+ * Completed jobs where the signed-in user (client or hired pro) still owes a review.
+ * Drives the "How did it go?" prompt on the dashboards.
+ */
+export async function listPendingReviews(req: Request, res: Response) {
+  const v = viewer(req);
+  const asClient = v.role === UserRole.HOMEOWNER;
+  const direction = asClient ? ReviewDirection.CLIENT_TO_PRO : ReviewDirection.PRO_TO_CLIENT;
+  const rows: Array<{ jobId: string; title: string; completedAt: Date | null; counterpartId: string; counterpartName: string | null }> =
+    await AppDataSource.query(
+      `SELECT j."id" AS "jobId", j."title", j."completedAt",
+              ${asClient ? `b."tradespersonId"` : `j."homeownerId"`} AS "counterpartId",
+              u."name" AS "counterpartName"
+         FROM "jobs" j
+         JOIN "bids" b ON b."id" = j."acceptedBidId"
+         JOIN "users" u ON u."id" = ${asClient ? `b."tradespersonId"` : `j."homeownerId"`}
+        WHERE j."status" = $1
+          AND ${asClient ? `j."homeownerId"` : `b."tradespersonId"`} = $2
+          AND NOT EXISTS (SELECT 1 FROM "reviews" r WHERE r."jobId" = j."id" AND r."direction" = $3)
+        ORDER BY j."completedAt" DESC NULLS LAST
+        LIMIT 10`,
+      [JobStatus.COMPLETED, v.id, direction]
+    );
+  return res.json({
+    pending: rows.map((r) => ({
+      jobId: r.jobId,
+      title: r.title,
+      completedAt: r.completedAt,
+      counterpartId: r.counterpartId,
+      counterpartName: r.counterpartName || (asClient ? "Your professional" : "Your client"),
+      link: asClient ? `/client/jobs/${r.jobId}#review` : `/professional/jobs/${r.jobId}#review`,
+    })),
+  });
+}

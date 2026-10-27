@@ -1,6 +1,6 @@
 import { Bid } from "../entities/Bid";
 import { Dispute } from "../entities/Dispute";
-import { Job } from "../entities/Job";
+import { Job, JobStatus } from "../entities/Job";
 import { Message } from "../entities/Message";
 import { Notification } from "../entities/Notification";
 import { PaymentMilestone } from "../entities/PaymentMilestone";
@@ -10,6 +10,7 @@ import { User } from "../entities/User";
 import { NOTIFICATION_TYPE_VALUES } from "../domain/notificationTypes";
 import { publicUrl, publicUrls, signedUrl, signedUrls } from "../services/files";
 import type { JobAccess } from "../policies/jobPolicy";
+import { config } from "../config";
 
 const num = (v: unknown): number | null => {
   if (v === null || v === undefined || v === "") return null;
@@ -155,6 +156,10 @@ export function toJob(job: Job, access: Exclude<JobAccess, "none">) {
     scheduleNote: job.scheduleNote ?? null,
     photoConsent: !!job.photoConsent,
     pendingConfirmationAt: job.pendingConfirmationAt ?? null,
+    autoConfirmAt:
+      job.status === JobStatus.PENDING_CONFIRMATION && job.pendingConfirmationAt
+        ? new Date(new Date(job.pendingConfirmationAt).getTime() + config().autoConfirmDays * 86400_000)
+        : null,
     completedAt: job.completedAt ?? null,
   };
 }

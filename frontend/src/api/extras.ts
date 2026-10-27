@@ -180,3 +180,17 @@ export function removeFavorite(targetType: "job" | "pro", targetId: string) {
     { method: "DELETE" }
   );
 }
+
+export type PendingReview = {
+  jobId: string;
+  title: string;
+  completedAt: string | null;
+  counterpartId: string;
+  counterpartName: string;
+  link: string;
+};
+
+/** Completed jobs the signed-in client / hired pro still has to review. */
+export function listPendingReviews(signal?: AbortSignal) {
+  return api<{ pending: PendingReview[] }>("/api/reviews/pending", { signal });
+}
