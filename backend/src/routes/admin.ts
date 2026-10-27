@@ -18,12 +18,12 @@ router.get("/ping", (_req, res) => {
 router.get("/stats", admin.adminStats);
 router.get("/match-quality", admin.matchQualityLite);
 router.get("/match-weights", admin.getMatchWeightsConfig);
-router.put("/match-weights", admin.updateMatchWeightsConfig);
-router.patch("/match-weights", admin.updateMatchWeightsConfig);
+router.put("/match-weights", validate({ body: s.matchWeightsBody }), admin.updateMatchWeightsConfig);
+router.patch("/match-weights", validate({ body: s.matchWeightsBody }), admin.updateMatchWeightsConfig);
 router.post("/match-weights/rollback", validate({ body: s.rollbackBody }), admin.rollbackMatchWeightsFromAudit);
 router.post("/best-value-blend/rollback", validate({ body: s.rollbackBody }), admin.rollbackBestValueBlendFromAudit);
-router.get("/best-value-blend/preview", admin.previewBestValueBlend);
-router.post("/best-value-blend/preview", admin.previewBestValueBlend);
+router.get("/best-value-blend/preview", validate({ query: s.bestValuePreviewQuery }), admin.previewBestValueBlend);
+router.post("/best-value-blend/preview", validate({ query: s.bestValuePreviewQuery, body: s.bestValuePreviewBody }), admin.previewBestValueBlend);
 router.get("/users", validate({ query: s.listUsersQuery }), admin.listUsers);
 router.patch("/users/:id/suspend", validate({ params: idParams, body: s.suspendBody }), admin.setUserSuspended);
 router.get("/tradespeople", validate({ query: s.listTradespeopleQuery }), admin.listTradespeople);

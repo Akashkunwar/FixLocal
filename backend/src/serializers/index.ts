@@ -283,6 +283,12 @@ export function toReview(r: Review) {
   };
 }
 
+/** Reviews on a public profile: no reviewer id and no job title (those identify the client). */
+export function toPublicReview(r: Review) {
+  const { reviewerId: _reviewer, jobTitle: _title, ...rest } = toReview(r);
+  return rest;
+}
+
 export function toNotification(n: Notification) {
   return {
     id: n.id,

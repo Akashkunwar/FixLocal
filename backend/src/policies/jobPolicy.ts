@@ -5,8 +5,7 @@ import { Upload, UploadKind } from "../entities/Upload";
 import { UserRole } from "../entities/User";
 import { forbidden, notFound } from "../http/errors";
 import { PUBLIC_KINDS } from "../services/files";
-import { AppDataSource as DS } from "../data-source";
-import { TradespersonProfile } from "../entities/TradespersonProfile";
+import { getAuthState } from "../auth/authState";
 
 export type Viewer = {
   id: string;
@@ -56,12 +55,9 @@ export async function bidOf(jobId: string, proId: string): Promise<Bid | null> {
   return AppDataSource.getRepository(Bid).findOne({ where: { jobId, tradespersonId: proId } });
 }
 
+/** The same cached lookup requireAuth uses, so there is one source for "is this pro verified". */
 export async function isProVerified(userId: string): Promise<boolean> {
-  const p = await DS.getRepository(TradespersonProfile).findOne({
-    where: { userId },
-    select: { id: true, verificationStatus: true },
-  });
-  return p?.verificationStatus === "verified";
+  return (await getAuthState(userId))?.proVerified === true;
 }
 
 /** Parties: the client, the awarded professional, and admins. Full detail (address, schedule, money). */

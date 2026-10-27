@@ -66,7 +66,8 @@ export async function listMilestones(req: Request, res: Response) {
       action: a.action,
       summary: a.summary || "",
       snippet: String((a.meta as Record<string, unknown> | undefined)?.note || a.summary || "").slice(0, 240),
-      actorEmail: a.actorEmail || null,
+      // Who on the FixLocal team wrote it stays internal; parties see the team as one.
+      actorEmail: a.actorEmail ? "FixLocal support" : null,
       createdAt: a.createdAt,
     })),
   });

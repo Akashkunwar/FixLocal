@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { api, client, createJob, png, pro, rows, uniqueEmail } from "./helpers";
+import { admin, api, awardedJob, client, createJob, png, pro, rows, uniqueEmail } from "./helpers";
 import { consoleMailer } from "../src/services/mailer";
 import { config, overrideConfig } from "../src/config";
 import { logSms, setMessagingProvider } from "../src/services/messaging";
@@ -118,5 +118,76 @@ describe("auth scan regressions", () => {
     } finally {
       overrideConfig({ rateLimitEnabled: false });
     }
+  });
+
+  it("L3 parties see admin notes as from FixLocal support, not an admin's email", async () => {
+    const { owner, job } = await awardedJob();
+    const a = await admin();
+    await api().post("/api/admin/audit-notes").set(a.auth).send({ note: "Checked the photos", targetType: "job", targetId: job.id }).expect(201);
+    const res = await api().get(`/api/jobs/${job.id}/payments`).set(owner.auth).expect(200);
+    const note = res.body.auditNotes.find((n: { snippet: string }) => n.snippet.includes("Checked the photos"));
+    expect(note.actorEmail).toBe("FixLocal support");
+    expect(JSON.stringify(res.body)).not.toContain(a.user.email);
+  });
+
+  it("L4 reviews on a public profile don't name the reviewer's id or the job", async () => {
+    const { owner, worker, job } = await awardedJob({ stage: "completed" });
+    await api().post("/api/reviews").set(owner.auth).send({ jobId: job.id, rating: 5, comment: "Great work" }).expect(201);
+    const stranger = await client();
+    for (const res of [
+      await api().get(`/api/profile/user/${worker.user.id}`),
+      await api().get(`/api/reviews/pro/${worker.user.id}`).set(stranger.auth),
+    ]) {
+      expect(res.status).toBe(200);
+      expect(res.body.reviews).toHaveLength(1);
+      expect(res.body.reviews[0].rating).toBe(5);
+      expect(res.body.reviews[0].reviewerId).toBeUndefined();
+      expect(res.body.reviews[0].jobTitle).toBeUndefined();
+    }
+    const own = await api().get(`/api/reviews/pro/${worker.user.id}`).set(worker.auth).expect(200);
+    expect(own.body.reviews[0].jobTitle).toBe(job.title);
+  });
+
+  it("L5 file downloads ignore a token whose role no longer matches the account", async () => {
+    const owner = await client();
+    const created = await api()
+      .post("/api/jobs")
+      .set(owner.auth)
+      .field("title", "Photo job for L5")
+      .field("description", "Leaking pipe under the sink, see photo")
+      .field("category", "plumbing")
+      .field("city", "Bengaluru")
+      .attach("photos", await png(), "p.png")
+      .expect(201);
+    const url = String(created.body.job.photoUrls[0]).split("?")[0];
+    expect((await api().get(url)).status).toBe(401);
+    expect((await api().get(url).set(owner.auth)).status).toBe(200);
+    await rows(`UPDATE "users" SET "role" = 'TRADESPERSON' WHERE "id" = $1`, [owner.user.id]);
+    const { invalidateAuthState } = await import("../src/auth/authState");
+    await invalidateAuthState(owner.user.id);
+    expect((await api().get(url).set(owner.auth)).status).toBe(401);
+  });
+
+  it("removing a case study deletes its own photos but keeps gallery photos", async () => {
+    const { owner, worker, job } = await awardedJob({ stage: "in_progress" });
+    await api().post(`/api/jobs/${job.id}/completion-photos`).set(worker.auth).attach("after", await png(), { filename: "a.png", contentType: "image/png" }).expect(200);
+    await api().post(`/api/jobs/${job.id}/mark-done`).set(worker.auth).expect(200);
+    await api().post(`/api/jobs/${job.id}/confirm`).set(owner.auth).expect(200);
+    await api().post(`/api/jobs/${job.id}/photo-consent`).set(owner.auth).send({ consent: true }).expect(200);
+    const pub = await api().post(`/api/jobs/${job.id}/publish-case-study`).set(worker.auth).send({ title: "Sink fixed" }).expect(200);
+    const url = pub.body.caseStudy.afterUrl as string;
+    expect((await api().get(url)).status).toBe(200);
+    await api().patch("/api/profile").set(worker.auth).send({ caseStudies: [] }).expect(200);
+    expect((await api().get(url)).status).toBe(404);
+  });
+
+  it("admin matching settings reject bad numbers and unknown presets", async () => {
+    const a = await admin();
+    for (const body of [{ skills: "lots" }, { weights: { rating: 500 } }, { preset: "bogus" }, { heatWeight: 99 }, { bestValueBlend: { matchPct: -1 } }]) {
+      const res = await api().put("/api/admin/match-weights").set(a.auth).send(body);
+      expect(res.status, JSON.stringify(body)).toBe(400);
+    }
+    expect((await api().get("/api/admin/best-value-blend/preview?matchPct=abc").set(a.auth)).status).toBe(400);
+    expect((await api().get("/api/admin/best-value-blend/preview?matchPct=60&pricePct=40").set(a.auth)).status).toBe(200);
   });
 });

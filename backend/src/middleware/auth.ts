@@ -26,22 +26,43 @@ function checkState(state: AuthState | null): AuthState {
   return state;
 }
 
-/** Bearer access token only (never from the query string). */
-export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
-  const token = bearer(req);
-  if (!token) return next(unauthorized("Missing or invalid token"));
+/** The account behind a bearer token, with every check requireAuth makes; throws HttpErrors. */
+async function stateFromToken(token: string): Promise<AuthState> {
   let claims;
   try {
     claims = verifyAccessToken(token);
   } catch {
-    return next(unauthorized("Invalid or expired token", "TOKEN_EXPIRED"));
+    throw unauthorized("Invalid or expired token", "TOKEN_EXPIRED");
   }
   const state = checkState(await getAuthState(claims.sub));
   if (state.tokenVersion !== claims.tv || state.role !== claims.role) {
-    return next(unauthorized("Session is no longer valid", "TOKEN_REVOKED"));
+    throw unauthorized("Session is no longer valid", "TOKEN_REVOKED");
   }
-  attach(req, state);
+  return state;
+}
+
+/** Bearer access token only (never from the query string). */
+export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
+  const token = bearer(req);
+  if (!token) return next(unauthorized("Missing or invalid token"));
+  try {
+    attach(req, await stateFromToken(token));
+  } catch (err) {
+    return next(err);
+  }
   next();
+}
+
+/** For handlers that accept but don't need a session (file downloads): the viewer, or null. */
+export async function bearerViewer(req: Request): Promise<{ id: string; role: UserRole; proVerified: boolean } | null> {
+  const token = bearer(req);
+  if (!token) return null;
+  try {
+    const state = await stateFromToken(token);
+    return { id: state.id, role: state.role, proVerified: state.proVerified };
+  } catch {
+    return null;
+  }
 }
 
 /**

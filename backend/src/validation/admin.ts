@@ -42,3 +42,31 @@ export const rollbackBody = z.object({ auditLogId: id });
 export const forceCancelBody = z.object({ reason: optionalText(500) });
 
 export { id };
+
+// ---- matching settings (admin): every number checked here, not silently clamped later ----
+
+/** A percentage or weight 0-100; "" and null mean "leave unchanged", as the controller treats them. */
+const pct = z.union([z.literal(""), z.null(), z.coerce.number().finite().min(0).max(100)]).optional();
+const matchPresets = ["balanced", "speed", "quality", "availability"] as const;
+const blendPresets = ["match_heavy", "price_heavy", "balanced_sla"] as const;
+
+const weightsShape = { skills: pct, rating: pct, response: pct, distance: pct };
+const blendShape = { matchPct: pct, pricePct: pct, slaHeatPct: pct };
+
+export const matchWeightsBody = z.object({
+  preset: z.enum(matchPresets).nullish(),
+  weights: z.object(weightsShape).nullish(),
+  ...weightsShape,
+  heatWeight: z.union([z.literal(""), z.null(), z.coerce.number().finite().min(0).max(20)]).optional(),
+  shortlistInviteMinHeat: pct,
+  bestValueBlendPreset: z.enum(blendPresets).nullish(),
+  blendPreset: z.enum(blendPresets).nullish(),
+  bestValueBlend: z.object(blendShape).nullish(),
+  ...blendShape,
+});
+
+export const bestValuePreviewQuery = z.object({ ...blendShape, limit: z.coerce.number().int().min(1).max(12).optional() });
+export const bestValuePreviewBody = z
+  .object({ ...blendShape, bestValueBlend: z.object(blendShape).nullish(), limit: z.coerce.number().int().min(1).max(12).optional() })
+  .optional()
+  .default({});

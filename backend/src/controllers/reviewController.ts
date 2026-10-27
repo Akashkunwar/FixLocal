@@ -6,7 +6,7 @@ import { TradespersonProfile } from "../entities/TradespersonProfile";
 import { User, UserRole } from "../entities/User";
 import { NotificationType } from "../entities/Notification";
 import { createNotification } from "../utils/notifications";
-import { toReview } from "../serializers";
+import { toPublicReview, toReview } from "../serializers";
 import { assertPrivateAccess, isAwardedPro, isOwner, loadJobContext } from "../policies/jobPolicy";
 import { viewer } from "./jobController";
 import { conflict, forbidden, notFound } from "../http/errors";
@@ -77,7 +77,9 @@ export async function listReviewsForPro(req: Request, res: Response) {
     order: { createdAt: "DESC" },
     take: 50,
   });
-  return res.json({ reviews: rows.map(toReview) });
+  // Any signed-in user can read these: the pro themself and admins get full rows, others the public shape.
+  const full = req.user!.role === UserRole.ADMIN || req.user!.id === req.valid.params.userId;
+  return res.json({ reviews: rows.map(full ? toReview : toPublicReview) });
 }
 
 /** Pros can see how a client has been rated by other professionals. */
