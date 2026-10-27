@@ -99,7 +99,9 @@ test("a professional replies publicly to a review", async ({ page, request }) =>
   expect(await audit(page, "pro profile with reply")).toEqual([]);
 
   // The client sees it too.
-  const seen = await apiCall<{ reviews: { comment: string; reply: string | null }[] }>(request, client, "get", `/api/profile/user/${pro.id}`);
+  // Fresh token: e2e access tokens last 20 s.
+  const again = await apiLogin(request, client.email);
+  const seen = await apiCall<{ reviews: { comment: string; reply: string | null }[] }>(request, again, "get", `/api/profile/user/${pro.id}`);
   expect(seen.reviews.find((r) => r.comment === comment)?.reply).toContain("Outer Ring Road");
 });
 
@@ -123,6 +125,7 @@ test("an office client adds a GSTIN that shows on the payment summary", async ({
   await expect(card.getByLabel("GSTIN")).toHaveValue("27AAPFU0939F1ZV");
   expect(await audit(page, "settings business card")).toEqual([]);
 
-  const pay = await apiCall<{ parties: { homeowner: { businessName: string; gstin: string } } }>(request, pro, "get", `/api/jobs/${job.id}/payments`);
+  const proAgain = await apiLogin(request, SEEDED.pro2); // e2e access tokens last 20 s
+  const pay = await apiCall<{ parties: { homeowner: { businessName: string; gstin: string } } }>(request, proAgain, "get", `/api/jobs/${job.id}/payments`);
   expect(pay.parties.homeowner).toMatchObject({ businessName: "Acme Interiors LLP", gstin: "27AAPFU0939F1ZV" });
 });

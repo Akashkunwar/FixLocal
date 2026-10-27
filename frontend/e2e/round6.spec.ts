@@ -122,8 +122,10 @@ for (const size of [
     // Switching back to English there syncs to the account too.
     await phone.getByRole("button", { name: /View in English/ }).first().click();
     await expect(phone.getByRole("heading", { level: 1, name: "My jobs" })).toBeVisible();
+    // The API token from the start of the test may have expired by now (20 s in e2e): log in again.
+    const fresh = await apiLogin(request, client.email);
     await expect
-      .poll(async () => (await apiCall<{ user: { language: string } }>(request, client, "get", "/api/auth/me")).user.language)
+      .poll(async () => (await apiCall<{ user: { language: string } }>(request, fresh, "get", "/api/auth/me")).user.language)
       .toBe("en");
     await other.close();
 
