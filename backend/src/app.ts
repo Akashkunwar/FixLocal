@@ -35,7 +35,8 @@ export function createApp(): Express {
   const cfg = config();
   const app = express();
   app.disable("x-powered-by");
-  if (cfg.trustProxy) app.set("trust proxy", 1);
+  // A hop count, not "true": trusting every X-Forwarded-For entry would let clients pick their own IP.
+  if (cfg.trustProxy > 0) app.set("trust proxy", cfg.trustProxy);
 
   app.use(
     pinoHttp({

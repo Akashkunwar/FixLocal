@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import type { Server } from "http";
-import { config } from "./config";
+import { config, loadDbConfig } from "./config";
 import { logger } from "./logger";
 import { AppDataSource } from "./data-source";
 import { closeCache, initCache } from "./utils/cache";
@@ -22,6 +22,29 @@ process.on("uncaughtException", (err) => {
   setTimeout(() => process.exit(1), 500).unref();
 });
 
+/** Arbitrary constant for pg_advisory_lock: one API replica migrates at a time, the rest wait. */
+const MIGRATION_LOCK_KEY = 7_340_021;
+
+async function migrateIfAllowed() {
+  if (!(await AppDataSource.showMigrations())) return;
+  if (!loadDbConfig().migrationsRun) {
+    throw new Error("Database has pending migrations. Run `npm run db:migrate` (or set MIGRATIONS_RUN=true).");
+  }
+  const runner = AppDataSource.createQueryRunner();
+  await runner.connect();
+  try {
+    await runner.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
+    // Another replica may have finished them while this one waited for the lock.
+    if (await AppDataSource.showMigrations()) {
+      await AppDataSource.runMigrations({ transaction: "each" });
+      logger.info("Database migrations applied");
+    }
+  } finally {
+    await runner.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]).catch(() => undefined);
+    await runner.release();
+  }
+}
+
 async function start() {
   const cfg = config();
   initErrorReporter();
@@ -29,15 +52,7 @@ async function start() {
     logger.warn("MAIL_PROVIDER=console in production: verification and password-reset emails are NOT delivered");
   }
   await AppDataSource.initialize();
-  const pending = await AppDataSource.showMigrations();
-  if (pending) {
-    if (process.env.MIGRATIONS_RUN === "true") {
-      await AppDataSource.runMigrations({ transaction: "each" });
-      logger.info("Database migrations applied");
-    } else {
-      throw new Error("Database has pending migrations. Run `npm run db:migrate` (or set MIGRATIONS_RUN=true).");
-    }
-  }
+  await migrateIfAllowed();
   logger.info("Database connected");
   ensureUploadDirs();
   await initCache();
