@@ -1,4 +1,4 @@
-import { Suspense, lazy, type ComponentType, type ReactNode } from "react";
+import { Suspense, lazy, type ComponentType } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -8,6 +8,8 @@ import { Spinner } from "./components/ui/Spinner";
 import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { CLIENT_ROOT, LEGACY_CLIENT_ROOT, LEGACY_PRO_ROOT, PRO_ROOT } from "./lib/paths";
+import { useI18n } from "./lib/i18n";
+import { Keyed } from "./components/Keyed";
 
 function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) {
   return lazy(() => load().then((m) => ({ default: m[name] })));
@@ -47,30 +49,31 @@ const JobAlertsPage = page(() => import("./pages/tradesperson/JobAlertsPage"), "
 
 const ANY: Role[] = ["ADMIN", "HOMEOWNER", "TRADESPERSON"];
 
-const PROTECTED: { path: string; allow: Role[]; element: ReactNode }[] = [
-  { path: "/notifications", allow: ANY, element: <NotificationsPage /> },
-  { path: "/settings", allow: ANY, element: <SettingsPage /> },
-  { path: "/admin", allow: ["ADMIN"], element: <AdminStatsPage /> },
-  { path: "/admin/users", allow: ["ADMIN"], element: <AdminUsersPage /> },
-  { path: "/admin/tradespeople", allow: ["ADMIN"], element: <AdminTradespeoplePage /> },
-  { path: "/admin/disputes", allow: ["ADMIN"], element: <AdminDisputesPage /> },
-  { path: "/admin/reports", allow: ["ADMIN"], element: <AdminReportsPage /> },
-  { path: "/admin/jobs", allow: ["ADMIN"], element: <AdminJobsPage /> },
-  { path: "/admin/audit", allow: ["ADMIN"], element: <AdminAuditPage /> },
-  { path: "/admin/match", allow: ["ADMIN"], element: <AdminMatchPage /> },
-  { path: CLIENT_ROOT, allow: ["HOMEOWNER"], element: <HomeownerDashboard /> },
-  { path: `${CLIENT_ROOT}/jobs/new`, allow: ["HOMEOWNER"], element: <CreateJobPage /> },
-  { path: `${CLIENT_ROOT}/jobs/:id`, allow: ["HOMEOWNER"], element: <JobDetailPage /> },
-  { path: `${CLIENT_ROOT}/pros`, allow: ["HOMEOWNER"], element: <FindProsPage /> },
-  { path: `${CLIENT_ROOT}/spending`, allow: ["HOMEOWNER"], element: <SpendingPage /> },
-  { path: `${CLIENT_ROOT}/favorites`, allow: ["HOMEOWNER"], element: <FavoritesPage /> },
-  { path: PRO_ROOT, allow: ["TRADESPERSON"], element: <BrowseJobsPage /> },
-  { path: `${PRO_ROOT}/jobs/:id`, allow: ["TRADESPERSON"], element: <ProJobDetailPage /> },
-  { path: `${PRO_ROOT}/my-jobs`, allow: ["TRADESPERSON"], element: <MyJobsPage /> },
-  { path: `${PRO_ROOT}/profile`, allow: ["TRADESPERSON"], element: <ProfilePage /> },
-  { path: `${PRO_ROOT}/analytics`, allow: ["TRADESPERSON"], element: <AnalyticsPage /> },
-  { path: `${PRO_ROOT}/alerts`, allow: ["TRADESPERSON"], element: <JobAlertsPage /> },
-  { path: `${PRO_ROOT}/favorites`, allow: ["TRADESPERSON"], element: <FavoritesPage /> },
+/** Routes are built per render (not module constants) so a language switch re-renders every page. */
+const PROTECTED: { path: string; allow: Role[]; Page: ComponentType; keyBy?: string }[] = [
+  { path: "/notifications", allow: ANY, Page: NotificationsPage },
+  { path: "/settings", allow: ANY, Page: SettingsPage },
+  { path: "/admin", allow: ["ADMIN"], Page: AdminStatsPage },
+  { path: "/admin/users", allow: ["ADMIN"], Page: AdminUsersPage },
+  { path: "/admin/tradespeople", allow: ["ADMIN"], Page: AdminTradespeoplePage },
+  { path: "/admin/disputes", allow: ["ADMIN"], Page: AdminDisputesPage },
+  { path: "/admin/reports", allow: ["ADMIN"], Page: AdminReportsPage },
+  { path: "/admin/jobs", allow: ["ADMIN"], Page: AdminJobsPage },
+  { path: "/admin/audit", allow: ["ADMIN"], Page: AdminAuditPage },
+  { path: "/admin/match", allow: ["ADMIN"], Page: AdminMatchPage },
+  { path: CLIENT_ROOT, allow: ["HOMEOWNER"], Page: HomeownerDashboard },
+  { path: `${CLIENT_ROOT}/jobs/new`, allow: ["HOMEOWNER"], Page: CreateJobPage },
+  { path: `${CLIENT_ROOT}/jobs/:id`, allow: ["HOMEOWNER"], Page: JobDetailPage, keyBy: "id" },
+  { path: `${CLIENT_ROOT}/pros`, allow: ["HOMEOWNER"], Page: FindProsPage },
+  { path: `${CLIENT_ROOT}/spending`, allow: ["HOMEOWNER"], Page: SpendingPage },
+  { path: `${CLIENT_ROOT}/favorites`, allow: ["HOMEOWNER"], Page: FavoritesPage },
+  { path: PRO_ROOT, allow: ["TRADESPERSON"], Page: BrowseJobsPage },
+  { path: `${PRO_ROOT}/jobs/:id`, allow: ["TRADESPERSON"], Page: ProJobDetailPage, keyBy: "id" },
+  { path: `${PRO_ROOT}/my-jobs`, allow: ["TRADESPERSON"], Page: MyJobsPage },
+  { path: `${PRO_ROOT}/profile`, allow: ["TRADESPERSON"], Page: ProfilePage },
+  { path: `${PRO_ROOT}/analytics`, allow: ["TRADESPERSON"], Page: AnalyticsPage },
+  { path: `${PRO_ROOT}/alerts`, allow: ["TRADESPERSON"], Page: JobAlertsPage },
+  { path: `${PRO_ROOT}/favorites`, allow: ["TRADESPERSON"], Page: FavoritesPage },
 ];
 
 function PageLoader() {
@@ -97,6 +100,7 @@ function LegacyRedirect({ from, to }: { from: string; to: string }) {
 
 export default function App() {
   const location = useLocation();
+  useI18n(); // re-render the route tree (not remount it) when the language changes
   return (
     <ErrorBoundary resetKey={location.pathname}>
       <Suspense fallback={<PageLoader />}>
@@ -111,12 +115,22 @@ export default function App() {
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           {/* Public so profiles can be shared and indexed; contact details stay hidden server-side. */}
-          <Route path="/pros/:userId" element={<ProPublicPage />} />
+          <Route path="/pros/:userId" element={<Keyed param="userId"><ProPublicPage /></Keyed>} />
           {PROTECTED.map((r) => (
             <Route
               key={r.path}
               path={r.path}
-              element={<ProtectedRoute allow={r.allow}>{r.element}</ProtectedRoute>}
+              element={
+                <ProtectedRoute allow={r.allow}>
+                  {r.keyBy ? (
+                    <Keyed param={r.keyBy}>
+                      <r.Page />
+                    </Keyed>
+                  ) : (
+                    <r.Page />
+                  )}
+                </ProtectedRoute>
+              }
             />
           ))}
           <Route path={`${LEGACY_CLIENT_ROOT}/*`} element={<LegacyRedirect from={LEGACY_CLIENT_ROOT} to={CLIENT_ROOT} />} />
