@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shell } from "../components/Shell";
 import { TemplateEditor } from "../components/TemplateEditor";
@@ -11,13 +11,14 @@ import { LanguageSettings } from "../components/LanguageSettings";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/Toast";
 import { changePassword, deleteAccount, logoutEverywhere } from "../api/client";
-import { DEFAULT_NOTIF_PREFS, NOTIF_PREF_META, mergeNotifPrefs, type NotifPrefKey } from "../lib/notifPrefs";
+import { NOTIF_PREF_META, mergeNotifPrefs, type NotifPrefKey } from "../lib/notifPrefs";
 import { DEFAULT_INVITE_STARTERS, mergeInviteTemplates } from "../lib/inviteTemplates";
 import { DEFAULT_COUNTER_STARTERS, mergeCounterTemplates } from "../lib/counterTemplates";
 import { DEFAULT_HOMEOWNER_COUNTER_NOTES, mergeHomeownerCounterNotes } from "../lib/homeownerCounterNotes";
 import { DEFAULT_INTRO_STARTERS, mergeIntroTemplates } from "../lib/introTemplates";
 import { deleteNamedJobTemplate, mergeNamedJobTemplates } from "../lib/namedJobTemplates";
 import { t } from "../lib/i18n";
+import { useServerField } from "../lib/useServerField";
 
 function supportedZones(): string[] {
   try {
@@ -41,13 +42,14 @@ export function SettingsPage() {
   const { success, error } = useToast();
   const navigate = useNavigate();
 
-  const [name, setName] = useState(user?.name || "");
-  const [phone, setPhone] = useState(user?.phone || "");
-  const [timezone, setTimezone] = useState(user?.timezone || "Asia/Kolkata");
+  // Each card keeps its own unsaved edits when another card saves and `user` changes.
+  const [name, setName] = useServerField(user?.name || "");
+  const [phone, setPhone] = useServerField(user?.phone || "");
+  const [timezone, setTimezone] = useServerField(user?.timezone || "Asia/Kolkata");
   const [busy, setBusy] = useState(false);
-  const [prefs, setPrefs] = useState(DEFAULT_NOTIF_PREFS);
+  const [prefs, setPrefs] = useServerField(mergeNotifPrefs(user?.notificationPrefs));
   const [prefsBusy, setPrefsBusy] = useState(false);
-  const [nudgeHours, setNudgeHours] = useState("4");
+  const [nudgeHours, setNudgeHours] = useServerField(user?.quoteViewNudgeHours != null ? String(user.quoteViewNudgeHours) : "4");
   const [nudgeBusy, setNudgeBusy] = useState(false);
   const [namedBusy, setNamedBusy] = useState(false);
 
@@ -59,14 +61,6 @@ export function SettingsPage() {
 
   const zones = useMemo(() => timeZones(user?.timezone), [user?.timezone]);
   const namedJobs = useMemo(() => mergeNamedJobTemplates(user?.namedJobTemplates), [user?.namedJobTemplates]);
-
-  useEffect(() => {
-    setName(user?.name || "");
-    setPhone(user?.phone || "");
-    setTimezone(user?.timezone || "Asia/Kolkata");
-    setPrefs(mergeNotifPrefs(user?.notificationPrefs));
-    if (user?.quoteViewNudgeHours != null) setNudgeHours(String(user.quoteViewNudgeHours));
-  }, [user]);
 
   if (!user) return null;
   const isClient = user.role === "HOMEOWNER";
