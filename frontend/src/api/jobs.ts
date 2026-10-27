@@ -389,7 +389,7 @@ export function mediaUrl(path: string | null | undefined) {
   return `${API_URL}${path}`;
 }
 
-export function listJobs(params: Record<string, string | undefined> = {}) {
+export function listJobs(params: Record<string, string | undefined> = {}, signal?: AbortSignal) {
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
     if (v) qs.set(k, v);
@@ -398,7 +398,7 @@ export function listJobs(params: Record<string, string | undefined> = {}) {
   return api<{
     jobs: Job[];
     pagination: { total: number; page: number; totalPages: number };
-  }>(`/api/jobs${q ? `?${q}` : ""}`);
+  }>(`/api/jobs${q ? `?${q}` : ""}`, { signal });
 }
 
 export function getJob(id: string, signal?: AbortSignal) {

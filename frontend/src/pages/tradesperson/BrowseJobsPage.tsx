@@ -16,6 +16,9 @@ import { OnboardingChecklist } from "../../components/OnboardingChecklist";
 import { PendingReviewsCard } from "../../components/PendingReviewsCard";
 import { proPath } from "../../lib/paths";
 import { t } from "../../lib/i18n";
+import { useRequestGuard } from "../../lib/useQuery";
+import { errorText } from "../../lib/apiErrors";
+import { isAbort } from "../../api/client";
 
 const SAVED_KEY = "fixlocal:savedJobSearch";
 
@@ -56,8 +59,14 @@ export function BrowseJobsPage() {
   const [verification, setVerification] = useState<string | null>(null);
   const [availabilitySet, setAvailabilitySet] = useState(false);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const beginLoad = useRequestGuard();
+
+  /** Latest search wins: an older, slower answer never replaces the newer filter's results. */
   async function load(f: Facets = facets, origin: Near = near) {
+    const { signal, isCurrent } = beginLoad();
     setLoading(true);
+    setLoadError(null);
     try {
       const r = await listJobs({
         q: f.q || undefined,
@@ -71,10 +80,12 @@ export function BrowseJobsPage() {
         urgent: f.urgent ? "true" : undefined,
         nearLat: origin?.lat != null ? String(origin.lat) : undefined,
         nearLng: origin?.lng != null ? String(origin.lng) : undefined,
-      });
-      setJobs(r.jobs);
+      }, signal);
+      if (isCurrent()) setJobs(r.jobs);
+    } catch (err) {
+      if (isCurrent() && !isAbort(err)) setLoadError(errorText(err, "Couldn't load jobs"));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }
 
@@ -390,6 +401,13 @@ export function BrowseJobsPage() {
       </div>
       {loading ? (
         <Spinner />
+      ) : loadError ? (
+        <div className="card p-5 text-sm" role="alert">
+          <p className="font-medium text-rose-800">{loadError}</p>
+          <button type="button" className="btn-secondary btn-sm mt-3" onClick={() => load()}>
+            {t("Try again")}
+          </button>
+        </div>
       ) : jobs.length === 0 ? (
         <EmptyState
           title={t("No open jobs")}

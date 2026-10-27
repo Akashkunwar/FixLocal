@@ -7,7 +7,8 @@ import {
   type ChatMessage,
 } from "../api/extras";
 import { mediaUrl } from "../api/jobs";
-import { ApiError } from "../api/client";
+import { ApiError, isAbort } from "../api/client";
+import { useRequestGuard } from "../lib/useQuery";
 import { useAuth } from "../auth/AuthContext";
 import { fmtDateTime, initials, money } from "../lib/format";
 import { useToast } from "./Toast";
@@ -53,9 +54,13 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
   const introChips = mergeIntroTemplates(user?.role === "TRADESPERSON" ? user.introTemplates : null);
 
   /** "ok" | "error" (retry with backoff) | "denied" (stop: this viewer has no access). */
+  const beginLoad = useRequestGuard();
   const load = useCallback(async (): Promise<"ok" | "error" | "denied"> => {
+    // Latest load wins, and switching job/thread aborts the old one (fe-logic MED 13).
+    const { signal, isCurrent } = beginLoad();
     try {
-      const r = await listMessages(jobId, proId);
+      const r = await listMessages(jobId, proId, signal);
+      if (!isCurrent()) return "ok";
       setMessages(r.messages);
       setCanSend(r.canSend);
       setDenied(false);
@@ -64,13 +69,14 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
       }
       return "ok";
     } catch (e) {
+      if (!isCurrent() || isAbort(e)) return "ok"; // superseded by a newer load
       if (e instanceof ApiError && (e.status === 401 || e.status === 403 || e.status === 404 || e.status === 400)) {
         setDenied(true);
         return "denied";
       }
       return "error";
     }
-  }, [jobId, proId, user?.role]);
+  }, [jobId, proId, user?.role, beginLoad]);
 
   useEffect(() => {
     let stopped = false;

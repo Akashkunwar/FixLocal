@@ -25,7 +25,8 @@ export function JobConversations({ jobId, initialProId, hiredProId }: Props) {
           setThreads(r.threads);
           setSelected((cur) => cur || hiredProId || r.threads[0]?.tradespersonId);
         })
-        .catch(() => !cancelled && setThreads([]));
+        // A failed poll keeps what's on screen (and the open chat's unsent text) (fe-logic MED 14).
+        .catch(() => !cancelled && setThreads((prev) => prev ?? []));
     void load();
     const timer = window.setInterval(load, 60_000);
     return () => {
