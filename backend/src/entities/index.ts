@@ -21,6 +21,7 @@ export { Report } from "./Report";
 export { UserTemplate, TEMPLATE_KINDS } from "./UserTemplate";
 export { UserBlock } from "./UserBlock";
 export { JobAlert } from "./JobAlert";
+export { JobQuestion } from "./JobQuestion";
 export { OutboundMessage } from "./OutboundMessage";
 export { ReferralReward } from "./ReferralReward";
 export { CreditEntry } from "./CreditEntry";
@@ -50,6 +51,7 @@ import { Report } from "./Report";
 import { UserTemplate } from "./UserTemplate";
 import { UserBlock } from "./UserBlock";
 import { JobAlert } from "./JobAlert";
+import { JobQuestion } from "./JobQuestion";
 import { OutboundMessage } from "./OutboundMessage";
 import { ReferralReward } from "./ReferralReward";
 import { CreditEntry } from "./CreditEntry";
@@ -85,4 +87,5 @@ export const ALL_ENTITIES = [
   CreditEntry,
   ReferralReward,
   OutboundMessage,
+  JobQuestion,
 ];

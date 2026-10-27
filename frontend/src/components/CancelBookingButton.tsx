@@ -73,6 +73,13 @@ export function CancelBookingButton({ jobId, side, onDone }: Props) {
 /** Explains who called a booking off, and why. */
 export function CancellationNote({ cancelledBy, reason }: { cancelledBy?: string | null; reason?: string | null }) {
   if (!cancelledBy) return null;
+  if (cancelledBy === "system") {
+    return (
+      <p className="w-full rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700" role="status" data-testid="cancellation-note">
+        {t("This job closed automatically because nobody was hired in time. Repost it whenever you're ready.")}
+      </p>
+    );
+  }
   const who = cancelledBy === "client" ? "the client" : "the professional";
   return (
     <p className="w-full rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700" role="status" data-testid="cancellation-note">

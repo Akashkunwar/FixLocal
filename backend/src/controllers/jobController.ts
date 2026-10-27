@@ -1,7 +1,8 @@
+import { config } from "../config";
 import type { Request, Response } from "express";
 import { In } from "typeorm";
 import { AppDataSource } from "../data-source";
-import { Job, JobStatus } from "../entities/Job";
+import { Job, JobStatus, URGENT_WINDOW_HOURS } from "../entities/Job";
 import { Bid, BidStatus } from "../entities/Bid";
 import { UserRole } from "../entities/User";
 import { NotificationType } from "../entities/Notification";
@@ -75,6 +76,11 @@ export async function listJobs(req: Request, res: Response) {
   }
   if (query.category) qb.andWhere("job.category = :category", { category: query.category });
   if (query.siteType) qb.andWhere("job.siteType = :siteType", { siteType: query.siteType });
+  if (query.urgent) {
+    qb.andWhere(`job.urgent = true AND job.createdAt > :urgentSince`, {
+      urgentSince: new Date(Date.now() - URGENT_WINDOW_HOURS * 3600_000),
+    });
+  }
 
   const cityQ = String(query.city || "").trim();
   const nbhQ = String(query.neighborhood || query.area || "").trim();
@@ -188,6 +194,8 @@ export async function createJob(req: Request, res: Response) {
         siteType: b.siteType ?? null,
         cadence: b.cadence,
         cadenceNote: b.cadenceNote ?? null,
+        urgent: !!b.urgent,
+        expiresAt: new Date(Date.now() + config().jobExpiryDays * 86400_000),
         preferredStart: b.preferredStart,
         preferredEnd: b.preferredEnd,
         maxBids: b.maxBids,
@@ -249,7 +257,7 @@ export async function updateJob(req: Request, res: Response) {
   const b = req.valid.body;
   const patch: Partial<Job> = {};
   const editable = [
-    "title", "description", "category", "siteType", "cadence", "cadenceNote", "preferredStart",
+    "title", "description", "category", "siteType", "cadence", "cadenceNote", "urgent", "preferredStart",
     "preferredEnd", "maxBids", "budgetMin", "budgetMax", "address", "area", "city", "pincode", "lat", "lng",
   ] as const;
   for (const key of editable) {
@@ -318,6 +326,21 @@ export async function cancelJob(req: Request, res: Response) {
   );
   await invalidateOpenJobsCache();
   await revokeThreadStreams(ctx.job.id, null);
+  const fresh = await jobRepo().findOneOrFail({ where: { id: ctx.job.id } });
+  return res.json({ job: toJob(fresh, "private") });
+}
+
+/** Client keeps an open job listed for another full expiry window. */
+export async function keepJobOpen(req: Request, res: Response) {
+  const ctx = await loadJobContext(req.valid.params.id);
+  assertOwner(ctx, viewer(req));
+  const rows = await jobRepo()
+    .createQueryBuilder()
+    .update()
+    .set({ expiresAt: new Date(Date.now() + config().jobExpiryDays * 86400_000), expiryWarnedAt: null })
+    .where(`"id" = :id AND "status" = :open`, { id: ctx.job.id, open: JobStatus.OPEN })
+    .execute();
+  if (!rows.affected) throw conflict("Only open jobs can be kept open", "JOB_NOT_OPEN");
   const fresh = await jobRepo().findOneOrFail({ where: { id: ctx.job.id } });
   return res.json({ job: toJob(fresh, "private") });
 }

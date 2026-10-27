@@ -8,7 +8,7 @@ import { User } from "../entities/User";
 import { AuditAction, AuditLog } from "../entities/AuditLog";
 import { NotificationType } from "../entities/Notification";
 import { createNotification } from "../utils/notifications";
-import { toContactUser, toJob, toMilestone } from "../serializers";
+import { toBillingParty, toJob, toMilestone } from "../serializers";
 import { milestoneReleaseBlock, releaseMilestone as releaseMilestoneTx } from "../domain/escrow";
 import { assertOwnerOrAdmin, assertPrivateAccess, loadJobContext } from "../policies/jobPolicy";
 import { viewer } from "./jobController";
@@ -58,8 +58,8 @@ export async function listMilestones(req: Request, res: Response) {
       return { ...toMilestone(m), releaseBlockedReason: block?.message ?? null };
     }),
     parties: {
-      homeowner: toContactUser(byId.get(job.homeownerId)),
-      tradesperson: ctx.acceptedProId ? toContactUser(byId.get(ctx.acceptedProId)) : null,
+      homeowner: toBillingParty(byId.get(job.homeownerId)),
+      tradesperson: ctx.acceptedProId ? toBillingParty(byId.get(ctx.acceptedProId)) : null,
     },
     auditNotes: auditLogs.map((a) => ({
       id: a.id,

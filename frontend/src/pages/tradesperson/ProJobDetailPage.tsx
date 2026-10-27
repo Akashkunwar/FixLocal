@@ -1,3 +1,5 @@
+import { UrgentBadge } from "../../components/UrgentBadge";
+import { JobQuestionsPanel } from "../../components/JobQuestionsPanel";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Shell } from "../../components/Shell";
@@ -569,6 +571,7 @@ export function ProJobDetailPage() {
           <section className="card p-6 space-y-3">
             <div className="flex flex-wrap gap-2">
               <Badge status={job.status} />
+              {job.urgent && <UrgentBadge />}
               {job.paymentStatus && isAwardedToMe && (
                 <Badge status={job.paymentStatus} />
               )}
@@ -684,6 +687,8 @@ export function ProJobDetailPage() {
               </form>
             )}
           </section>
+
+          <JobQuestionsPanel jobId={job.id} />
 
           {isAwardedToMe && liveWork && (
             <SchedulePanel

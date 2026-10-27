@@ -137,3 +137,27 @@ export async function listPendingReviews(req: Request, res: Response) {
     })),
   });
 }
+
+/** The person reviewed answers publicly (or edits / removes their answer). The reviewer is told once. */
+export async function replyToReview(req: Request, res: Response) {
+  const v = viewer(req);
+  const review = await reviews().findOne({ where: { id: req.valid.params.id }, relations: ["job"] });
+  if (!review) throw notFound("Review not found");
+  if (review.revieweeId !== v.id) throw forbidden("Only the person reviewed can reply");
+  const text = (req.valid.body.reply as string).trim();
+  const first = !review.reply && !!text;
+  review.reply = text || null;
+  review.repliedAt = text ? new Date() : null;
+  await reviews().save(review);
+  if (first) {
+    await createNotification({
+      userId: review.reviewerId,
+      type: NotificationType.REVIEW,
+      title: "Reply to your review",
+      body: `You got a reply to your review on "${review.job?.title ?? "a job"}".`,
+      link: review.direction === ReviewDirection.CLIENT_TO_PRO ? `/pros/${review.revieweeId}` : `/professional/jobs/${review.jobId}`,
+      meta: { jobId: review.jobId, reviewId: review.id },
+    });
+  }
+  return res.json({ review: toReview(review) });
+}

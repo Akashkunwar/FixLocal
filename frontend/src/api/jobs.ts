@@ -58,8 +58,12 @@ export type Job = {
   /** When the job confirms itself (and releases the rest of the escrow) if the client doesn't respond. */
   autoConfirmAt?: string | null;
   completedAt?: string | null;
-  cancelledBy?: "client" | "professional" | null;
+  cancelledBy?: "client" | "professional" | "system" | null;
   cancellationReason?: string | null;
+  /** Posted as "needed within 24 hours" (shown for 48 hours after posting). */
+  urgent?: boolean;
+  /** An open job with no hire closes itself at this time unless the client keeps it open. */
+  expiresAt?: string | null;
   createdAt: string;
   unavailable?: boolean;
 };
@@ -196,8 +200,8 @@ export type JobPayments = {
   credit?: { appliedToPayment: number; addedToPayout: number } | null;
   milestones: PaymentMilestone[];
   parties?: {
-    homeowner?: { id: string; name?: string | null; email?: string } | null;
-    tradesperson?: { id: string; name?: string | null; email?: string } | null;
+    homeowner?: BillingParty | null;
+    tradesperson?: BillingParty | null;
   };
   auditNotes?: {
     id: string;
@@ -1019,10 +1023,15 @@ export function browsePros(params: Record<string, string | undefined> = {}) {
   return api<{ pros: TradespersonProfile[] }>(`/api/profile/browse${q ? `?${q}` : ""}`);
 }
 
+export type BillingParty = { id: string; name?: string | null; email?: string; businessName?: string | null; gstin?: string | null };
+
 export type PublicReview = {
   id: string;
   rating: number;
   comment?: string | null;
+  /** The professional's public reply. */
+  reply?: string | null;
+  repliedAt?: string | null;
   createdAt: string;
   jobTitle?: string;
   reviewerName: string;
@@ -1127,4 +1136,44 @@ export function getHomeownerCounterAnalytics() {
 
 export function getProCounterAnalytics() {
   return api<CounterAnalytics>("/api/profile/counter-analytics");
+}
+
+/** Public questions a professional asks before bidding; the client answers. */
+export type JobQuestion = {
+  id: string;
+  question: string;
+  answer: string | null;
+  answeredAt: string | null;
+  createdAt: string;
+  askedByYou: boolean;
+  /** Only the client (and admins) see who asked. */
+  askerName: string | null;
+  askerId: string | null;
+};
+
+export function listJobQuestions(jobId: string, signal?: AbortSignal) {
+  return api<{ questions: JobQuestion[]; canAsk: boolean; canAnswer: boolean }>(`/api/jobs/${jobId}/questions`, { signal });
+}
+
+export function askJobQuestion(jobId: string, question: string) {
+  return api<{ question: JobQuestion }>(`/api/jobs/${jobId}/questions`, { method: "POST", body: JSON.stringify({ question }) });
+}
+
+export function answerJobQuestion(jobId: string, questionId: string, answer: string) {
+  return api<{ question: JobQuestion }>(`/api/jobs/${jobId}/questions/${questionId}/answer`, {
+    method: "PUT",
+    body: JSON.stringify({ answer }),
+  });
+}
+
+export function deleteJobQuestion(jobId: string, questionId: string) {
+  return api<{ ok: true }>(`/api/jobs/${jobId}/questions/${questionId}`, { method: "DELETE" });
+}
+
+export function keepJobOpen(jobId: string) {
+  return api<{ job: Job }>(`/api/jobs/${jobId}/keep-open`, { method: "POST" });
+}
+
+export function replyToReview(reviewId: string, reply: string) {
+  return api<{ review: PublicReview }>(`/api/reviews/${reviewId}/reply`, { method: "PUT", body: JSON.stringify({ reply }) });
 }

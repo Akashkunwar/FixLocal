@@ -7,6 +7,7 @@ import { JobAlertDigests1790000000006 } from "../migrations/1790000000006-JobAle
 import { AccountLanguage1790000000007 } from "../migrations/1790000000007-AccountLanguage";
 import { ReferralCredits1790000000008 } from "../migrations/1790000000008-ReferralCredits";
 import { TextMessaging1790000000009 } from "../migrations/1790000000009-TextMessaging";
+import { Round71790000000010 } from "../migrations/1790000000010-Round7";
 
 /** Every migration in order (tests run exactly this list). */
 export const ALL_MIGRATIONS = [
@@ -19,4 +20,5 @@ export const ALL_MIGRATIONS = [
   AccountLanguage1790000000007,
   ReferralCredits1790000000008,
   TextMessaging1790000000009,
+  Round71790000000010,
 ];

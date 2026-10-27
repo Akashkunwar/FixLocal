@@ -1,7 +1,7 @@
 import { Bid } from "../entities/Bid";
 import { TERMS_VERSION } from "../domain/legal";
 import { Dispute } from "../entities/Dispute";
-import { Job, JobStatus } from "../entities/Job";
+import { isUrgentNow, Job, JobStatus } from "../entities/Job";
 import { Message } from "../entities/Message";
 import { Notification } from "../entities/Notification";
 import { PaymentMilestone } from "../entities/PaymentMilestone";
@@ -47,6 +47,8 @@ export function toSelfUser(user: User) {
     termsAccepted: user.termsVersion === TERMS_VERSION,
     timezone: user.timezone,
     language: user.language === "hi" ? "hi" : "en",
+    businessName: user.businessName ?? null,
+    gstin: user.gstin ?? null,
     notificationPrefs: mergedNotificationPrefs(user.notificationPrefs),
     emailNotifications: user.notificationPrefs?.email !== false,
     quoteViewNudgeHours:
@@ -72,6 +74,12 @@ export function toPublicUser(user: Pick<User, "id" | "name" | "role" | "avatarUr
 export function toContactUser(user: Pick<User, "id" | "name" | "email" | "phone" | "role"> | null | undefined) {
   if (!user) return null;
   return { id: user.id, name: user.name ?? null, email: user.email, phone: user.phone ?? null, role: user.role };
+}
+
+/** Contact plus business/GST details, for the parties on a payment summary. */
+export function toBillingParty(user: User | null | undefined) {
+  if (!user) return null;
+  return { ...toContactUser(user)!, businessName: user.businessName ?? null, gstin: user.gstin ?? null };
 }
 
 type ProfileView = "owner" | "public" | "admin";
@@ -124,6 +132,7 @@ export function toJob(job: Job, access: Exclude<JobAccess, "none">) {
     description: job.description,
     category: job.category,
     siteType: job.siteType ?? null,
+    urgent: isUrgentNow(job),
     cadence: job.cadence ?? null,
     cadenceNote: job.cadenceNote ?? null,
     preferredStart: job.preferredStart ?? null,
@@ -168,6 +177,7 @@ export function toJob(job: Job, access: Exclude<JobAccess, "none">) {
         ? new Date(new Date(job.pendingConfirmationAt).getTime() + config().autoConfirmDays * 86400_000)
         : null,
     completedAt: job.completedAt ?? null,
+    expiresAt: job.status === JobStatus.OPEN ? (job.expiresAt ?? null) : null,
     cancelledBy: job.cancelledBy ?? null,
     cancellationReason: job.cancellationReason ?? null,
   };
@@ -263,6 +273,8 @@ export function toReview(r: Review) {
     direction: r.direction,
     rating: r.rating,
     comment: r.comment ?? null,
+    reply: r.reply ?? null,
+    repliedAt: r.repliedAt ?? null,
     createdAt: r.createdAt,
     reviewerId: r.reviewerId,
     revieweeId: r.revieweeId,

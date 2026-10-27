@@ -46,3 +46,19 @@ describe("printMilestoneInvoice (L-1)", () => {
     expect(revoke).toHaveBeenCalledWith("blob:x");
   });
 });
+
+describe("GST details on the payment summary", () => {
+  it("prints each party's business name and GSTIN when set, escaped", async () => {
+    const { buildMilestoneInvoiceHtml } = await import("./invoice");
+    const html = buildMilestoneInvoiceHtml(job, {
+      ...payments,
+      parties: {
+        homeowner: { id: "c", name: "Asha", businessName: "Acme <Interiors> LLP", gstin: "27AAPFU0939F1ZV" },
+        tradesperson: { id: "p", name: "Ravi", businessName: null, gstin: null },
+      },
+    } as unknown as JobPayments);
+    expect(html).toContain("Acme &lt;Interiors&gt; LLP");
+    expect(html).toContain("GSTIN: 27AAPFU0939F1ZV");
+    expect(html.match(/GSTIN:/g)).toHaveLength(1);
+  });
+});

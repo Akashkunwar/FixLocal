@@ -60,6 +60,13 @@ export class Review {
   @Column({ type: "text", nullable: true })
   comment?: string;
 
+  /** Public reply from the person reviewed (one, editable). */
+  @Column({ type: "text", nullable: true })
+  reply?: string | null;
+
+  @Column({ type: "timestamptz", nullable: true })
+  repliedAt?: Date | null;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

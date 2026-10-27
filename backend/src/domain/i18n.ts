@@ -45,6 +45,11 @@ export const HI_TITLES: Record<string, string> = {
   "New jobs match your alerts": "आपके अलर्ट से मिलते नए काम",
   "You earned FixLocal credit": "आपको FixLocal क्रेडिट मिला",
   "Referral credit reversed": "रेफ़रल क्रेडिट वापस लिया गया",
+  "Reply to your review": "आपके रिव्यू का जवाब आया",
+  "New question on your job": "आपके काम पर नया सवाल",
+  "Your question was answered": "आपके सवाल का जवाब आया",
+  "Your job closes soon": "आपका काम जल्द बंद होगा",
+  "Job closed": "काम बंद हुआ",
 };
 
 export function localizeTitle(lang: Lang, title: string): string {

@@ -49,11 +49,11 @@ test("chat: each pro has a private thread, attachments work, and messages arrive
   await login(p1, SEEDED.pro);
   await p1.goto(`/professional/jobs/${job.id}`);
   await p1.getByRole("textbox", { name: "Message", exact: true }).fill("Hello from Arjun");
-  await p1.getByRole("button", { name: "Send" }).click();
+  await p1.getByRole("button", { name: "Send", exact: true }).click();
   await expect(p1.getByText("Hello from Arjun")).toBeVisible();
   await p1.locator('input[type="file"][multiple]').setInputFiles({ name: "leak.png", mimeType: "image/png", buffer: pngBytes(3) });
   await p1.getByRole("textbox", { name: "Message", exact: true }).fill("Photo of the fitting");
-  await p1.getByRole("button", { name: "Send" }).click();
+  await p1.getByRole("button", { name: "Send", exact: true }).click();
   await expect(p1.locator('img[src*="/api/files/"]').first()).toBeVisible();
 
   // Pro 2 sees only their own (empty) conversation.
@@ -63,7 +63,7 @@ test("chat: each pro has a private thread, attachments work, and messages arrive
   await expect(p2.getByRole("textbox", { name: "Message", exact: true })).toBeVisible();
   await expect(p2.getByText("Hello from Arjun")).toHaveCount(0);
   await p2.getByRole("textbox", { name: "Message", exact: true }).fill("Sneha here");
-  await p2.getByRole("button", { name: "Send" }).click();
+  await p2.getByRole("button", { name: "Send", exact: true }).click();
   await expect(p2.getByText("Sneha here")).toBeVisible();
 
   // The client switches between the two threads.

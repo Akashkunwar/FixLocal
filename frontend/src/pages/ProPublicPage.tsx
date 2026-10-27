@@ -25,6 +25,7 @@ import {
 import { normalizeCaseStudies } from "../lib/caseStudies";
 import { useToast } from "../components/Toast";
 import { useAuth } from "../auth/AuthContext";
+import { ReviewReply } from "../components/ReviewReply";
 import { BlockButton } from "../components/BlockButton";
 import { Heart, Send } from "lucide-react";
 import {
@@ -465,6 +466,11 @@ export function ProPublicPage() {
                     </div>
                     {r.comment && <p className="mt-1 text-sm text-slate-600">{r.comment}</p>}
                     {r.jobTitle && <p className="mt-1 text-xs text-slate-500">{t("Job:")}{" "}{r.jobTitle}</p>}
+                    <ReviewReply
+                      review={r}
+                      canReply={!!user && profile.userId === user.id}
+                      onChange={(next) => setReviews((list) => list.map((x) => (x.id === next.id ? next : x)))}
+                    />
                   </li>
                 ))}
               </ul>

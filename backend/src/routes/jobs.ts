@@ -7,6 +7,7 @@ import { idempotent } from "../middleware/idempotency";
 import { optionalMultipart, uploadCompletionPhotos, uploadEvidence, uploadJobPhotos, uploadQuoteAttachment } from "../middleware/upload";
 import { UserRole } from "../entities/User";
 import * as jobs from "../controllers/jobController";
+import * as questions from "../controllers/jobQuestionController";
 import * as invites from "../controllers/inviteController";
 import * as match from "../controllers/matchController";
 import * as status from "../controllers/jobStatusController";
@@ -54,6 +55,21 @@ router.get("/counter-analytics", requireRole(HOMEOWNER, ADMIN), validate({ query
 // Before "/:id": a client's spending and job history.
 router.get("/spending", requireRole(HOMEOWNER), getMySpending);
 router.get("/:id", params, jobs.getJob);
+router.get("/:id/questions", params, questions.listQuestions);
+router.post(
+  "/:id/questions",
+  requireRole(PRO),
+  limiter("messages"),
+  validate({ params: js.jobIdParams, body: js.askQuestionBody }),
+  questions.askQuestion
+);
+router.put(
+  "/:id/questions/:questionId/answer",
+  requireRole(HOMEOWNER),
+  validate({ params: js.jobQuestionParams, body: js.answerQuestionBody }),
+  questions.answerQuestion
+);
+router.delete("/:id/questions/:questionId", validate({ params: js.jobQuestionParams }), questions.deleteQuestion);
 router.patch(
   "/:id",
   requireRole(HOMEOWNER),
@@ -64,6 +80,7 @@ router.patch(
   jobs.updateJob
 );
 router.post("/:id/cancel", requireRole(HOMEOWNER), params, jobs.cancelJob);
+router.post("/:id/keep-open", requireRole(HOMEOWNER), params, jobs.keepJobOpen);
 router.post("/:id/photo-consent", requireRole(HOMEOWNER), validate({ params: js.jobIdParams, body: js.photoConsentBody }), jobs.setPhotoConsent);
 
 router.get("/:id/suggested-pros", requireRole(HOMEOWNER, ADMIN), validate({ params: js.jobIdParams, query: js.suggestedQuery }), match.suggestedProsForJob);

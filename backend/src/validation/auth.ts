@@ -1,3 +1,4 @@
+import { isValidGstin, normalizeGstin } from "../domain/gstin";
 import { z } from "zod";
 import { UserRole } from "../entities/User";
 import { email, nullableText, optionalInt, text } from "./common";
@@ -47,6 +48,11 @@ export const updateMeBody = z.object({
   emailNotifications: z.boolean().optional(),
   quoteViewNudgeHours: z.preprocess((v) => (v === "" ? null : v), optionalInt(1, 168).nullable()),
   language: z.enum(["en", "hi"]).optional(),
+  businessName: nullableText(120),
+  gstin: z.preprocess(
+    (v) => (typeof v === "string" ? (normalizeGstin(v) === "" ? null : normalizeGstin(v)) : v),
+    z.string().refine(isValidGstin, "Enter a valid 15-character GSTIN").nullable().optional()
+  ),
   smsOptIn: z.boolean().optional(),
   whatsappOptIn: z.boolean().optional(),
 });

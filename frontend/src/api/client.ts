@@ -40,6 +40,9 @@ export type User = {
   smsOptIn?: boolean;
   whatsappOptIn?: boolean;
   language?: "en" | "hi";
+  /** Optional business details printed on payment summaries. */
+  businessName?: string | null;
+  gstin?: string | null;
   avatarUrl?: string | null;
   emailVerified?: boolean;
   /** False until the user accepts the current Terms of Service / Privacy Policy. */
@@ -222,6 +225,8 @@ export function updateMe(body: {
   language?: "en" | "hi";
   smsOptIn?: boolean;
   whatsappOptIn?: boolean;
+  businessName?: string | null;
+  gstin?: string | null;
 }) {
   return api<{ user: User }>("/api/auth/me", { method: "PATCH", body: JSON.stringify(body) });
 }
