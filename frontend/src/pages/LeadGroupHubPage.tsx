@@ -1,3 +1,4 @@
+import { CategoryIcon, LeadGroupIcon } from "../components/CategoryIcon";
 import { useEffect } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { setPageMeta } from "../lib/site";
@@ -62,8 +63,8 @@ export function LeadGroupHubPage() {
         <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
           Category group
         </p>
-        <h1 className="mt-1 font-display text-3xl font-semibold text-slate-900 sm:text-4xl">
-          {lead?.emoji ? `${lead.emoji} ` : ""}
+        <h1 className="mt-1 flex items-center gap-3 font-display text-3xl font-semibold text-slate-900 sm:text-4xl">
+          <LeadGroupIcon group={group} size="lg" tile />
           {group}
         </h1>
         <p className="mt-3 max-w-2xl text-slate-600">{leadGroupBlurb(group)}</p>
@@ -88,8 +89,8 @@ export function LeadGroupHubPage() {
           <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {cats.map((c) => (
               <li key={c.value} className="card p-4 transition hover:shadow-lift">
-                <p className="font-semibold text-slate-900">
-                  <span className="mr-1.5">{c.emoji}</span>
+                <p className="flex items-center gap-2.5 font-semibold text-slate-900">
+                  <CategoryIcon category={c.value} size="md" tile />
                   {c.label}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -125,14 +126,13 @@ export function LeadGroupHubPage() {
           </h2>
           <div className="mt-3 flex flex-wrap gap-2" role="navigation" aria-label="Other lead groups">
             {LEAD_GROUPS.filter((g) => g !== group).map((g) => {
-              const emoji = categoriesForLeadGroup(g)[0]?.emoji || "🛠️";
               return (
                 <Link
                   key={g}
                   to={leadGroupHubPath(g)}
-                  className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 no-underline hover:bg-slate-50"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 no-underline hover:bg-slate-50"
                 >
-                  {emoji} {g}
+                  <LeadGroupIcon group={g} size="sm" /> {g}
                 </Link>
               );
             })}

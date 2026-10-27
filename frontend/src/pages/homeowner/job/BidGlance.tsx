@@ -1,3 +1,4 @@
+import { RatingStar } from "../../../components/ui/RatingStar";
 import type { Bid, Job } from "../../../api/jobs";
 import { money } from "../../../lib/format";
 import {
@@ -16,7 +17,8 @@ function Rating({ b }: { b: Bid }) {
   return (
     <span>
       <span className="font-semibold text-slate-800">
-        {p.averageRating.toFixed(1)}★
+        {p.averageRating.toFixed(1)}
+        <RatingStar className="ml-0.5" />
       </span>{" "}
       <span className="text-slate-500">({p.reviewCount})</span>
     </span>

@@ -1,3 +1,4 @@
+import { CategoryIcon } from "../../components/CategoryIcon";
 import { UrgentBadge } from "../../components/UrgentBadge";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -6,7 +7,7 @@ import { listJobs, getProfile, type Job } from "../../api/jobs";
 import { Badge } from "../../components/ui/Badge";
 import { Spinner } from "../../components/ui/Spinner";
 import { EmptyState } from "../../components/ui/EmptyState";
-import { categoryEmoji, categoryGroups, categoryLabel, fmtDate, money } from "../../lib/format";
+import { categoryGroups, categoryLabel, fmtDate, money } from "../../lib/format";
 import { SITE_TYPES, siteTypeLabel, type SiteType } from "../../lib/paths";
 import { useToast } from "../../components/Toast";
 import { BellRing, Bookmark, MapPin, Search, Zap } from "lucide-react";
@@ -251,7 +252,7 @@ export function BrowseJobsPage() {
               <optgroup key={group} label={t(group)}>
                 {cats.map((c) => (
                   <option key={c.value} value={c.value}>
-                    {c.emoji} {t(c.label)}
+                    {t(c.label)}
                   </option>
                 ))}
               </optgroup>
@@ -413,7 +414,7 @@ export function BrowseJobsPage() {
                 className="card flex flex-wrap items-center justify-between gap-4 p-5 no-underline text-inherit hover:shadow-lift transition"
               >
                 <div className="flex gap-3 min-w-0">
-                  <span className="text-2xl">{categoryEmoji(job.category)}</span>
+                  <CategoryIcon category={job.category} size="md" tile />
                   <div>
                     <p className="font-semibold text-slate-900">
                       {job.title}

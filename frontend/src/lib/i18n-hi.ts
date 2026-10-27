@@ -1301,4 +1301,7 @@ export const HI: Record<string, string> = {
   "Your question was answered": "आपके सवाल का जवाब आया",
   "Your job closes soon": "आपका काम जल्द बंद होगा",
   "Job closed": "काम बंद हुआ",
+
+  // Icons
+  "out of 5": "5 में से",
 };

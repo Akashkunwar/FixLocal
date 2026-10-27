@@ -1,3 +1,4 @@
+import { CategoryIcon } from "../../components/CategoryIcon";
 import { Link } from "react-router-dom";
 import { Shell } from "../../components/Shell";
 import { mediaUrl } from "../../api/jobs";
@@ -26,7 +27,6 @@ import {
   upsertNamedJobTemplate,
 } from "../../lib/namedJobTemplates";
 import {
-  categoryEmoji,
   categoryLabel,
   fmtDate,
   fmtDateTime,
@@ -158,11 +158,16 @@ export function JobDetailPage() {
   return (
     <Shell
       title={job.title}
-      subtitle={`${categoryEmoji(job.category)} ${categoryLabel(job.category)}${
-        job.cadence && normalizeCadence(job.cadence) !== "one_time"
-          ? ` · ${cadenceLabel(job.cadence)}`
-          : ""
-      } · Posted ${fmtDate(job.createdAt)}`}
+      subtitle={
+        <>
+          <CategoryIcon category={job.category} className="mr-1.5" />
+          {`${categoryLabel(job.category)}${
+            job.cadence && normalizeCadence(job.cadence) !== "one_time"
+              ? ` · ${cadenceLabel(job.cadence)}`
+              : ""
+          } · Posted ${fmtDate(job.createdAt)}`}
+        </>
+      }
       actions={
         <button
           type="button"

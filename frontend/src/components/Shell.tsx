@@ -95,7 +95,7 @@ export function Shell({
   children,
 }: {
   title?: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   /** Meta description for search results and link previews (defaults to the site description). */
   description?: string;
   actions?: React.ReactNode;

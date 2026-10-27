@@ -1,3 +1,4 @@
+import { CategoryIcon } from "../../components/CategoryIcon";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { BellRing, MapPin, Pause, Play, Trash2 } from "lucide-react";
@@ -153,7 +154,7 @@ export function JobAlertsPage() {
                         : "rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:border-brand-600"
                     }
                   >
-                    <span aria-hidden>{c.emoji} </span>
+                    <CategoryIcon category={c.value} size="xs" inherit className="mr-1" />
                     {t(c.label)}
                   </button>
                 );

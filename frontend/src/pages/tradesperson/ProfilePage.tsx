@@ -1,3 +1,4 @@
+import { CategoryIcon } from "../../components/CategoryIcon";
 import { FormEvent, useEffect, useState } from "react";
 import { Shell } from "../../components/Shell";
 import {
@@ -327,7 +328,8 @@ export function ProfilePage() {
                     setForm({ ...form, skills: next.join(", ") });
                   }}
                 >
-                  {c.emoji} {c.label}
+                  <CategoryIcon category={c.value} size="xs" inherit className="mr-1" />
+                  {c.label}
                 </button>
               );
             })}
@@ -364,7 +366,8 @@ export function ProfilePage() {
                     )
                   }
                 >
-                  {c.emoji} {c.label}
+                  <CategoryIcon category={c.value} size="xs" inherit className="mr-1" />
+                  {c.label}
                 </button>
               );
             })}
