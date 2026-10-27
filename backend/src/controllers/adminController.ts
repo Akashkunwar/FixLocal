@@ -16,7 +16,7 @@ import { createNotifications } from "../utils/notifications";
 import { revokeThreadStreams } from "../utils/sse";
 import { haversineKm } from "../utils/geo";
 import { boostedScore, scoreProForJob, type ScoreablePro } from "../utils/matchScore";
-import { getMatchWeights, setMatchWeights, weightsSum, DEFAULT_MATCH_WEIGHTS, MATCH_WEIGHT_PRESETS, detectMatchPreset, normalizeMatchWeights, getHeatWeight, setHeatWeight, DEFAULT_HEAT_WEIGHT, normalizeHeatWeight, computeHeatBoost, getBestValueBlend, setBestValueBlend, DEFAULT_BEST_VALUE_BLEND, blendsEqual, normalizeBestValueBlend, BEST_VALUE_BLEND_PRESETS, detectBestValueBlendPreset, getShortlistInviteMinHeat, setShortlistInviteMinHeat } from "../utils/matchWeights";
+import { getMatchWeights, setMatchWeights, weightsSum, DEFAULT_MATCH_WEIGHTS, MATCH_WEIGHT_PRESETS, detectMatchPreset, normalizeMatchWeights, getHeatWeight, setHeatWeight, DEFAULT_HEAT_WEIGHT, normalizeHeatWeight, computeHeatBoost, getBestValueBlend, setBestValueBlend, DEFAULT_BEST_VALUE_BLEND, blendsEqual, normalizeBestValueBlend, BEST_VALUE_BLEND_PRESETS, detectBestValueBlendPreset, getShortlistInviteMinHeat, setShortlistInviteMinHeat, normalizeShortlistMinHeat, saveConfigs, MATCH_WEIGHTS_KEY, SHORTLIST_MIN_HEAT_KEY, MATCH_HEAT_WEIGHT_KEY } from "../utils/matchWeights";
 import { scoreBestValueBids, escrowHoldFromAmounts } from "../utils/bestValueScore";
 import { hoursBetween, buildEventSla } from "../utils/responseSla";
 import { loadJobToBidSamples } from "../utils/proSlaBatch";
@@ -533,21 +533,15 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
 
   const log = await AppDataSource.getRepository(AuditLog).findOne({ where: { id: auditLogId } });
   if (!log) {
-    return res.status(404).json({ message: "Audit log not found", code: "NOT_FOUND" });
+    throw notFound("Audit log not found");
   }
   if (log.action !== AuditAction.MATCH_WEIGHTS_UPDATE) {
-    return res.status(400).json({
-      message: "Only match_weights_update audit rows can be rolled back",
-      code: "WRONG_ACTION",
-    });
+    throw badRequest("Only match_weights_update audit rows can be rolled back", "WRONG_ACTION");
   }
 
   const beforeRaw = log.meta?.before;
   if (!beforeRaw || typeof beforeRaw !== "object") {
-    return res.status(400).json({
-      message: "Audit row has no clean before snapshot",
-      code: "NOT_CLEAN",
-    });
+    throw badRequest("Audit row has no clean before snapshot", "NOT_CLEAN");
   }
 
   const raw = beforeRaw as Record<string, unknown>;
@@ -555,10 +549,7 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
   for (const k of keys) {
     const n = Number(raw[k]);
     if (!Number.isFinite(n) || n < 0 || n > 100) {
-      return res.status(400).json({
-        message: `Before snapshot is not clean (${k})`,
-        code: "NOT_CLEAN",
-      });
+      throw badRequest(`Before snapshot is not clean (${k})`, "NOT_CLEAN");
     }
   }
 
@@ -566,10 +557,7 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
   const sum = weightsSum(target);
   // Clean = sane total (allow custom weights that don't sum exactly to 100)
   if (sum < 40 || sum > 160) {
-    return res.status(400).json({
-      message: `Before snapshot sum ${sum} is out of clean range`,
-      code: "NOT_CLEAN",
-    });
+    throw badRequest(`Before snapshot sum ${sum} is out of clean range`, "NOT_CLEAN");
   }
 
   // Wave 21: restore heat weight from clean before snapshot when present
@@ -581,10 +569,7 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
   if (metaHeat !== undefined && metaHeat !== null && metaHeat !== "") {
     const n = Number(metaHeat);
     if (!Number.isFinite(n) || n < 0 || n > 20) {
-      return res.status(400).json({
-        message: "Before heatWeight snapshot is not clean",
-        code: "NOT_CLEAN",
-      });
+      throw badRequest("Before heatWeight snapshot is not clean", "NOT_CLEAN");
     }
     targetHeat = normalizeHeatWeight(n);
   }
@@ -596,16 +581,19 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
   if (rawBeforeMinHeat !== undefined && rawBeforeMinHeat !== null) {
     const n = Number(rawBeforeMinHeat);
     if (!Number.isFinite(n) || n < 0 || n > 100) {
-      return res.status(400).json({ message: "Before shortlist gate snapshot is not clean", code: "NOT_CLEAN" });
+      throw badRequest("Before shortlist gate snapshot is not clean", "NOT_CLEAN");
     }
   }
-  const weights = await setMatchWeights(target);
+  // All three settings change together or not at all.
+  const weights = target;
   const minHeat =
-    rawBeforeMinHeat !== undefined && rawBeforeMinHeat !== null
-      ? await setShortlistInviteMinHeat(rawBeforeMinHeat)
-      : currentMinHeat;
-  const heatWeight =
-    targetHeat != null ? await setHeatWeight(targetHeat) : await getHeatWeight();
+    rawBeforeMinHeat !== undefined && rawBeforeMinHeat !== null ? normalizeShortlistMinHeat(rawBeforeMinHeat) : currentMinHeat;
+  const heatWeight = targetHeat ?? currentHeat;
+  await saveConfigs([
+    { key: MATCH_WEIGHTS_KEY, value: weights as unknown as Record<string, unknown> },
+    { key: SHORTLIST_MIN_HEAT_KEY, value: { minHeat } },
+    { key: MATCH_HEAT_WEIGHT_KEY, value: { heatWeight } },
+  ]);
   const preset = detectMatchPreset(weights, heatWeight);
 
   try {
@@ -659,50 +647,35 @@ export async function rollbackBestValueBlendFromAudit(req: Request, res: Respons
 
   const log = await AppDataSource.getRepository(AuditLog).findOne({ where: { id: auditLogId } });
   if (!log) {
-    return res.status(404).json({ message: "Audit log not found", code: "NOT_FOUND" });
+    throw notFound("Audit log not found");
   }
   if (log.action !== AuditAction.BEST_VALUE_BLEND_UPDATE) {
-    return res.status(400).json({
-      message: "Only best_value_blend_update audit rows can be rolled back",
-      code: "WRONG_ACTION",
-    });
+    throw badRequest("Only best_value_blend_update audit rows can be rolled back", "WRONG_ACTION");
   }
 
   const beforeRaw = log.meta?.before;
   if (!beforeRaw || typeof beforeRaw !== "object") {
-    return res.status(400).json({
-      message: "Audit row has no clean before snapshot",
-      code: "NOT_CLEAN",
-    });
+    throw badRequest("Audit row has no clean before snapshot", "NOT_CLEAN");
   }
 
   const raw = beforeRaw as Record<string, unknown>;
   for (const k of ["matchPct", "pricePct"] as const) {
     const n = Number(raw[k]);
     if (!Number.isFinite(n) || n < 0 || n > 100) {
-      return res.status(400).json({
-        message: `Before snapshot is not clean (${k})`,
-        code: "NOT_CLEAN",
-      });
+      throw badRequest(`Before snapshot is not clean (${k})`, "NOT_CLEAN");
     }
   }
   if (raw.slaHeatPct != null && raw.slaHeatPct !== "") {
     const n = Number(raw.slaHeatPct);
     if (!Number.isFinite(n) || n < 0 || n > 100) {
-      return res.status(400).json({
-        message: "Before snapshot is not clean (slaHeatPct)",
-        code: "NOT_CLEAN",
-      });
+      throw badRequest("Before snapshot is not clean (slaHeatPct)", "NOT_CLEAN");
     }
   }
 
   const target = normalizeBestValueBlend(raw);
   const sum = target.matchPct + target.pricePct + (target.slaHeatPct || 0);
   if (sum < 90 || sum > 110) {
-    return res.status(400).json({
-      message: `Before blend sum ${sum} is out of clean range`,
-      code: "NOT_CLEAN",
-    });
+    throw badRequest(`Before blend sum ${sum} is out of clean range`, "NOT_CLEAN");
   }
 
   const current = await getBestValueBlend();

@@ -94,3 +94,30 @@ describe("migrations list (infra MED 10)", () => {
     expect(ALL_MIGRATIONS.map((m) => m.name)).toEqual(names);
   });
 });
+
+describe("admin config rollback (infra MED 15)", () => {
+  it("writes several settings all-or-nothing", async () => {
+    const { getMatchWeights, saveConfigs, MATCH_WEIGHTS_KEY, clearConfigCache } = await import("../src/utils/matchWeights");
+    const before = await getMatchWeights();
+    const changed = { ...before, skills: before.skills === 40 ? 41 : 40 };
+    await expect(
+      saveConfigs([
+        { key: MATCH_WEIGHTS_KEY, value: changed as unknown as Record<string, unknown> },
+        { key: "k".repeat(80), value: { broken: true } }, // longer than the key column: the batch fails
+      ])
+    ).rejects.toThrow();
+    clearConfigCache();
+    expect(await getMatchWeights()).toEqual(before);
+  });
+
+  it("answers a missing audit row with a coded 404", async () => {
+    const { admin, api } = await import("./helpers");
+    const a = await admin();
+    const res = await api()
+      .post("/api/admin/match-weights/rollback")
+      .set(a.auth)
+      .send({ auditLogId: "00000000-0000-4000-8000-000000000000" });
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe("NOT_FOUND");
+  });
+});
