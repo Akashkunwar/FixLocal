@@ -30,13 +30,15 @@ export function JobExpiryNotice({ job, onUpdated }: { job: Job; onUpdated: (j: J
 
   return (
     <div
-      className={`flex flex-wrap items-center gap-3 rounded-xl p-3 text-sm ring-1 ${soon ? "bg-amber-50 text-amber-950 ring-amber-200" : "bg-slate-50 text-slate-700 ring-slate-200"}`}
+      className={`flex flex-col items-start gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:gap-3 text-sm ring-1 ${soon ? "bg-amber-50 text-amber-950 ring-amber-200" : "bg-slate-50 text-slate-700 ring-slate-200"}`}
       data-testid="job-expiry"
     >
-      <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />
-      <p className="min-w-0 flex-1">
-        {t("Listed until")} <strong>{fmtDate(job.expiresAt)}</strong>
-        {soon ? ` · ${t("closes automatically if nobody is hired.")}` : ""}
+      <p className="flex min-w-0 flex-1 items-start gap-2">
+        <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <span>
+          {t("Listed until")} <strong>{fmtDate(job.expiresAt)}</strong>
+          {soon ? ` · ${t("closes automatically if nobody is hired.")}` : ""}
+        </span>
       </p>
       {soon && (
         <button type="button" className="btn-secondary btn-sm" disabled={busy} onClick={keep}>
