@@ -14,6 +14,9 @@ import {
 } from "../api/extras";
 import { NOTIFICATION_GROUPS, NOTIFICATIONS_CHANGED, dayLabel, notificationHref } from "../lib/notifications";
 import { t } from "../lib/i18n";
+import { useRequestGuard } from "../lib/useQuery";
+import { errorText } from "../lib/apiErrors";
+import { isAbort } from "../api/client";
 
 const PAGE = 20;
 
@@ -29,22 +32,40 @@ export function NotificationsPage() {
 
   const types = NOTIFICATION_GROUPS.find((g) => g.key === group)?.types ?? [];
 
+  // Every load belongs to one filter. Changing the filter aborts the old request, and a slow
+  // answer (or a "load more") for the previous filter is dropped instead of mixed in (fe-logic MED 15).
+  const begin = useRequestGuard();
   const load = useCallback(
     async (before?: string) => {
-      const r = await listNotificationsPage({ unread: unreadOnly, types, before, limit: PAGE });
+      const { signal, isCurrent } = begin();
+      const r = await listNotificationsPage({ unread: unreadOnly, types, before, limit: PAGE }, signal);
+      if (!isCurrent()) return false;
       setTotal(r.total);
       setUnreadCount(r.unreadCount);
       setItems((xs) => (before ? [...xs, ...r.notifications] : r.notifications));
+      return true;
     },
+    // `types` is derived from `group`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [unreadOnly, group]
+    [unreadOnly, group, begin]
   );
 
   useEffect(() => {
+    let live = true;
     setLoading(true);
+    setItems([]);
     load()
-      .catch((e: Error) => error(e.message))
-      .finally(() => setLoading(false));
+      .then((done) => {
+        if (done && live) setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if (!live || isAbort(e)) return;
+        error(errorText(e, "Couldn't load notifications"));
+        setLoading(false);
+      });
+    return () => {
+      live = false;
+    };
   }, [load, error]);
 
   async function loadMore() {
@@ -52,7 +73,7 @@ export function NotificationsPage() {
     try {
       await load(items[items.length - 1]?.createdAt);
     } catch (e) {
-      error((e as Error).message);
+      if (!isAbort(e)) error(errorText(e, "Couldn't load more notifications"));
     } finally {
       setMore(false);
     }
