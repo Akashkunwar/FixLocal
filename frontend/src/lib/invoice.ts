@@ -1,5 +1,14 @@
-import type { Job, JobPayments } from "../api/jobs";
+import type { BillingParty, Job, JobPayments } from "../api/jobs";
 import { money, fmtDate, fmtDateTime } from "./format";
+
+/** Business name and GSTIN lines for a party, when they've added them in Settings. */
+function businessLines(p?: BillingParty | null): string {
+  if (!p) return "";
+  return [
+    p.businessName ? `<p class="business">${escapeHtml(p.businessName)}</p>` : "",
+    p.gstin ? `<p class="gstin">GSTIN: ${escapeHtml(p.gstin)}</p>` : "",
+  ].join("");
+}
 
 export function buildMilestoneInvoiceHtml(job: Job, payments: JobPayments): string {
   const rows = payments.milestones
@@ -21,11 +30,13 @@ export function buildMilestoneInvoiceHtml(job: Job, payments: JobPayments): stri
     <div class="party">
       <h2>Bill from (client)</h2>
       <p class="name">${escapeHtml(home?.name || "—")}</p>
+      ${businessLines(home)}
       <p class="muted">${escapeHtml(home?.email || job.homeownerId)}</p>
     </div>
     <div class="party">
       <h2>Pay to (professional)</h2>
       <p class="name">${escapeHtml(pro?.name || "—")}</p>
+      ${businessLines(pro)}
       <p class="muted">${escapeHtml(pro?.email || (pro?.id ? pro.id : "Not awarded yet"))}</p>
     </div>
   </div>`;
@@ -83,6 +94,8 @@ export function buildMilestoneInvoiceHtml(job: Job, payments: JobPayments): stri
     .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.1rem; }
     .party { padding: 0.85rem 1rem; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; }
     .party p { margin: 0.15rem 0 0; }
+    .party .business { font-weight: 500; }
+    .party .gstin { font-family: ui-monospace, monospace; font-size: 0.85rem; letter-spacing: 0.02em; }
     table { width: 100%; border-collapse: collapse; margin-top: 1.35rem; }
     th, td { border-bottom: 1px solid #e2e8f0; padding: 0.65rem 0.45rem; font-size: 0.9rem; text-align: left; }
     th { color: #64748b; font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; }

@@ -1,3 +1,4 @@
+import { UrgentBadge } from "../../components/UrgentBadge";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Shell } from "../../components/Shell";
@@ -8,7 +9,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { categoryEmoji, categoryGroups, categoryLabel, fmtDate, money } from "../../lib/format";
 import { SITE_TYPES, siteTypeLabel, type SiteType } from "../../lib/paths";
 import { useToast } from "../../components/Toast";
-import { BellRing, Bookmark, MapPin, Search } from "lucide-react";
+import { BellRing, Bookmark, MapPin, Search, Zap } from "lucide-react";
 import clsx from "clsx";
 import { OnboardingChecklist } from "../../components/OnboardingChecklist";
 import { PendingReviewsCard } from "../../components/PendingReviewsCard";
@@ -26,6 +27,7 @@ type Facets = {
   budgetMax: string;
   sort: string;
   siteType: "" | SiteType;
+  urgent?: boolean;
 };
 
 const defaults: Facets = {
@@ -65,6 +67,7 @@ export function BrowseJobsPage() {
         budgetMax: f.budgetMax || undefined,
         sort: f.sort,
         siteType: f.siteType || undefined,
+        urgent: f.urgent ? "true" : undefined,
         nearLat: origin?.lat != null ? String(origin.lat) : undefined,
         nearLng: origin?.lng != null ? String(origin.lng) : undefined,
       });
@@ -347,6 +350,21 @@ export function BrowseJobsPage() {
               {t(s.label)}
             </button>
           ))}
+          <button
+            type="button"
+            className={clsx(
+              "inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition",
+              facets.urgent ? "bg-amber-600 text-white ring-amber-600" : "bg-white text-amber-900 ring-amber-300 hover:bg-amber-50"
+            )}
+            aria-pressed={!!facets.urgent}
+            onClick={() => {
+              const next = { ...facets, urgent: !facets.urgent };
+              setFacets(next);
+              load(next);
+            }}
+          >
+            <Zap className="h-3 w-3" aria-hidden /> {t("Urgent only")}
+          </button>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <button type="button" className="btn-secondary btn-sm" onClick={saveSearch}>
@@ -397,7 +415,10 @@ export function BrowseJobsPage() {
                 <div className="flex gap-3 min-w-0">
                   <span className="text-2xl">{categoryEmoji(job.category)}</span>
                   <div>
-                    <p className="font-semibold text-slate-900">{job.title}</p>
+                    <p className="font-semibold text-slate-900">
+                      {job.title}
+                      {job.urgent && <UrgentBadge className="ml-2 align-middle" />}
+                    </p>
                     <p className="text-sm text-slate-500">
                       {categoryLabel(job.category)}
                       {siteTypeLabel(job.siteType) ? ` · ${siteTypeLabel(job.siteType)}` : ""}

@@ -50,6 +50,8 @@ type Draft = {
   area: string;
   pincode: string;
   preferredStart: string;
+  /** "true" when it's needed within 24 hours (kept as a string so the draft stays FormData-friendly). */
+  urgent: string;
   lat: string;
   lng: string;
 };
@@ -75,6 +77,7 @@ const emptyDraft: Draft = {
   area: "",
   pincode: "",
   preferredStart: "",
+  urgent: "",
   lat: String(BLR_CENTER.lat),
   lng: String(BLR_CENTER.lng),
 };
@@ -588,6 +591,21 @@ export function CreateJobPage() {
               </div>
             </div>
 
+            <label className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-slate-800">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-5 w-5 shrink-0 accent-amber-600"
+                checked={draft.urgent === "true"}
+                onChange={(e) => patch({ urgent: e.target.checked ? "true" : "" })}
+              />
+              <span>
+                <span className="font-semibold">{t("Urgent: needed within 24 hours")}</span>
+                <span className="block text-xs text-slate-600">
+                  {t("Matching professionals are alerted straight away and your job is marked urgent for two days.")}
+                </span>
+              </span>
+            </label>
+
             <div>
               <p className="label">{t("Job cadence")}</p>
               <p className="mb-2 text-xs text-slate-500">
@@ -708,6 +726,7 @@ export function CreateJobPage() {
                 {draft.cadenceNote.trim() ? ` — ${draft.cadenceNote.trim()}` : ""}
               </p>
               <p><span className="text-slate-500">{t("Budget:")}</span> ₹{draft.budgetMin || "?"} – ₹{draft.budgetMax || "?"}</p>
+              {draft.urgent === "true" && <p className="font-semibold text-amber-800">{t("Urgent: needed within 24 hours")}</p>}
               <p><span className="text-slate-500">{t("Location:")}</span> {[draft.city, draft.area, draft.address].filter(Boolean).join(" · ") || "—"}</p>
               {draft.lat && draft.lng && (
                 <p><span className="text-slate-500">{t("Coords:")}</span> {draft.lat}, {draft.lng}</p>

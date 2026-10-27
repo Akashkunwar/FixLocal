@@ -6,6 +6,7 @@ import { PrivacySettings } from "../components/PrivacySettings";
 import { InviteFriends } from "../components/InviteFriends";
 import { CreditCard } from "../components/CreditCard";
 import { TextAlertsCard } from "../components/TextAlertsCard";
+import { BusinessDetailsCard } from "../components/BusinessDetailsCard";
 import { LanguageSettings } from "../components/LanguageSettings";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/Toast";
@@ -422,6 +423,7 @@ export function SettingsPage() {
         {user.role !== "ADMIN" && <LanguageSettings />}
 
         {(user.role === "HOMEOWNER" || user.role === "TRADESPERSON") && <TextAlertsCard />}
+        {(user.role === "HOMEOWNER" || user.role === "TRADESPERSON") && <BusinessDetailsCard />}
 
         {(user.role === "HOMEOWNER" || user.role === "TRADESPERSON") && (
           <>

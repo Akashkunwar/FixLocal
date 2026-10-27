@@ -1,3 +1,4 @@
+import { UrgentBadge } from "../../components/UrgentBadge";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Shell } from "../../components/Shell";
@@ -260,7 +261,10 @@ export function HomeownerDashboard() {
                 <div className="flex items-start gap-3 min-w-0">
                   <span className="text-2xl">{categoryEmoji(job.category)}</span>
                   <div className="min-w-0">
-                    <p className="font-semibold text-slate-900 truncate">{job.title}</p>
+                    <p className="font-semibold text-slate-900 truncate">
+                      {job.urgent && <UrgentBadge className="mr-2 align-middle" />}
+                      {job.title}
+                    </p>
                     <p className="mt-0.5 text-sm text-slate-500">
                       {categoryLabel(job.category)}
                       {job.area ? ` · ${job.area}` : ""} · {fmtDate(job.createdAt)}

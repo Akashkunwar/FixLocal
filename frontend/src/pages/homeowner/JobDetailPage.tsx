@@ -52,6 +52,9 @@ const BestValueExplainPanel = lazy(() =>
   })),
 );
 import { useJobDetail } from "./job/useJobDetail";
+import { UrgentBadge } from "../../components/UrgentBadge";
+import { JobExpiryNotice } from "../../components/JobExpiryNotice";
+import { JobQuestionsPanel } from "../../components/JobQuestionsPanel";
 import { ShortlistInvitePanel } from "./job/ShortlistInvitePanel";
 import { SuggestedProsPanel } from "./job/SuggestedProsPanel";
 import { BidComparePanel } from "./job/BidComparePanel";
@@ -192,11 +195,13 @@ export function JobDetailPage() {
           <section className="card p-6 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge status={job.status} />
+              {job.urgent && <UrgentBadge />}
               {job.paymentStatus && <Badge status={job.paymentStatus} />}
               {job.scheduleStatus && job.scheduleStatus !== "none" && (
                 <Badge status={job.scheduleStatus} />
               )}
             </div>
+            <JobExpiryNotice job={job} onUpdated={(j) => s.setJob(j)} />
             <p className="text-slate-700 whitespace-pre-wrap">
               {job.description}
             </p>
@@ -356,6 +361,8 @@ export function JobDetailPage() {
               />
             )}
           </section>
+
+          <JobQuestionsPanel jobId={job.id} />
 
           {liveWork && (
             <SchedulePanel
