@@ -5,7 +5,8 @@ import {
   logout as apiLogout,
   me,
   onUnauthenticated,
-  refreshSession,
+  forgetSessionHint,
+  restoreSession,
   register as apiRegister,
   saveTemplates,
   setAccessToken,
@@ -66,6 +67,9 @@ function withTemplates(user: User, t: TemplateBundle | null): User {
   };
 }
 
+/** Device settings that are not personal data and survive a log-out (the language choice). */
+const KEEP_ON_LOGOUT = new Set(["fixlocal:lang"]);
+
 /** Drafts, checklists and saved filters are per person; don't hand them to the next user of this browser. */
 export function clearLocalUserData(storage: Storage | undefined = globalThis.localStorage) {
   if (!storage) return;
@@ -73,7 +77,7 @@ export function clearLocalUserData(storage: Storage | undefined = globalThis.loc
     const keys: string[] = [];
     for (let i = 0; i < storage.length; i++) {
       const key = storage.key(i);
-      if (key && key.startsWith("fixlocal")) keys.push(key);
+      if (key && key.startsWith("fixlocal") && !KEEP_ON_LOGOUT.has(key)) keys.push(key);
     }
     keys.forEach((k) => storage.removeItem(k));
   } catch {
@@ -104,16 +108,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     onUnauthenticated(() => {
+      // The server ended the session (expired, revoked, suspended): same clean-up as logging out.
       setAccessToken(null);
       templatesRef.current = null;
+      clearLocalUserData();
+      forgetSessionHint();
       setUser(null);
     });
     let cancelled = false;
     // A page load has no access token in memory; the refresh cookie restores the session.
-    refreshSession()
+    restoreSession()
       .then(async (session) => {
         if (cancelled || !session) return;
         await adopt(session.user);
+      })
+      .catch(() => {
+        /* server unreachable after retries: show the signed-out view without forgetting the session */
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -194,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(null);
     templatesRef.current = null;
     clearLocalUserData();
+    forgetSessionHint();
     setUser(null);
   }, []);
 

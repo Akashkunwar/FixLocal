@@ -70,4 +70,44 @@ describe("AuthProvider", () => {
     expect(localStorage.getItem("fixlocal_job_draft_v3")).toBeNull();
     await waitFor(() => expect(hasAccessToken()).toBe(false));
   });
+
+  it("a session lost on the server clears drafts like a log-out but keeps the language (fe-logic MED 10)", async () => {
+    localStorage.setItem("fixlocal_job_draft_v3", "{\"title\":\"private\"}");
+    localStorage.setItem("fixlocal:lang", "hi");
+    let refreshed = false;
+    mockFetch((url) => {
+      if (url === "/api/auth/refresh") {
+        if (refreshed) return json(401, { code: "UNAUTHORIZED" });
+        refreshed = true;
+        return json(200, { token: "t", expiresIn: 900, user });
+      }
+      if (url === "/api/auth/me/templates") return json(200, { templates });
+      if (url === "/api/auth/me") return json(401, { code: "UNAUTHORIZED" });
+      return undefined;
+    });
+    function Lost() {
+      const { user, refreshUser } = useAuth();
+      return user ? <button onClick={() => void refreshUser().catch(() => undefined)}>poke</button> : <p>gone</p>;
+    }
+    render(<AuthProvider><Lost /></AuthProvider>);
+    await userEvent.click(await screen.findByRole("button", { name: "poke" }));
+    expect(await screen.findByText("gone")).toBeInTheDocument();
+    expect(localStorage.getItem("fixlocal_job_draft_v3")).toBeNull();
+    expect(localStorage.getItem("fixlocal:lang")).toBe("hi");
+    expect(localStorage.getItem("fixlocal:session")).toBe("0");
+  });
+
+  it("explicit log-out keeps the language choice", async () => {
+    localStorage.setItem("fixlocal:lang", "hi");
+    mockFetch((url) => {
+      if (url === "/api/auth/refresh") return json(200, { token: "t", expiresIn: 900, user });
+      if (url === "/api/auth/me/templates") return json(200, { templates });
+      if (url === "/api/auth/logout") return json(200, { ok: true });
+      return undefined;
+    });
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await userEvent.click(await screen.findByRole("button", { name: "log out" }));
+    expect(await screen.findByText("signed out")).toBeInTheDocument();
+    expect(localStorage.getItem("fixlocal:lang")).toBe("hi");
+  });
 });
