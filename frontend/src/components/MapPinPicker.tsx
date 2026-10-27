@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
-import { BLR_CENTER } from "../lib/geo";
+import { BLR_CENTER, parseLatLng } from "../lib/geo";
 import "leaflet/dist/leaflet.css";
 import markerIconUrl from "leaflet/dist/images/marker-icon.png";
 import markerIconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
@@ -35,7 +35,11 @@ type Props = {
   className?: string;
 };
 
-export function MapPinPicker({ lat, lng, onChange, height = 260, className }: Props) {
+export function MapPinPicker({ lat: rawLat, lng: rawLng, onChange, height = 260, className }: Props) {
+  // Never hand Leaflet a NaN or out-of-range value: it throws and takes the page down.
+  const valid = parseLatLng(rawLat ?? null, rawLng ?? null);
+  const lat = valid?.lat ?? null;
+  const lng = valid?.lng ?? null;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -80,8 +84,8 @@ export function MapPinPicker({ lat, lng, onChange, height = 260, className }: Pr
     mapRef.current = map;
     markerRef.current = marker;
 
-    // If parent had no coords yet, seed Bengaluru once
-    if (lat == null || lng == null) {
+    // If parent had no (valid) coords yet, seed Bengaluru once
+    if ((lat == null || lng == null) && rawLat == null && rawLng == null) {
       onChangeRef.current({
         lat: Math.round(startLat * 1e5) / 1e5,
         lng: Math.round(startLng * 1e5) / 1e5,
