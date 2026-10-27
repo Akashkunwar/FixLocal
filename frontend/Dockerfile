@@ -27,7 +27,7 @@ ENV VITE_API_URL= \
 RUN npm run build && find dist -name '*.map' -delete
 
 # ---- serve ----
-FROM nginx:1.29-alpine
+FROM nginx:1.31-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY security-headers.conf /etc/nginx/security-headers.conf
 COPY --from=build /app/dist /usr/share/nginx/html
