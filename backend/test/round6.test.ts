@@ -277,6 +277,23 @@ describe("SMS / WhatsApp alerts", () => {
     expect(changed.body.user).toMatchObject({ phoneVerified: false, smsOptIn: false, whatsappOptIn: false });
   });
 
+  it("never hands back a text another flush is still sending, whatever time the caller passes", async () => {
+    enable();
+    const u = await client();
+    const insert = (updatedAt: string) =>
+      AppDataSource.query(
+        `INSERT INTO "outbound_messages" ("userId", "channel", "body", "status", "sendAfter", "attempts", "dedupeKey", "updatedAt")
+         VALUES ($1, 'sms', 'b', 'sending', now(), 1, $2, ${updatedAt}) RETURNING "id"`,
+        [u.user.id, `stale-${updatedAt}-${Date.now()}`]
+      );
+    const [fresh] = await insert("now()");
+    const [stale] = await insert("now() - interval '11 minutes'");
+    await flushOutbound(new Date(Date.now() + 48 * 3600_000));
+    const status = async (id: string) => (await rows<{ status: string }>(`SELECT "status" FROM "outbound_messages" WHERE "id" = $1`, [id]))[0].status;
+    expect(await status(fresh.id)).toBe("sending");
+    expect(await status(stale.id)).not.toBe("sending");
+  });
+
   it("holds texts during quiet hours, skips users who opted out, and retries failures", async () => {
     enable();
     const u = await client();
