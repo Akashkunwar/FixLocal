@@ -309,7 +309,7 @@ async function seed() {
 
   // Keep ratings in sync even when sample jobs were skipped (idempotent re-seed)
 
-  // Wave 25 — ensure lead marketplace categories have at least one open demo job
+  // Ensure lead marketplace categories have at least one open demo job
   const wave25Jobs = [
     {
       title: "Deep clean 3BHK + kitchen (weekend)",

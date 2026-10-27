@@ -405,13 +405,13 @@ export async function updateMatchWeightsConfig(req: Request, res: Response) {
     rawMinHeat !== undefined && rawMinHeat !== null && rawMinHeat !== ""
       ? await setShortlistInviteMinHeat(rawMinHeat)
       : beforeMinHeat;
-  // Wave 24: blend-only updates must not clobber match weights with defaults
+  // blend-only updates must not clobber match weights with defaults
   const weights = nextWeightsRaw != null ? await setMatchWeights(nextWeightsRaw) : before;
   let heatWeight = beforeHeat;
   if (req.body?.heatWeight !== undefined && req.body?.heatWeight !== null && req.body?.heatWeight !== "") {
     heatWeight = await setHeatWeight(req.body.heatWeight);
   } else if (presetHeat != null) {
-    // Wave 21: presets include heat weight
+    // presets include heat weight
     heatWeight = await setHeatWeight(presetHeat);
   }
   const beforeBlend = await getBestValueBlend();
@@ -479,7 +479,7 @@ export async function updateMatchWeightsConfig(req: Request, res: Response) {
       console.warn("audit match weights failed", e);
     }
   }
-  // Wave 23: dedicated audit + rollback snapshots for best_value_blend
+  // dedicated audit + rollback snapshots for best_value_blend
   if (blendTouched && !blendsEqual(beforeBlend, bestValueBlend)) {
     try {
       await writeAudit({
@@ -560,7 +560,7 @@ export async function rollbackMatchWeightsFromAudit(req: Request, res: Response)
     throw badRequest(`Before snapshot sum ${sum} is out of clean range`, "NOT_CLEAN");
   }
 
-  // Wave 21: restore heat weight from clean before snapshot when present
+  // restore heat weight from clean before snapshot when present
   const metaHeat =
     log.meta?.beforeHeatWeight != null
       ? log.meta.beforeHeatWeight

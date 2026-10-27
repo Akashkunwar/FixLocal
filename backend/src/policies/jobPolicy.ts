@@ -18,16 +18,6 @@ export type JobContext = {
   acceptedProId: string | null;
 };
 
-/** Job statuses in which the awarded professional still has a working relationship. */
-export const AWARDED_STATUSES: JobStatus[] = [
-  JobStatus.AWARDED,
-  JobStatus.IN_PROGRESS,
-  JobStatus.PENDING_CONFIRMATION,
-  JobStatus.COMPLETED,
-  JobStatus.DISPUTED,
-  JobStatus.CANCELLED,
-];
-
 export async function loadJobContext(jobId: string): Promise<JobContext> {
   const job = await AppDataSource.getRepository(Job).findOne({ where: { id: jobId } });
   if (!job) throw notFound("Job not found");

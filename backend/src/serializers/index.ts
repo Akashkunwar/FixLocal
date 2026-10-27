@@ -59,17 +59,6 @@ export function toSelfUser(user: User) {
   };
 }
 
-/** Safe to show to any signed-in user. */
-export function toPublicUser(user: Pick<User, "id" | "name" | "role" | "avatarUrl"> | null | undefined) {
-  if (!user) return null;
-  return {
-    id: user.id,
-    name: user.name ?? null,
-    role: user.role,
-    avatarUrl: publicUrl(user.avatarUrl),
-  };
-}
-
 /** Name + contact, only between the client and the hired professional (or admins). */
 export function toContactUser(user: Pick<User, "id" | "name" | "email" | "phone" | "role"> | null | undefined) {
   if (!user) return null;

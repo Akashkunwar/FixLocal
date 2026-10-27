@@ -4,7 +4,6 @@
  * (the body keeps job titles and names exactly as people typed them).
  */
 export type Lang = "en" | "hi";
-export const LANGS: readonly Lang[] = ["en", "hi"];
 export const asLang = (v: unknown): Lang => (v === "hi" ? "hi" : "en");
 
 export const HI_TITLES: Record<string, string> = {

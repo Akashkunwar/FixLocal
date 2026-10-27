@@ -215,7 +215,7 @@ RESET_CMD="npm --prefix ../backend run db:reset-e2e && npm --prefix ../backend r
 npm run legacy:smoke
 ```
 
-`RESET_CMD` inherits your environment, so set `DB_NAME` (ending in `_e2e` or `_test`) and `REDIS_URL` for the throwaway stack. The browser scripts `e2e-*.mjs` and `demo-smoke.mjs` target the UI from before the Client/Professional redesign and are kept for reference only; the Playwright suite covers what they checked.
+`RESET_CMD` inherits your environment, so set `DB_NAME` (ending in `_e2e` or `_test`) and `REDIS_URL` for the throwaway stack.
 
 ## Security model
 
