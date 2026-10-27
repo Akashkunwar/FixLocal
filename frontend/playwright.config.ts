@@ -6,9 +6,10 @@ import { defineConfig, devices } from "@playwright/test";
  * End-to-end tests run a real backend (port 3101) on a throwaway database (fixlocal_e2e,
  * recreated on every run) and the Vite dev server (port 5174) proxying /api to it.
  * The developer's own servers (3001 / 5173) and database are never touched.
+ * E2E_API_PORT, E2E_WEB_PORT, E2E_DB_NAME, E2E_REDIS_URL and E2E_UPLOADS_DIR let two runs share a machine.
  */
-const API_PORT = 3101;
-const WEB_PORT = 5174;
+const API_PORT = Number(process.env.E2E_API_PORT || 3101);
+const WEB_PORT = Number(process.env.E2E_WEB_PORT || 5174);
 export const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
 export const E2E_PASSWORD = "E2e-Password-123";
 
@@ -23,7 +24,7 @@ const backendEnv = {
   ACCESS_TOKEN_TTL_SEC: "20",
   REDIS_URL: process.env.E2E_REDIS_URL || "redis://127.0.0.1:6379/14",
   REDIS_ENABLED: process.env.E2E_REDIS_ENABLED || "true",
-  UPLOADS_DIR: path.join(os.tmpdir(), "fixlocal-e2e-uploads"),
+  UPLOADS_DIR: process.env.E2E_UPLOADS_DIR || path.join(os.tmpdir(), `fixlocal-e2e-uploads-${API_PORT}`),
   CORS_ORIGINS: `${WEB_URL},http://localhost:${WEB_PORT}`,
   APP_URL: WEB_URL,
   DEV_OUTBOX: "true",
@@ -40,8 +41,9 @@ export default defineConfig({
   workers: 1,
   timeout: 90_000,
   expect: { timeout: 10_000 },
+  // One retry on CI; a test that only passed on retry is still flagged ("flaky") by the github reporter.
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : [["list"]],
+  reporter: process.env.CI ? [["list"], ["github"], ["html", { open: "never" }]] : [["list"]],
   use: {
     baseURL: WEB_URL,
     trace: "retain-on-failure",

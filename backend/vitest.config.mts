@@ -32,6 +32,9 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       exclude: ["src/migrations/**", "src/scripts/**", "src/server.ts", "src/index.ts", "src/types/**"],
       reporter: ["text-summary", "text", "html"],
+      // A little under today's numbers (lines 91.7, statements 88.3, functions 90.8, branches 75.0):
+      // CI fails if a change drops coverage noticeably.
+      thresholds: { lines: 89, statements: 86, functions: 88, branches: 72 },
     },
   },
 });

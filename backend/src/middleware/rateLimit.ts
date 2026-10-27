@@ -2,7 +2,7 @@ import type { Request, RequestHandler } from "express";
 import rateLimit, { ipKeyGenerator, type Store } from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import { config } from "../config";
-import { redisClient } from "../utils/cache";
+import { onTestCacheFlush, redisClient } from "../utils/cache";
 
 type LimitName =
   | "login"
@@ -95,11 +95,19 @@ function store(name: LimitName): Store | undefined {
 const noop: RequestHandler = (_req, _res, next) => next();
 
 /** Build the limiter lazily so tests can toggle RATE_LIMIT_ENABLED and override limits. */
+let generation = 0;
+// Without Redis the counters live in each limiter's memory store; tests start each case from zero.
+onTestCacheFlush(() => {
+  generation++;
+});
+
 export function limiter(name: LimitName, override?: Partial<{ windowMs: number; limit: number }>): RequestHandler {
   let built: RequestHandler | null = null;
+  let builtFor = -1;
   return (req, res, next) => {
     if (!config().rateLimitEnabled) return noop(req, res, next);
-    if (!built) {
+    if (!built || builtFor !== generation) {
+      builtFor = generation;
       const cfg = { ...LIMITS[name], ...override };
       built = rateLimit({
         windowMs: cfg.windowMs,
