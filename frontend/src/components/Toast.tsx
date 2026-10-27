@@ -8,6 +8,8 @@ import {
 } from "react";
 import { CheckCircle2, AlertCircle, X } from "lucide-react";
 import clsx from "clsx";
+import { t as tr } from "../lib/i18n";
+import { ConfirmProvider } from "./ConfirmDialog";
 
 type ToastKind = "success" | "error" | "info";
 type ToastItem = { id: number; kind: ToastKind; message: string };
@@ -48,7 +50,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={value}>
-      {children}
+      {/* The in-app confirm/prompt dialog rides along, so every page that can toast can also ask. */}
+      <ConfirmProvider>{children}</ConfirmProvider>
       <div className="toast-viewport" aria-live="polite">
         {items.map((t) => (
           <div
@@ -59,19 +62,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               t.kind === "error" && "border-rose-200",
               t.kind === "info" && "border-slate-200"
             )}
-            role="status"
+            role={t.kind === "error" ? "alert" : "status"}
           >
             {t.kind === "success" ? (
               <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
             ) : t.kind === "error" ? (
               <AlertCircle className="h-5 w-5 text-rose-600 shrink-0" />
             ) : null}
-            <p className="flex-1 text-slate-800">{t.message}</p>
+            {/* Callers pass t("…") text; translating here too covers server messages with a dictionary entry. */}
+            <p className="flex-1 text-slate-800">{tr(t.message)}</p>
             <button
               type="button"
-              className="text-slate-500 hover:text-slate-600"
+              className="text-slate-500 hover:text-slate-700"
               onClick={() => dismiss(t.id)}
-              aria-label="Dismiss"
+              aria-label={tr("Dismiss")}
             >
               <X className="h-4 w-4" />
             </button>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -12,25 +12,36 @@ import { openSse } from "../lib/sse";
 import { NOTIFICATIONS_CHANGED, notificationHref } from "../lib/notifications";
 import clsx from "clsx";
 import { t } from "../lib/i18n";
+import { useDialogFocus } from "./ui/Dialog";
+import { useRequestGuard } from "../lib/useQuery";
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
   const [live, setLive] = useState(false);
+  const seenIds = useRef(new Set<string>());
   const ref = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(false);
   const sseOk = useRef(false);
+  const begin = useRequestGuard();
+  // Escape closes the panel and focus goes back to the bell (ux MED 8). Not a modal: no trap.
+  useDialogFocus(open, panelRef, () => setOpen(false), { trap: false });
 
-  async function load() {
+  const load = useCallback(async () => {
+    const { signal, isCurrent } = begin();
     try {
-      const r = await listNotifications();
+      const r = await listNotifications(false, signal);
+      if (!isCurrent()) return;
+      r.notifications.forEach((n) => seenIds.current.add(n.id));
       setItems(r.notifications);
       setUnread(r.unreadCount);
     } catch {
-      /* ignore */
+      /* ignore: the next poll or live event tries again */
     }
-  }
+  }, [begin]);
+
 
   useEffect(() => {
     openRef.current = open;
@@ -42,6 +53,7 @@ export function NotificationBell() {
       onOpen: () => {
         sseOk.current = true;
         setLive(true);
+        load(); // (re)connected: catch up on anything sent while the stream was down (fe-logic LOW 19)
       },
       onError: () => {
         sseOk.current = false;
@@ -51,32 +63,33 @@ export function NotificationBell() {
         if (event !== "notification") return;
         const payload = data as { notification?: Notification };
         if (payload?.notification) {
-          setItems((xs) => {
-            if (xs.some((x) => x.id === payload.notification!.id)) return xs;
-            return [payload.notification!, ...xs].slice(0, 30);
-          });
-          setUnread((u) => u + 1);
+          const n = payload.notification;
+          // A repeated event (reconnect, two streams) must not count the same notification twice.
+          if (seenIds.current.has(n.id)) return;
+          seenIds.current.add(n.id);
+          setItems((xs) => [n, ...xs.filter((x) => x.id !== n.id)].slice(0, 30));
+          if (!n.read) setUnread((u) => u + 1);
         } else {
           load();
         }
       },
     });
     return () => sse.close();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     // Fall back to polling when SSE is down; slow safety poll when live.
     const ms = live ? (open ? 45000 : 90000) : open ? 4000 : 15000;
     const timer = window.setInterval(() => load(), ms);
     return () => clearInterval(timer);
-  }, [open, live]);
+  }, [open, live, load]);
 
   useEffect(() => {
     // The notification centre page marks things read; keep the badge in step.
     const reload = () => load();
     window.addEventListener(NOTIFICATIONS_CHANGED, reload);
     return () => window.removeEventListener(NOTIFICATIONS_CHANGED, reload);
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -112,8 +125,9 @@ export function NotificationBell() {
         type="button"
         className="relative rounded-xl p-2.5 text-slate-600 hover:bg-slate-100 touch-target"
         aria-expanded={open}
+        aria-haspopup="dialog"
         onClick={onOpen}
-        title={live ? t("Live notifications (SSE)") : t("Notifications (polling)")}
+        title={t("Notifications")}
       >
         <Bell className="h-5 w-5" aria-hidden />
         <span className="sr-only">{t("Notifications")}</span>
@@ -125,14 +139,15 @@ export function NotificationBell() {
         )}
       </button>
       {open && (
-        <div className="fixed inset-x-3 top-16 z-50 max-h-[70vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lift sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 sm:max-h-none">
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-label={t("Notifications")}
+          tabIndex={-1}
+          className="fixed inset-x-3 top-16 z-50 max-h-[70vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lift sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 sm:max-h-none"
+        >
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <span className="text-sm font-semibold">
-              {t("Notifications")}
-              <span className="ml-2 text-[10px] font-normal text-slate-500">
-                {live ? "live" : "polling"}
-              </span>
-            </span>
+            <span className="text-sm font-semibold">{t("Notifications")}</span>
             {unread > 0 && (
               <button type="button" className="text-xs text-brand-700" onClick={markAll}>
                 {t("Mark all read")}

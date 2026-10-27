@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { X } from "lucide-react";
+import { Dialog } from "./ui/Dialog";
 import { t } from "../lib/i18n";
 
 export type MatchBreakdown = {
@@ -80,7 +80,6 @@ type Props = {
 
 /** Side drawer explaining sk/rt/rs/ds match score parts. */
 export function MatchScorePanel({ open, onClose, name, score, breakdown }: Props) {
-  if (!open) return null;
   const max = {
     skills: breakdown.weights?.skills ?? DEFAULT_MAX.skills,
     rating: breakdown.weights?.rating ?? DEFAULT_MAX.rating,
@@ -90,34 +89,24 @@ export function MatchScorePanel({ open, onClose, name, score, breakdown }: Props
   const PARTS = partsFor(max);
   const maxTotal = max.skills + max.rating + max.response + max.distance;
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      <button
-        type="button"
-        className="absolute inset-0 bg-slate-900/40"
-        aria-label={t("Close match score")}
-        onClick={onClose}
-      />
-      <aside className="relative z-10 flex h-full w-full max-w-md flex-col bg-white shadow-xl">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">{t("Match explainability")}</p>
-            <h2 className="text-lg font-semibold text-slate-900">
-              {name || t("Verified pro")} · {score.toFixed(0)}/{maxTotal.toFixed(0)}
-            </h2>
-            <p className="mt-1 text-xs text-slate-500">
-              {t("sk skills · rt rating · rs response · ds distance (max")}{" "}{maxTotal.toFixed(0)})
-            </p>
-          </div>
-          <button
-            type="button"
-            className="btn-ghost btn-sm touch-target"
-            onClick={onClose}
-            aria-label={t("Close")}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5 space-y-4">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      variant="drawer"
+      eyebrow={t("Match explainability")}
+      title={
+        <>
+          {name || t("Verified pro")} · {score.toFixed(0)}/{maxTotal.toFixed(0)}
+        </>
+      }
+      description={
+        <span className="text-xs text-slate-500">
+          {t("sk skills · rt rating · rs response · ds distance (max")}{" "}{maxTotal.toFixed(0)})
+        </span>
+      }
+      closeLabel={t("Close match score")}
+    >
+        <div className="space-y-4">
           {PARTS.map((p) => {
             const v = Number(breakdown[p.key] || 0);
             return (
@@ -161,7 +150,6 @@ export function MatchScorePanel({ open, onClose, name, score, breakdown }: Props
             </p>
           </div>
         </div>
-      </aside>
-    </div>
+    </Dialog>
   );
 }
