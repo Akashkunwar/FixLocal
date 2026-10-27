@@ -50,6 +50,15 @@ export const HI_TITLES: Record<string, string> = {
   "Your question was answered": "आपके सवाल का जवाब आया",
   "Your job closes soon": "आपका काम जल्द बंद होगा",
   "Job closed": "काम बंद हुआ",
+  "New message": "नया संदेश",
+  "New quote in chat": "चैट में नया कोटेशन",
+  "New message with attachment": "अटैचमेंट के साथ नया संदेश",
+  "Recurring package accepted": "नियमित सेवा पैकेज स्वीकार हुआ",
+  "Recurring package declined": "नियमित सेवा पैकेज अस्वीकार हुआ",
+  "Client replied to your package": "ग्राहक ने आपके पैकेज का जवाब दिया",
+  "Recurring request accepted": "नियमित सेवा अनुरोध स्वीकार हुआ",
+  "Recurring request declined": "नियमित सेवा अनुरोध अस्वीकार हुआ",
+  "Professional countered your request": "प्रोफ़ेशनल ने आपके अनुरोध पर नया प्रस्ताव दिया",
 };
 
 export function localizeTitle(lang: Lang, title: string): string {

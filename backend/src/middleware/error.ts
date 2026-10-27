@@ -10,6 +10,18 @@ type PgError = { code?: string; detail?: string; constraint?: string };
 
 const PG_BAD_INPUT = new Set(["22P02", "22007", "22008", "22003", "22001", "22023", "22004"]);
 
+/** A specific message for failures people actually hit, so the page can say more than "Invalid request". */
+function describeValidation(err: ValidationFailure): { message: string; code: string } {
+  const paths = err.issues.map((i) => i.path);
+  if (paths.includes("body.token")) {
+    return { message: "This link is invalid or has expired. Ask for a new one.", code: "TOKEN_INVALID" };
+  }
+  if (paths.length && paths.every((p) => p.startsWith("params."))) {
+    return { message: "We couldn't find that. The link may be wrong or out of date.", code: "INVALID_ID" };
+  }
+  return { message: "Invalid request", code: "VALIDATION" };
+}
+
 export function notFoundHandler(req: Request, res: Response) {
   res.status(404).json({ message: `Route not found: ${req.method} ${req.path}`, code: "ROUTE_NOT_FOUND" });
 }
@@ -18,7 +30,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
   if (res.headersSent) return next(err);
 
   if (err instanceof ValidationFailure) {
-    return res.status(400).json({ message: "Invalid request", code: "VALIDATION", issues: err.issues });
+    return res.status(400).json({ ...describeValidation(err), issues: err.issues });
   }
   if (err instanceof HttpError) {
     return res.status(err.status).json({ message: err.message, code: err.code, ...(err.details || {}) });
