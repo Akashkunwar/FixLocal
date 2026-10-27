@@ -78,6 +78,8 @@ for (const size of sizes) {
         ["shortlist", "/client/favorites"],
         ["pro profile", `/pros/${pro.id}`],
         ["settings", "/settings"],
+        ["notifications", "/notifications"],
+        ["spending", "/client/spending"],
       ]) {
         await page.goto(path);
         found.push(...(await audit(page, name)));
@@ -97,6 +99,7 @@ for (const size of sizes) {
         ["pro job detail", `/professional/jobs/${job.id}`],
         ["portfolio", "/professional/profile"],
         ["analytics", "/professional/analytics"],
+        ["job alerts", "/professional/alerts"],
       ]) {
         await page.goto(path);
         found.push(...(await audit(page, name)));

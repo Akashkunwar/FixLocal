@@ -29,6 +29,7 @@ import {
   type NamedJobTemplate,
 } from "../../lib/namedJobTemplates";
 import { useAuth } from "../../auth/AuthContext";
+import { t } from "../../lib/i18n";
 
 const DRAFT_KEY = JOB_DRAFT_KEY;
 const STEPS = ["Basics", "Budget & location", "Photos & review"] as const;
@@ -172,25 +173,25 @@ export function CreateJobPage() {
     });
   }
 
-  function applyTemplate(t: JobTemplate) {
+  function applyTemplate(tpl: JobTemplate) {
     patch({
-      title: t.title,
-      description: t.description,
-      category: t.category,
-      siteType: t.siteType || draft.siteType || "residential",
+      title: tpl.title,
+      description: tpl.description,
+      category: tpl.category,
+      siteType: tpl.siteType || draft.siteType || "residential",
       leadGroup:
-        CATEGORIES.find((c) => c.value === t.category)?.group || draft.leadGroup,
+        CATEGORIES.find((c) => c.value === tpl.category)?.group || draft.leadGroup,
     });
   }
 
-  function applyNamedTemplate(t: NamedJobTemplate) {
-    const d = draftFromNamedTemplate(t);
+  function applyNamedTemplate(tpl: NamedJobTemplate) {
+    const d = draftFromNamedTemplate(tpl);
     patch({
       ...d,
       siteType: d.siteType || draft.siteType || "residential",
       maxBids: d.maxBids || draft.maxBids || "5",
     });
-    success(`Applied library template “${t.name}”`);
+    success(`Applied library template “${tpl.name}”`);
   }
 
   function canNext() {
@@ -260,11 +261,11 @@ export function CreateJobPage() {
 
   return (
     <Shell
-      title="Post a job"
-      subtitle="Guided wizard — draft autosaves in this browser"
+      title={t("Post a job")}
+      subtitle={t("Guided wizard — draft autosaves in this browser")}
       actions={
         <button type="button" className="btn-ghost btn-sm" onClick={clearDraft}>
-          Clear draft
+          {t("Clear draft")}
         </button>
       }
     >
@@ -289,20 +290,20 @@ export function CreateJobPage() {
       {repeatBanner && (
         <div className="mb-4 flex flex-wrap items-start justify-between gap-2 rounded-xl bg-violet-50 px-4 py-3 text-sm text-violet-950 ring-1 ring-violet-100">
           <p>
-            <span className="font-semibold">Prefilling from completed job</span>
+            <span className="font-semibold">{t("Prefilling from completed job")}</span>
             {repeatBanner.title ? (
               <>
                 : <span className="opacity-90">{repeatBanner.title}</span>
               </>
             ) : null}
-            . Cadence, specialty, and site are copied — edit anything before posting.
+            {t(". Cadence, specialty, and site are copied — edit anything before posting.")}
           </p>
           <button
             type="button"
             className="btn-ghost btn-sm shrink-0"
             onClick={dismissRepeatBanner}
           >
-            Dismiss
+            {t("Dismiss")}
           </button>
         </div>
       )}
@@ -311,31 +312,31 @@ export function CreateJobPage() {
         {step === 0 && (
           <>
             <div>
-              <label className="label" htmlFor="title">Title</label>
+              <label className="label" htmlFor="title">{t("Title")}</label>
               <input
                 id="title"
                 className="input"
                 required
-                placeholder="e.g. Kitchen sink leak"
+                placeholder={t("e.g. Kitchen sink leak")}
                 value={draft.title}
                 onChange={(e) => patch({ title: e.target.value })}
               />
             </div>
             <div>
-              <label className="label" htmlFor="description">Description</label>
+              <label className="label" htmlFor="description">{t("Description")}</label>
               <textarea
                 id="description"
                 className="input min-h-[120px]"
                 required
-                placeholder="What's wrong? Any access notes?"
+                placeholder={t("What's wrong? Any access notes?")}
                 value={draft.description}
                 onChange={(e) => patch({ description: e.target.value })}
               />
             </div>
 
             <div>
-              <p className="label">Work type</p>
-              <p className="mb-2 text-xs text-slate-500">Pick a lead group, then a specialty.</p>
+              <p className="label">{t("Work type")}</p>
+              <p className="mb-2 text-xs text-slate-500">{t("Pick a lead group, then a specialty.")}</p>
               <div className="flex flex-wrap gap-2">
                 {groups.map(([group]) => (
                   <button
@@ -349,14 +350,14 @@ export function CreateJobPage() {
                     )}
                     onClick={() => selectLeadGroup(group)}
                   >
-                    {group}
+                    {t(group)}
                   </button>
                 ))}
               </div>
             </div>
 
             <div>
-              <p className="label">Specialty</p>
+              <p className="label">{t("Specialty")}</p>
               <div className="flex flex-wrap gap-2">
                 {specialtyOptions.map((c) => (
                   <button
@@ -370,7 +371,7 @@ export function CreateJobPage() {
                     )}
                     onClick={() => patch({ category: c.value })}
                   >
-                    {c.emoji} {c.label}
+                    {c.emoji} {t(c.label)}
                   </button>
                 ))}
               </div>
@@ -378,19 +379,19 @@ export function CreateJobPage() {
 
             {groupTemplates.length > 0 && (
               <div>
-                <p className="label">Quick templates</p>
+                <p className="label">{t("Quick templates")}</p>
                 <p className="mb-2 text-xs text-slate-500">
-                  Prefills title, description, and specialty for this lead group.
+                  {t("Prefills title, description, and specialty for this lead group.")}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {groupTemplates.map((t) => (
+                  {groupTemplates.map((tpl) => (
                     <button
-                      key={t.id}
+                      key={tpl.id}
                       type="button"
                       className="rounded-full bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-white"
-                      onClick={() => applyTemplate(t)}
+                      onClick={() => applyTemplate(tpl)}
                     >
-                      {t.label}
+                      {t(tpl.label)}
                     </button>
                   ))}
                 </div>
@@ -399,23 +400,23 @@ export function CreateJobPage() {
 
             {namedLibrary.length > 0 && (
               <div>
-                <p className="label">Your job templates</p>
+                <p className="label">{t("Your job templates")}</p>
                 <p className="mb-2 text-xs text-slate-500">
-                  Named library from past completed jobs — search or filter by specialty.
+                  {t("Named library from past completed jobs — search or filter by specialty.")}
                 </p>
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
                     className="input sm:max-w-xs"
                     type="search"
-                    placeholder="Search templates…"
+                    placeholder={t("Search templates…")}
                     value={namedQuery}
                     onChange={(e) => setNamedQuery(e.target.value)}
-                    aria-label="Search named job templates"
+                    aria-label={t("Search named job templates")}
                   />
                   <div
                     className="flex flex-wrap gap-1.5"
                     role="group"
-                    aria-label="Filter templates by specialty"
+                    aria-label={t("Filter templates by specialty")}
                   >
                     <button
                       type="button"
@@ -427,7 +428,7 @@ export function CreateJobPage() {
                       aria-pressed={namedSpecialty === "all"}
                       onClick={() => setNamedSpecialty("all")}
                     >
-                      All
+                      {t("All")}
                     </button>
                     {namedSpecialtyOptions.map((c) => (
                       <button
@@ -448,7 +449,7 @@ export function CreateJobPage() {
                 </div>
                 {filteredNamedLibrary.length === 0 ? (
                   <p className="text-xs text-slate-500">
-                    No templates match this search / specialty filter.
+                    {t("No templates match this search / specialty filter.")}
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
@@ -472,7 +473,7 @@ export function CreateJobPage() {
             )}
 
             <div>
-              <p className="label">Site</p>
+              <p className="label">{t("Site")}</p>
               <div className="flex flex-wrap gap-2">
                 {SITE_TYPES.map((s) => (
                   <button
@@ -486,15 +487,15 @@ export function CreateJobPage() {
                     )}
                     onClick={() => patch({ siteType: s.value })}
                   >
-                    <span className="block font-semibold">{s.label}</span>
-                    <span className="text-slate-500">{s.hint}</span>
+                    <span className="block font-semibold">{t(s.label)}</span>
+                    <span className="text-slate-500">{t(s.hint)}</span>
                   </button>
                 ))}
               </div>
             </div>
 
             <div>
-              <label className="label" htmlFor="maxBids">Max bids</label>
+              <label className="label" htmlFor="maxBids">{t("Max bids")}</label>
               <input
                 id="maxBids"
                 className="input max-w-32"
@@ -512,7 +513,7 @@ export function CreateJobPage() {
           <>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="label" htmlFor="budgetMin">Budget min (₹)</label>
+                <label className="label" htmlFor="budgetMin">{t("Budget min (₹)")}</label>
                 <input
                   id="budgetMin"
                   className="input"
@@ -523,7 +524,7 @@ export function CreateJobPage() {
                 />
               </div>
               <div>
-                <label className="label" htmlFor="budgetMax">Budget max (₹)</label>
+                <label className="label" htmlFor="budgetMax">{t("Budget max (₹)")}</label>
                 <input
                   id="budgetMax"
                   className="input"
@@ -536,7 +537,7 @@ export function CreateJobPage() {
             </div>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="sm:col-span-2">
-                <label className="label" htmlFor="address">Address</label>
+                <label className="label" htmlFor="address">{t("Address")}</label>
                 <input
                   id="address"
                   className="input"
@@ -545,7 +546,7 @@ export function CreateJobPage() {
                 />
               </div>
               <div>
-                <label className="label" htmlFor="pincode">Pincode</label>
+                <label className="label" htmlFor="pincode">{t("Pincode")}</label>
                 <input
                   id="pincode"
                   className="input"
@@ -556,27 +557,27 @@ export function CreateJobPage() {
             </div>
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
-                <label className="label" htmlFor="city">City</label>
+                <label className="label" htmlFor="city">{t("City")}</label>
                 <input
                   id="city"
                   className="input"
-                  placeholder="Bengaluru"
+                  placeholder={t("Bengaluru")}
                   value={draft.city}
                   onChange={(e) => patch({ city: e.target.value })}
                 />
               </div>
               <div>
-                <label className="label" htmlFor="area">Neighborhood</label>
+                <label className="label" htmlFor="area">{t("Neighborhood")}</label>
                 <input
                   id="area"
                   className="input"
-                  placeholder="Indiranagar"
+                  placeholder={t("Indiranagar")}
                   value={draft.area}
                   onChange={(e) => patch({ area: e.target.value })}
                 />
               </div>
               <div>
-                <label className="label" htmlFor="preferredStart">Preferred start</label>
+                <label className="label" htmlFor="preferredStart">{t("Preferred start")}</label>
                 <input
                   id="preferredStart"
                   className="input"
@@ -588,11 +589,11 @@ export function CreateJobPage() {
             </div>
 
             <div>
-              <p className="label">Job cadence</p>
+              <p className="label">{t("Job cadence")}</p>
               <p className="mb-2 text-xs text-slate-500">
-                Soft preference only — one-time, weekly, monthly, or AMC interest. Pros see this on the job; no auto-recurring engine yet.
+                {t("Soft preference only — one-time, weekly, monthly, or AMC interest. Pros see this on the job; no auto-recurring engine yet.")}
               </p>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Job cadence">
+              <div className="flex flex-wrap gap-2" role="group" aria-label={t("Job cadence")}>
                 {CADENCE_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
@@ -605,16 +606,16 @@ export function CreateJobPage() {
                     )}
                     aria-pressed={draft.cadence === opt.value}
                     onClick={() => patch({ cadence: opt.value })}
-                    title={opt.hint}
+                    title={t(opt.hint)}
                   >
-                    {opt.label}
+                    {t(opt.label)}
                   </button>
                 ))}
               </div>
               {draft.cadence !== "one_time" && (
                 <div className="mt-3">
                   <label className="label" htmlFor="cadenceNote">
-                    Cadence note (optional)
+                    {t("Cadence note (optional)")}
                   </label>
                   <input
                     id="cadenceNote"
@@ -622,8 +623,8 @@ export function CreateJobPage() {
                     maxLength={500}
                     placeholder={
                       draft.cadence === "amc"
-                        ? "e.g. Annual AC service, prefer evenings"
-                        : "e.g. Every Saturday morning"
+                        ? t("e.g. Annual AC service, prefer evenings")
+                        : t("e.g. Every Saturday morning")
                     }
                     value={draft.cadenceNote}
                     onChange={(e) => patch({ cadenceNote: e.target.value })}
@@ -633,7 +634,7 @@ export function CreateJobPage() {
             </div>
 
             <div>
-              <p className="label">Pin on map</p>
+              <p className="label">{t("Pin on map")}</p>
               <LazyMapPinPicker
                 lat={draft.lat ? Number(draft.lat) : null}
                 lng={draft.lng ? Number(draft.lng) : null}
@@ -643,7 +644,7 @@ export function CreateJobPage() {
               />
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="label" htmlFor="lat">Latitude</label>
+                  <label className="label" htmlFor="lat">{t("Latitude")}</label>
                   <input
                     id="lat"
                     className="input font-mono text-sm"
@@ -652,7 +653,7 @@ export function CreateJobPage() {
                   />
                 </div>
                 <div>
-                  <label className="label" htmlFor="lng">Longitude</label>
+                  <label className="label" htmlFor="lng">{t("Longitude")}</label>
                   <input
                     id="lng"
                     className="input font-mono text-sm"
@@ -668,7 +669,7 @@ export function CreateJobPage() {
         {step === 2 && (
           <>
             <div>
-              <label className="label" htmlFor="photos">Photos (up to 5)</label>
+              <label className="label" htmlFor="photos">{t("Photos (up to 5)")}</label>
               <input
                 id="photos"
                 className="input"
@@ -697,21 +698,21 @@ export function CreateJobPage() {
               )}
             </div>
             <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-700 space-y-1 ring-1 ring-slate-200">
-              <p className="font-semibold text-slate-900">Review</p>
-              <p><span className="text-slate-500">Title:</span> {draft.title || "—"}</p>
-              <p><span className="text-slate-500">Category:</span> {categoryLabel(draft.category)}</p>
-              <p><span className="text-slate-500">Site:</span> {siteTypeLabel(draft.siteType) || "—"}</p>
+              <p className="font-semibold text-slate-900">{t("Review")}</p>
+              <p><span className="text-slate-500">{t("Title:")}</span> {draft.title || "—"}</p>
+              <p><span className="text-slate-500">{t("Category:")}</span> {categoryLabel(draft.category)}</p>
+              <p><span className="text-slate-500">{t("Site:")}</span> {siteTypeLabel(draft.siteType) || "—"}</p>
               <p>
-                <span className="text-slate-500">Cadence:</span>{" "}
+                <span className="text-slate-500">{t("Cadence:")}</span>{" "}
                 {cadenceLabel(draft.cadence)}
                 {draft.cadenceNote.trim() ? ` — ${draft.cadenceNote.trim()}` : ""}
               </p>
-              <p><span className="text-slate-500">Budget:</span> ₹{draft.budgetMin || "?"} – ₹{draft.budgetMax || "?"}</p>
-              <p><span className="text-slate-500">Location:</span> {[draft.city, draft.area, draft.address].filter(Boolean).join(" · ") || "—"}</p>
+              <p><span className="text-slate-500">{t("Budget:")}</span> ₹{draft.budgetMin || "?"} – ₹{draft.budgetMax || "?"}</p>
+              <p><span className="text-slate-500">{t("Location:")}</span> {[draft.city, draft.area, draft.address].filter(Boolean).join(" · ") || "—"}</p>
               {draft.lat && draft.lng && (
-                <p><span className="text-slate-500">Coords:</span> {draft.lat}, {draft.lng}</p>
+                <p><span className="text-slate-500">{t("Coords:")}</span> {draft.lat}, {draft.lng}</p>
               )}
-              <p className="line-clamp-3"><span className="text-slate-500">Details:</span> {draft.description}</p>
+              <p className="line-clamp-3"><span className="text-slate-500">{t("Details:")}</span> {draft.description}</p>
             </div>
           </>
         )}
@@ -719,13 +720,13 @@ export function CreateJobPage() {
         <div className="flex flex-wrap gap-2 pt-2">
           {step > 0 && (
             <button type="button" className="btn-secondary" onClick={() => setStep((s) => s - 1)}>
-              Back
+              {t("Back")}
             </button>
           )}
           <button type="submit" className="btn-primary" disabled={busy || !canNext()}>
-            {busy ? "Posting…" : step < STEPS.length - 1 ? "Continue" : "Post job"}
+            {busy ? t("Posting…") : step < STEPS.length - 1 ? t("Continue") : t("Post job")}
           </button>
-          <button type="button" className="btn-ghost" onClick={() => navigate(-1)}>Cancel</button>
+          <button type="button" className="btn-ghost" onClick={() => navigate(-1)}>{t("Cancel")}</button>
         </div>
       </form>
     </Shell>

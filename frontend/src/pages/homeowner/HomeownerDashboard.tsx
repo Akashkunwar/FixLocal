@@ -18,6 +18,7 @@ import {
   upsertNamedJobTemplate,
 } from "../../lib/namedJobTemplates";
 import { useToast } from "../../components/Toast";
+import { t } from "../../lib/i18n";
 
 export function HomeownerDashboard() {
   const { user, updateProfile } = useAuth();
@@ -75,19 +76,19 @@ export function HomeownerDashboard() {
 
   return (
     <Shell
-      title="My jobs"
-      subtitle="Track posts, compare bids, and manage repairs"
+      title={t("My jobs")}
+      subtitle={t("Track posts, compare bids, and manage repairs")}
       actions={
         <Link to="/client/jobs/new" className="btn-primary no-underline">
-          <Plus className="h-4 w-4" /> Post a job
+          <Plus className="h-4 w-4" /> {t("Post a job")}
         </Link>
       }
     >
       <PendingReviewsCard />
       <OnboardingChecklist
         variant="client"
-        title="Client getting started"
-        subtitle="A short checklist — dismiss anytime"
+        title={t("Client getting started")}
+        subtitle={t("A short checklist — dismiss anytime")}
         items={[
           {
             id: "name",
@@ -130,7 +131,7 @@ export function HomeownerDashboard() {
             { label: "Bid after invite", value: inviteStats.bidAfterInvite, sub: `${inviteStats.bidRate}%` },
           ].map((c) => (
             <div key={c.label} className="card px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wide text-slate-500">{c.label}</p>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">{t(c.label)}</p>
               <p className="text-xl font-bold text-slate-900">{c.value}</p>
               {"sub" in c && c.sub ? <p className="text-[11px] text-slate-500">{c.sub}</p> : null}
             </div>
@@ -140,15 +141,15 @@ export function HomeownerDashboard() {
       {shortlistFunnel && shortlistFunnel.ranked > 0 && (
         <div className="mb-5">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Shortlist funnel (rank → invite → bid)
+            {t("Shortlist funnel (rank → invite → bid)")}
           </p>
           <div className="grid grid-cols-3 gap-2">
             {shortlistFunnel.funnel.map((s) => (
               <div key={s.stage} className="card px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">{s.label}</p>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">{t(s.label)}</p>
                 <p className="text-xl font-bold text-slate-900">{s.count}</p>
                 <p className="text-[11px] text-slate-500">
-                  {s.stage === "ranked" ? "saved pros" : `${s.rate}%`}
+                  {s.stage === "ranked" ? t("saved pros") : `${s.rate}%`}
                 </p>
               </div>
             ))}
@@ -159,7 +160,7 @@ export function HomeownerDashboard() {
       {counterStats && counterStats.sent > 0 && (
         <div className="mb-5">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Counter-offer analytics · time-to-address SLA
+            {t("Counter-offer analytics · time-to-address SLA")}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
@@ -179,7 +180,7 @@ export function HomeownerDashboard() {
               },
             ].map((c) => (
               <div key={c.label} className="card px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">{c.label}</p>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">{t(c.label)}</p>
                 <p className="text-xl font-bold text-slate-900">{c.value}</p>
                 {"sub" in c && c.sub ? <p className="text-[11px] text-slate-500">{c.sub}</p> : null}
               </div>
@@ -187,8 +188,8 @@ export function HomeownerDashboard() {
           </div>
           {(counterStats.afterAddressedAccepted > 0 || counterStats.afterAddressedRejected > 0) && (
             <p className="mt-2 text-[11px] text-slate-500">
-              After address → accepted {counterStats.afterAddressedAccepted} · rejected{" "}
-              {counterStats.afterAddressedRejected} · still open {counterStats.afterAddressedOpen}
+              {t("After address → accepted")}{" "}{counterStats.afterAddressedAccepted} {t("· rejected")}{" "}
+              {counterStats.afterAddressedRejected} {t("· still open")}{" "}{counterStats.afterAddressedOpen}
             </p>
           )}
         </div>
@@ -198,32 +199,32 @@ export function HomeownerDashboard() {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
             className="input pl-9"
-            placeholder="Search jobs…"
+            placeholder={t("Search jobs…")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && load()}
           />
         </div>
-        <select className="input w-auto" aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All statuses</option>
+        <select className="input w-auto" aria-label={t("Filter by status")} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">{t("All statuses")}</option>
           {["open", "awarded", "in_progress", "pending_confirmation", "completed", "cancelled", "disputed"].map((s) => (
             <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
           ))}
         </select>
-        <select className="input w-auto" aria-label="Filter by category" value={category} onChange={(e) => setCategory(e.target.value)}>
-          <option value="">All categories</option>
+        <select className="input w-auto" aria-label={t("Filter by category")} value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">{t("All categories")}</option>
           {categoryGroups().map(([group, cats]) => (
-            <optgroup key={group} label={group}>
+            <optgroup key={group} label={t(group)}>
               {cats.map((c) => (
-                <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
+                <option key={c.value} value={c.value}>{c.emoji} {t(c.label)}</option>
               ))}
             </optgroup>
           ))}
         </select>
-        <input className="input w-auto min-w-[110px]" placeholder="Area" value={area} onChange={(e) => setArea(e.target.value)} />
-        <input className="input w-28" type="number" min={0} placeholder="Min ₹" value={budgetMin} onChange={(e) => setBudgetMin(e.target.value)} />
-        <input className="input w-28" type="number" min={0} placeholder="Max ₹" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} />
-        <button type="button" className="btn-secondary" onClick={load}>Filter</button>
+        <input className="input w-auto min-w-[110px]" placeholder={t("Area")} value={area} onChange={(e) => setArea(e.target.value)} />
+        <input className="input w-28" type="number" min={0} placeholder={t("Min ₹")} value={budgetMin} onChange={(e) => setBudgetMin(e.target.value)} />
+        <input className="input w-28" type="number" min={0} placeholder={t("Max ₹")} value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} />
+        <button type="button" className="btn-secondary" onClick={load}>{t("Filter")}</button>
       </div>
 
       {loading ? (
@@ -232,18 +233,18 @@ export function HomeownerDashboard() {
         <div className="rounded-xl bg-rose-50 p-4 text-rose-700">{error}</div>
       ) : jobs.length === 0 ? (
         <EmptyState
-          title="No jobs yet"
-          description="Playbook: pick a category group → post with photos and budget → invite suggested pros → compare bids → hire. Verified professionals will start bidding."
+          title={t("No jobs yet")}
+          description={t("Playbook: pick a category group → post with photos and budget → invite suggested pros → compare bids → hire. Verified professionals will start bidding.")}
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Link to="/client/jobs/new" className="btn-primary no-underline">
-                Post a job
+                {t("Post a job")}
               </Link>
               <Link to="/client/pros" className="btn-secondary no-underline">
-                Find professionals
+                {t("Find professionals")}
               </Link>
               <Link to="/categories/home-repair-and-maintenance" className="btn-ghost no-underline">
-                Browse hubs
+                {t("Browse hubs")}
               </Link>
             </div>
           }
@@ -265,7 +266,7 @@ export function HomeownerDashboard() {
                       {job.area ? ` · ${job.area}` : ""} · {fmtDate(job.createdAt)}
                     </p>
                     <p className="mt-1 text-sm text-slate-600">
-                      Budget {money(job.budgetMin)} – {money(job.budgetMax)}
+                      {t("Budget")}{" "}{money(job.budgetMin)} – {money(job.budgetMax)}
                     </p>
                   </div>
                 </div>
@@ -282,7 +283,7 @@ export function HomeownerDashboard() {
                       navigate(clientPath("jobs/new"));
                     }}
                   >
-                    Repeat this job
+                    {t("Repeat this job")}
                   </button>
                   <button
                     type="button"
@@ -308,7 +309,7 @@ export function HomeownerDashboard() {
                       }
                     }}
                   >
-                    Save as template
+                    {t("Save as template")}
                   </button>
                 </div>
               )}

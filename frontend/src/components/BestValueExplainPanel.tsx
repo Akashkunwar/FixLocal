@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { t } from "../lib/i18n";
 
 export type BestValueExplainRow = {
   bidId: string;
@@ -49,33 +50,33 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
       <button
         type="button"
         className="absolute inset-0 bg-slate-900/40"
-        aria-label="Close best value explain"
+        aria-label={t("Close best value explain")}
         onClick={onClose}
       />
       <aside className="relative z-10 flex h-full w-full max-w-md flex-col bg-white shadow-xl">
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">Why best value</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">{t("Why best value")}</p>
             <h2 className="text-lg font-semibold text-slate-900">
               {row.name}
-              {row.isBest ? " · Best value" : ""}
+              {row.isBest ? t(" · Best value") : ""}
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              Blend: match {row.matchPct}% · lower escrow hold {row.pricePct}%
+              {t("Blend: match")}{" "}{row.matchPct}{t("% · lower escrow hold")}{" "}{row.pricePct}%
               {slaHeatPct > 0 ? ` · SLA/heat ${slaHeatPct}%` : ""}
             </p>
           </div>
-          <button type="button" className="btn-ghost btn-sm touch-target" onClick={onClose} aria-label="Close">
+          <button type="button" className="btn-ghost btn-sm touch-target" onClick={onClose} aria-label={t("Close")}>
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
           <div className="rounded-xl bg-sky-50 p-3 ring-1 ring-sky-100">
             <p className="text-sm font-semibold text-slate-900">
-              Value score <span className="font-mono text-sky-900">{row.valueScore}</span>
+              {t("Value score")}{" "}<span className="font-mono text-sky-900">{row.valueScore}</span>
             </p>
             <p className="mt-1 text-[11px] text-slate-500">
-              {row.matchPct}% × matchNorm ({row.matchNorm.toFixed(2)}) + {row.pricePct}% × priceNorm (
+              {row.matchPct}{t("% × matchNorm (")}{row.matchNorm.toFixed(2)}) + {row.pricePct}{t("% × priceNorm (")}
               {row.priceNorm.toFixed(2)})
               {slaHeatPct > 0 && row.slaHeatNorm != null
                 ? ` + ${slaHeatPct}% × slaHeatNorm (${row.slaHeatNorm.toFixed(2)})`
@@ -89,12 +90,12 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
               <div>
                 <p className="text-sm font-semibold text-slate-900">
                   <span className="mr-1.5 rounded-sm bg-brand-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-brand-800">
-                    mt
+                    {t("mt")}
                   </span>
-                  Match / ranked score
+                  {t("Match / ranked score")}
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-500">
-                  Raw match {row.matchScore.toFixed(0)} · normalized {row.matchNorm.toFixed(2)} among competing bids
+                  {t("Raw match")}{" "}{row.matchScore.toFixed(0)} {t("· normalized")}{" "}{row.matchNorm.toFixed(2)} {t("among competing bids")}
                 </p>
               </div>
               <p className="shrink-0 font-mono text-sm font-semibold text-brand-800">{matchPart}</p>
@@ -107,12 +108,12 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
               <div>
                 <p className="text-sm font-semibold text-slate-900">
                   <span className="mr-1.5 rounded-sm bg-emerald-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-emerald-800">
-                    px
+                    {t("px")}
                   </span>
-                  Lower escrow hold
+                  {t("Lower escrow hold")}
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-500">
-                  Hold ₹{Math.round(row.hold)} · priceNorm {row.priceNorm.toFixed(2)} (lower hold → higher)
+                  {t("Hold ₹")}{Math.round(row.hold)} {t("· priceNorm")}{" "}{row.priceNorm.toFixed(2)} {t("(lower hold → higher)")}
                 </p>
               </div>
               <p className="shrink-0 font-mono text-sm font-semibold text-emerald-800">{pricePart}</p>
@@ -126,13 +127,13 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
                     <span className="mr-1.5 rounded-sm bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-amber-900">
-                      sh
+                      {t("sh")}
                     </span>
-                    SLA + availability heat
+                    {t("SLA + availability heat")}
                   </p>
                   <p className="mt-0.5 text-[11px] text-slate-500">
-                    Raw {Number(row.slaHeatRaw ?? 0).toFixed(0)} · normalized {row.slaHeatNorm.toFixed(2)}{" "}
-                    (faster reply + higher heat → higher)
+                    {t("Raw")}{" "}{Number(row.slaHeatRaw ?? 0).toFixed(0)} {t("· normalized")}{" "}{row.slaHeatNorm.toFixed(2)}{" "}
+                    {t("(faster reply + higher heat → higher)")}
                   </p>
                 </div>
                 <p className="shrink-0 font-mono text-sm font-semibold text-amber-900">{slaPart}</p>
@@ -142,8 +143,7 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
           )}
 
           <p className="text-[11px] text-slate-500">
-            Weights are admin-tunable on Match quality (audited). Scores are relative to other clean competing
-            bids on this job (simulated escrow only).
+            {t("Weights are admin-tunable on Match quality (audited). Scores are relative to other clean competing bids on this job (simulated escrow only).")}
           </p>
         </div>
       </aside>

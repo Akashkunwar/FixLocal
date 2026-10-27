@@ -4,6 +4,7 @@ import { ResponseSlaBadge } from "../../../components/ui/ResponseSlaBadge";
 import { ShortlistFunnelPanel } from "./ShortlistFunnelPanel";
 import { Users } from "lucide-react";
 import type { JobDetailState } from "./useJobDetail";
+import { t } from "../../../lib/i18n";
 
 export function ShortlistInvitePanel({
   s,
@@ -35,10 +36,9 @@ export function ShortlistInvitePanel({
         <section className="card p-6 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-lg font-semibold">Invite from shortlist</h2>
+              <h2 className="text-lg font-semibold">{t("Invite from shortlist")}</h2>
               <p className="text-xs text-slate-500">
-                Smart-ranked for this job (match score + tag boost) · notes
-                &amp; tags from Favorites
+                {t("Smart-ranked for this job (match score + tag boost) · notes & tags from Favorites")}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -55,13 +55,13 @@ export function ShortlistInvitePanel({
                 }}
               >
                 <Users className="h-3.5 w-3.5" />
-                {shortlistBulkOpen ? "Cancel multi" : "Invite multiple"}
+                {shortlistBulkOpen ? t("Cancel multi") : t("Invite multiple")}
               </button>
               <Link
                 to="/client/favorites"
                 className="text-xs text-brand-700 no-underline hover:underline"
               >
-                Manage shortlist
+                {t("Manage shortlist")}
               </Link>
             </div>
           </div>
@@ -102,7 +102,7 @@ export function ShortlistInvitePanel({
                         to={`/pros/${pro.userId}`}
                         className="font-medium text-slate-900 no-underline hover:text-brand-700"
                       >
-                        {pro.name || "Pro"}
+                        {pro.name || t("Pro")}
                       </Link>
                       <p className="text-xs text-slate-500 truncate max-w-md">
                         {pro.skills || "—"}
@@ -117,12 +117,12 @@ export function ShortlistInvitePanel({
                                 : `Match score ${pro.score}`
                             }
                           >
-                            Match {pro.smartScore}
+                            {t("Match")}{" "}{pro.smartScore}
                           </span>
                         )}
                         {!!pro.tagBoost && (
                           <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-900 ring-1 ring-amber-200">
-                            +{pro.tagBoost} tags
+                            +{pro.tagBoost} {t("tags")}
                           </span>
                         )}
                         {pro.responseSla && (
@@ -142,28 +142,28 @@ export function ShortlistInvitePanel({
                                 : `Availability heat ${pro.availabilityHeat.score}`
                             }
                           >
-                            Heat {pro.availabilityHeat.score}
-                            {pro.inviteBlockedByHeat ? " · blocked" : ""}
+                            {t("Heat")}{" "}{pro.availabilityHeat.score}
+                            {pro.inviteBlockedByHeat ? t(" · blocked") : ""}
                           </span>
                         )}
                         {pro.availabilityHeat && !pro.availabilityHeat.clean && (
                           <span
                             className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200"
-                            title="This professional hasn't published a weekly schedule, so their availability is unknown."
+                            title={t("This professional hasn't published a weekly schedule, so their availability is unknown.")}
                           >
-                            Schedule unknown
+                            {t("Schedule unknown")}
                           </span>
                         )}
-                        {(pro.tags || []).map((t) => (
+                        {(pro.tags || []).map((tag) => (
                           <span
-                            key={t}
+                            key={tag}
                             className={
-                              (pro.tagHits || []).includes(t)
+                              (pro.tagHits || []).includes(tag)
                                 ? "rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-950 ring-1 ring-amber-300"
                                 : "rounded-full bg-white px-1.5 py-0.5 text-[10px] text-slate-600 ring-1 ring-slate-200"
                             }
                           >
-                            #{t}
+                            #{tag}
                           </span>
                         ))}
                       </div>
@@ -177,20 +177,19 @@ export function ShortlistInvitePanel({
                   <div className="flex items-center gap-2">
                     {hasBid ? (
                       <span className="text-[10px] uppercase tracking-wide text-violet-800 bg-violet-50 px-1.5 py-0.5 rounded-full">
-                        bid received
+                        {t("bid received")}
                       </span>
                     ) : already ? (
                       <span className="text-[10px] uppercase tracking-wide text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-                        invited
+                        {t("invited")}
                       </span>
                     ) : pro.inviteBlockedByHeat ? (
                       <span
                         className="max-w-36 text-right text-[10px] text-rose-700"
                         title={pro.inviteHeatReason || undefined}
                       >
-                        Heat below{" "}
-                        {pro.shortlistInviteMinHeat ?? shortlistMinHeat} —
-                        invite blocked
+                        {t("Heat below")}{" "}
+                        {pro.shortlistInviteMinHeat ?? shortlistMinHeat} {t("— invite blocked")}
                       </span>
                     ) : !shortlistBulkOpen ? (
                       <button
@@ -226,7 +225,7 @@ export function ShortlistInvitePanel({
                           )
                         }
                       >
-                        Invite
+                        {t("Invite")}
                       </button>
                     ) : null}
                   </div>
@@ -237,11 +236,11 @@ export function ShortlistInvitePanel({
           {shortlistBulkOpen && (
             <div className="rounded-xl border border-dashed border-brand-200 bg-brand-50/40 p-3 space-y-2">
               <p className="text-sm text-slate-700">
-                {shortlistSelected.length} selected
+                {shortlistSelected.length} {t("selected")}
               </p>
               <textarea
                 className="input min-h-[60px]"
-                placeholder="Optional shared message"
+                placeholder={t("Optional shared message")}
                 value={shortlistBulkMsg}
                 onChange={(e) => setShortlistBulkMsg(e.target.value)}
               />
@@ -252,7 +251,7 @@ export function ShortlistInvitePanel({
                 onClick={confirmShortlistBulkInvite}
               >
                 {inviteBusy
-                  ? "Sending…"
+                  ? t("Sending…")
                   : `Invite ${shortlistSelected.length || ""} from shortlist`}
               </button>
             </div>

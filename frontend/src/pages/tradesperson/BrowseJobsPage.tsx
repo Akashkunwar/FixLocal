@@ -8,11 +8,12 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { categoryEmoji, categoryGroups, categoryLabel, fmtDate, money } from "../../lib/format";
 import { SITE_TYPES, siteTypeLabel, type SiteType } from "../../lib/paths";
 import { useToast } from "../../components/Toast";
-import { Bookmark, MapPin, Search } from "lucide-react";
+import { BellRing, Bookmark, MapPin, Search } from "lucide-react";
 import clsx from "clsx";
 import { OnboardingChecklist } from "../../components/OnboardingChecklist";
 import { PendingReviewsCard } from "../../components/PendingReviewsCard";
 import { proPath } from "../../lib/paths";
+import { t } from "../../lib/i18n";
 
 const SAVED_KEY = "fixlocal:savedJobSearch";
 
@@ -171,7 +172,7 @@ export function BrowseJobsPage() {
   }
 
   return (
-    <Shell title="Open jobs" subtitle="Bid on verified-eligible repair requests near you">
+    <Shell title={t("Open jobs")} subtitle={t("Bid on verified-eligible repair requests near you")}>
       {verification && verification !== "verified" && (
         <div
           className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
@@ -179,15 +180,15 @@ export function BrowseJobsPage() {
         >
           <p className="font-medium">
             {verification === "pending"
-              ? "Your account is waiting for admin verification."
+              ? t("Your account is waiting for admin verification.")
               : verification === "rejected"
-                ? "Your verification was not approved."
-                : "Your professional account is suspended."}
+                ? t("Your verification was not approved.")
+                : t("Your professional account is suspended.")}
           </p>
           <p className="mt-1">
-            You can browse jobs, but you cannot place bids until an admin verifies you.{" "}
+            {t("You can browse jobs, but you cannot place bids until an admin verifies you.")}{" "}
             {verification !== "suspended" && (
-              <Link to={proPath("profile")}>Complete your portfolio and upload a licence or ID</Link>
+              <Link to={proPath("profile")}>{t("Complete your portfolio and upload a licence or ID")}</Link>
             )}
           </p>
         </div>
@@ -195,8 +196,8 @@ export function BrowseJobsPage() {
       <PendingReviewsCard />
       <OnboardingChecklist
         variant="pro"
-        title="Professional getting started"
-        subtitle="A short checklist — dismiss anytime"
+        title={t("Professional getting started")}
+        subtitle={t("A short checklist — dismiss anytime")}
         items={[
           {
             id: "portfolio",
@@ -229,8 +230,8 @@ export function BrowseJobsPage() {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input
               className="input pl-9"
-              placeholder="Search…"
-              aria-label="Search jobs"
+              placeholder={t("Search…")}
+              aria-label={t("Search jobs")}
               value={facets.q}
               onChange={(e) => setFacets({ ...facets, q: e.target.value })}
               onKeyDown={(e) => e.key === "Enter" && load()}
@@ -238,16 +239,16 @@ export function BrowseJobsPage() {
           </div>
           <select
             className="input w-auto"
-            aria-label="Category"
+            aria-label={t("Category")}
             value={facets.category}
             onChange={(e) => setFacets({ ...facets, category: e.target.value })}
           >
-            <option value="">All categories</option>
+            <option value="">{t("All categories")}</option>
             {categoryGroups().map(([group, cats]) => (
-              <optgroup key={group} label={group}>
+              <optgroup key={group} label={t(group)}>
                 {cats.map((c) => (
                   <option key={c.value} value={c.value}>
-                    {c.emoji} {c.label}
+                    {c.emoji} {t(c.label)}
                   </option>
                 ))}
               </optgroup>
@@ -255,15 +256,15 @@ export function BrowseJobsPage() {
           </select>
           <input
             className="input w-auto min-w-[110px]"
-            placeholder="City"
-            aria-label="City"
+            placeholder={t("City")}
+            aria-label={t("City")}
             value={facets.city}
             onChange={(e) => setFacets({ ...facets, city: e.target.value })}
           />
           <input
             className="input w-auto min-w-[120px]"
-            placeholder="Neighborhood"
-            aria-label="Neighborhood"
+            placeholder={t("Neighborhood")}
+            aria-label={t("Neighborhood")}
             value={facets.neighborhood}
             onChange={(e) => setFacets({ ...facets, neighborhood: e.target.value })}
           />
@@ -271,8 +272,8 @@ export function BrowseJobsPage() {
             className="input w-28"
             type="number"
             min={0}
-            placeholder="Min ₹"
-            aria-label="Minimum budget"
+            placeholder={t("Min ₹")}
+            aria-label={t("Minimum budget")}
             value={facets.budgetMin}
             onChange={(e) => setFacets({ ...facets, budgetMin: e.target.value })}
           />
@@ -280,33 +281,33 @@ export function BrowseJobsPage() {
             className="input w-28"
             type="number"
             min={0}
-            placeholder="Max ₹"
-            aria-label="Maximum budget"
+            placeholder={t("Max ₹")}
+            aria-label={t("Maximum budget")}
             value={facets.budgetMax}
             onChange={(e) => setFacets({ ...facets, budgetMax: e.target.value })}
           />
           <select
             className="input w-auto"
-            aria-label="Sort by"
+            aria-label={t("Sort by")}
             value={facets.sort}
             onChange={(e) => setFacets({ ...facets, sort: e.target.value })}
           >
-            <option value="newest">Newest</option>
-            <option value="distance">Nearest (km)</option>
-            <option value="budget_desc">Budget high</option>
-            <option value="budget_asc">Budget low</option>
+            <option value="newest">{t("Newest")}</option>
+            <option value="distance">{t("Nearest (km)")}</option>
+            <option value="budget_desc">{t("Budget high")}</option>
+            <option value="budget_asc">{t("Budget low")}</option>
           </select>
           <button type="button" className="btn-secondary" onClick={() => load()}>
-            Apply
+            {t("Apply")}
           </button>
         </div>
         <div
           className="flex flex-wrap items-center gap-2"
           role="group"
-          aria-label="Site type filter"
+          aria-label={t("Site type filter")}
         >
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500" id="site-type-label">
-            Site
+            {t("Site")}
           </span>
           <button
             type="button"
@@ -323,7 +324,7 @@ export function BrowseJobsPage() {
               load(next);
             }}
           >
-            Any
+            {t("Any")}
           </button>
           {SITE_TYPES.map((s) => (
             <button
@@ -335,7 +336,7 @@ export function BrowseJobsPage() {
                   ? "bg-brand-700 text-white ring-brand-700"
                   : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50"
               )}
-              title={s.hint}
+              title={t(s.hint)}
               aria-pressed={facets.siteType === s.value}
               onClick={() => {
                 const next = { ...facets, siteType: s.value };
@@ -343,30 +344,44 @@ export function BrowseJobsPage() {
                 load(next);
               }}
             >
-              {s.label}
+              {t(s.label)}
             </button>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <button type="button" className="btn-secondary btn-sm" onClick={saveSearch}>
-            <Bookmark className="h-3.5 w-3.5" /> Save search
+            <Bookmark className="h-3.5 w-3.5" /> {t("Save search")}
           </button>
-          {savedLabel && <span className="text-slate-500">Saved: {savedLabel}</span>}
+          <Link
+            className="btn-secondary btn-sm no-underline"
+            to={`/professional/alerts?${new URLSearchParams(
+              Object.entries({
+                category: facets.category,
+                city: facets.city,
+                area: facets.neighborhood,
+                minBudget: facets.budgetMin,
+                siteType: facets.siteType,
+              }).filter(([, v]) => v) as [string, string][]
+            ).toString()}`}
+          >
+            <BellRing className="h-3.5 w-3.5" aria-hidden /> {t("Alert me about new jobs like these")}
+          </Link>
+          {savedLabel && <span className="text-slate-500">{t("Saved:")}{" "}{savedLabel}</span>}
         </div>
       </div>
       {loading ? (
         <Spinner />
       ) : jobs.length === 0 ? (
         <EmptyState
-          title="No open jobs"
-          description="Playbook: clear filters → widen category/site → complete portfolio + availability → place a competitive bid with a visit window. Clients post throughout the day."
+          title={t("No open jobs")}
+          description={t("Playbook: clear filters → widen category/site → complete portfolio + availability → place a competitive bid with a visit window. Clients post throughout the day.")}
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Link to="/professional/profile" className="btn-secondary no-underline">
-                Update portfolio
+                {t("Update portfolio")}
               </Link>
               <Link to="/categories/cleaning" className="btn-ghost no-underline">
-                Category hubs
+                {t("Category hubs")}
               </Link>
             </div>
           }
@@ -390,14 +405,14 @@ export function BrowseJobsPage() {
                       {job.area ? ` · ${job.area}` : ""} · {fmtDate(job.createdAt)}
                     </p>
                     <p className="mt-1 text-sm text-slate-700">
-                      Budget {money(job.budgetMin)} – {money(job.budgetMax)}
+                      {t("Budget")}{" "}{money(job.budgetMin)} – {money(job.budgetMax)}
                     </p>
                   </div>
                 </div>
                 <Badge status={job.status} />
                   {job.distanceKm != null && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                      <MapPin className="h-3 w-3" /> ~{job.distanceKm} km
+                      <MapPin className="h-3 w-3" /> ~{job.distanceKm} {t("km")}
                     </span>
                   )}
               </Link>

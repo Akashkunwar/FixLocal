@@ -1,8 +1,9 @@
+import { grantReferralRewards } from "../domain/credits";
 import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { Job, JobStatus } from "../entities/Job";
 import { NotificationType } from "../entities/Notification";
-import { createNotification } from "../utils/notifications";
+import { createNotification, createNotifications } from "../utils/notifications";
 import { toJob } from "../serializers";
 import { transitionJob } from "../domain/jobStateMachine";
 import { refundMilestones, releaseRemaining } from "../domain/escrow";
@@ -64,8 +65,10 @@ export async function confirmComplete(req: Request, res: Response) {
   const result = await AppDataSource.transaction(async (m) => {
     await transitionJob(m, ctx.job.id, "confirm", { completedAt: new Date() });
     const job = await m.findOneOrFail(Job, { where: { id: ctx.job.id } });
-    return releaseRemaining(m, job, req.user!.id);
+    const released = await releaseRemaining(m, job, req.user!.id);
+    return { ...released, rewards: await grantReferralRewards(m, job.id) };
   });
+  if (result.rewards.length) await createNotifications(result.rewards);
   const autoReleased = result.released.length
     ? { count: result.released.length, paymentStatus: result.paymentStatus }
     : null;
@@ -80,6 +83,7 @@ export async function confirmComplete(req: Request, res: Response) {
         : `"${ctx.job.title}" was confirmed complete. Great work!`,
       link: `/professional/jobs/${ctx.job.id}`,
       meta: { jobId: ctx.job.id, status: JobStatus.COMPLETED, autoReleased },
+      text: !!autoReleased,
     });
   }
   const job = await jobRepo().findOneOrFail({ where: { id: ctx.job.id } });

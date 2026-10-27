@@ -51,6 +51,21 @@ const schema = z
     SMTP_URL: z.string().optional(),
     MAIL_FROM: z.string().default("FixLocal <no-reply@fixlocal.local>"),
     ALLOW_CONSOLE_MAIL: bool(false),
+    // Referral programme (simulated credit). 0 turns rewards off.
+    REFERRAL_REWARD_INR: int(100),
+    REFERRAL_MONTHLY_CAP: int(10),
+    REFERRAL_MIN_JOB_INR: int(500),
+    // SMS / WhatsApp alerts. Off unless MESSAGING_ENABLED=true; the "log" drivers only write to the log.
+    MESSAGING_ENABLED: bool(false),
+    SMS_DRIVER: z.enum(["log", "msg91"]).default("log"),
+    WHATSAPP_DRIVER: z.enum(["log", "cloud"]).default("log"),
+    MSG91_AUTH_KEY: z.string().optional(),
+    MSG91_TEMPLATE_ID: z.string().optional(),
+    MSG91_SENDER_ID: z.string().optional(),
+    WHATSAPP_TOKEN: z.string().optional(),
+    WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+    WHATSAPP_TEMPLATE: z.string().default("fixlocal_update"),
+    WHATSAPP_API_VERSION: z.string().default("v21.0"),
   })
   .superRefine((env, ctx) => {
     if (env.STORAGE_DRIVER === "s3" && !env.S3_BUCKET) {
@@ -61,6 +76,16 @@ const schema = z
         code: "custom",
         path: ["S3_SECRET_ACCESS_KEY"],
         message: "Set both S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY, or neither (to use the default AWS credential chain)",
+      });
+    }
+    if (env.SMS_DRIVER === "msg91" && (!env.MSG91_AUTH_KEY || !env.MSG91_TEMPLATE_ID)) {
+      ctx.addIssue({ code: "custom", path: ["MSG91_AUTH_KEY"], message: "SMS_DRIVER=msg91 needs MSG91_AUTH_KEY and MSG91_TEMPLATE_ID" });
+    }
+    if (env.WHATSAPP_DRIVER === "cloud" && (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["WHATSAPP_TOKEN"],
+        message: "WHATSAPP_DRIVER=cloud needs WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID",
       });
     }
     if (env.MAIL_PROVIDER === "smtp" && !env.SMTP_URL) {
@@ -134,6 +159,14 @@ export type AppConfig = {
   mailProvider: "console" | "smtp";
   smtpUrl: string | null;
   mailFrom: string;
+  referral: { rewardInr: number; monthlyCap: number; minJobInr: number };
+  messaging: {
+    enabled: boolean;
+    smsDriver: "log" | "msg91";
+    whatsappDriver: "log" | "cloud";
+    msg91: { authKey: string; templateId: string; senderId: string | null } | null;
+    whatsapp: { token: string; phoneNumberId: string; template: string; apiVersion: string } | null;
+  };
 };
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -181,6 +214,20 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     mailProvider: e.MAIL_PROVIDER,
     smtpUrl: e.SMTP_URL || null,
     mailFrom: e.MAIL_FROM,
+    referral: { rewardInr: e.REFERRAL_REWARD_INR, monthlyCap: e.REFERRAL_MONTHLY_CAP, minJobInr: e.REFERRAL_MIN_JOB_INR },
+    messaging: {
+      enabled: e.MESSAGING_ENABLED,
+      smsDriver: e.SMS_DRIVER,
+      whatsappDriver: e.WHATSAPP_DRIVER,
+      msg91:
+        e.MSG91_AUTH_KEY && e.MSG91_TEMPLATE_ID
+          ? { authKey: e.MSG91_AUTH_KEY, templateId: e.MSG91_TEMPLATE_ID, senderId: e.MSG91_SENDER_ID || null }
+          : null,
+      whatsapp:
+        e.WHATSAPP_TOKEN && e.WHATSAPP_PHONE_NUMBER_ID
+          ? { token: e.WHATSAPP_TOKEN, phoneNumberId: e.WHATSAPP_PHONE_NUMBER_ID, template: e.WHATSAPP_TEMPLATE, apiVersion: e.WHATSAPP_API_VERSION }
+          : null,
+    },
   };
 }
 

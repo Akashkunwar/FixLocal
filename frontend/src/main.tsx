@@ -12,18 +12,26 @@ import { AuthProvider } from "./auth/AuthContext";
 import { ToastProvider } from "./components/Toast";
 import App from "./App";
 import "./styles.css";
+import { listenForInstallPrompt } from "./lib/install";
+import { I18nProvider, prepareLanguage } from "./lib/i18n";
 
-createRoot(document.getElementById("root")!).render(
+void prepareLanguage().then(() =>
+  createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
+        <I18nProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </I18nProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>
+  )
 );
+
+listenForInstallPrompt();
 
 // Only production builds get the offline cache; in dev it would serve stale modules.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {

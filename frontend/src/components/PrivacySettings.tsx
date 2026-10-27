@@ -4,6 +4,7 @@ import { downloadMyData, listBlocks, unblockUser, type BlockedUser } from "../ap
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "./Toast";
 import { roleLabel } from "../lib/format";
+import { t } from "../lib/i18n";
 
 const message = (e: unknown, fallback: string) => (e instanceof Error && e.message) || fallback;
 
@@ -70,17 +71,17 @@ export function PrivacySettings() {
       <section className="card space-y-3 p-5 sm:p-6" aria-labelledby="email-title">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h2 id="email-title" className="font-semibold text-slate-900">Email updates</h2>
+            <h2 id="email-title" className="font-semibold text-slate-900">{t("Email updates")}</h2>
             <p className="mt-1 text-sm text-slate-500">
-              New bids, hiring, job progress and disputes, sent to {user.email}
-              {user.emailVerified === false ? " once it's verified" : ""}. Account and security emails always go out.
+              {t("New bids, hiring, job progress and disputes, sent to")}{" "}{user.email}
+              {user.emailVerified === false ? t(" once it's verified") : ""}{t(". Account and security emails always go out.")}
             </p>
           </div>
           <button
             type="button"
             role="switch"
             aria-checked={emailOn}
-            aria-label="Email updates"
+            aria-label={t("Email updates")}
             disabled={emailBusy}
             onClick={toggleEmail}
             className={`relative h-7 w-12 shrink-0 rounded-full transition ${emailOn ? "bg-brand-600" : "bg-slate-200"}`}
@@ -93,17 +94,17 @@ export function PrivacySettings() {
       {canBlock && (
         <section className="card space-y-3 p-5 sm:p-6" aria-labelledby="blocked-title">
           <div>
-            <h2 id="blocked-title" className="font-semibold text-slate-900">Blocked people</h2>
+            <h2 id="blocked-title" className="font-semibold text-slate-900">{t("Blocked people")}</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Blocked people can't bid on your jobs, invite you or message you, and you can't contact them.
+              {t("Blocked people can't bid on your jobs, invite you or message you, and you can't contact them.")}
             </p>
           </div>
           {blocksErr ? (
-            <p className="text-sm text-rose-700">Couldn't load your blocked list.</p>
+            <p className="text-sm text-rose-700">{t("Couldn't load your blocked list.")}</p>
           ) : blocks === null ? (
-            <p className="text-sm text-slate-500">Loading…</p>
+            <p className="text-sm text-slate-500">{t("Loading…")}</p>
           ) : blocks.length === 0 ? (
-            <p className="text-sm text-slate-500" data-testid="no-blocks">You haven't blocked anyone.</p>
+            <p className="text-sm text-slate-500" data-testid="no-blocks">{t("You haven't blocked anyone.")}</p>
           ) : (
             <ul className="divide-y divide-slate-100" data-testid="blocked-list">
               {blocks.map((b) => (
@@ -113,7 +114,7 @@ export function PrivacySettings() {
                     <span className="text-slate-500">· {roleLabel(b.role)}</span>
                   </span>
                   <button type="button" className="btn-secondary btn-sm" onClick={() => onUnblock(b)}>
-                    <ShieldOff className="h-4 w-4" aria-hidden /> Unblock
+                    <ShieldOff className="h-4 w-4" aria-hidden /> {t("Unblock")}
                   </button>
                 </li>
               ))}
@@ -124,13 +125,13 @@ export function PrivacySettings() {
 
       <section className="card space-y-3 p-5 sm:p-6" aria-labelledby="data-title">
         <div>
-          <h2 id="data-title" className="font-semibold text-slate-900">Your data</h2>
+          <h2 id="data-title" className="font-semibold text-slate-900">{t("Your data")}</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Download everything FixLocal holds about you (profile, jobs, bids, messages, reviews, payments) as a JSON file.
+            {t("Download everything FixLocal holds about you (profile, jobs, bids, messages, reviews, payments) as a JSON file.")}
           </p>
         </div>
         <button type="button" className="btn-secondary w-full sm:w-auto" onClick={onExport} disabled={exportBusy}>
-          <Download className="h-4 w-4" aria-hidden /> {exportBusy ? "Preparing…" : "Download my data"}
+          <Download className="h-4 w-4" aria-hidden /> {exportBusy ? t("Preparing…") : t("Download my data")}
         </button>
       </section>
     </>

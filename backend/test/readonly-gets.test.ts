@@ -26,6 +26,9 @@ const MOUNTS: Record<string, string> = {
   "reports.ts": "/api/reports",
   "reviews.ts": "/api/reviews",
   "seo.ts": "/api/seo",
+  "jobAlerts.ts": "/api/job-alerts",
+  "credits.ts": "/api/credits",
+  "referrals.ts": "/api/referrals",
 };
 
 function declaredGetRoutes(): string[] {
@@ -132,6 +135,11 @@ describe("GET routes are read-only (M-3)", () => {
       ["/api/blocks", "/api/blocks", owner],
       ["/api/seo/pros/:userId/head", `/api/seo/pros/${bidder.user.id}/head`],
       ["/api/seo/sitemap-pros.xml", "/api/seo/sitemap-pros.xml"],
+      ["/api/job-alerts", "/api/job-alerts", worker],
+      ["/api/jobs/spending", "/api/jobs/spending", done.owner],
+      ["/api/referrals/me", "/api/referrals/me", owner],
+      ["/api/credits/me", "/api/credits/me", owner],
+      ["/api/auth/me/messaging", "/api/auth/me/messaging", owner],
       ["/api/auth/me/export", "/api/auth/me/export", owner],
       ["/api/reviews/pending", "/api/reviews/pending", done.worker],
       ["/api/reviews/pro/:userId", `/api/reviews/pro/${done.worker.user.id}`, owner],

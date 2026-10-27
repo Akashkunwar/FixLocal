@@ -16,7 +16,14 @@ export const registerBody = z.object({
     .max(20)
     .regex(/^[+0-9 ()-]*$/, "Enter a valid phone number")
     .optional(),
+  /** The language the visitor was using, so the confirmation email matches it. */
+  language: z.enum(["en", "hi"]).optional(),
   acceptTerms: z.literal(true, { message: "Please accept the Terms of Service and Privacy Policy" }),
+  /** From an invite link (?ref=CODE). Unknown codes are ignored, so sign-up looks the same either way. */
+  referralCode: z.preprocess(
+    (v) => (typeof v === "string" ? v.trim().toUpperCase() || undefined : v),
+    z.string().max(16).regex(/^[A-Z0-9]*$/, "Invalid invite code").optional()
+  ),
 });
 
 export const loginBody = z.object({
@@ -39,7 +46,15 @@ export const updateMeBody = z.object({
   notificationPrefs: z.record(z.string().max(40), z.boolean()).optional(),
   emailNotifications: z.boolean().optional(),
   quoteViewNudgeHours: z.preprocess((v) => (v === "" ? null : v), optionalInt(1, 168).nullable()),
+  language: z.enum(["en", "hi"]).optional(),
+  smsOptIn: z.boolean().optional(),
+  whatsappOptIn: z.boolean().optional(),
 });
+
+export const phoneCodeBody = z.object({
+  phone: z.string().trim().max(20).regex(/^[+0-9 ()-]*$/, "Enter a valid phone number").optional(),
+});
+export const verifyPhoneBody = z.object({ code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code") });
 
 export const changePasswordBody = z.object({
   currentPassword: existingPassword,

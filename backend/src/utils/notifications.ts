@@ -6,6 +6,8 @@ import { publishNotification } from "./sse";
 import { toNotification } from "../serializers";
 import { logger } from "../logger";
 import { appLink, sendMail } from "../services/mailer";
+import { asLang, emails } from "../domain/i18n";
+import { queueTexts } from "./outbound";
 
 /** Notification types that also go out by email (when the user hasn't turned email off). */
 export const EMAIL_NOTIFICATION_TYPES: ReadonlySet<string> = new Set([
@@ -13,6 +15,7 @@ export const EMAIL_NOTIFICATION_TYPES: ReadonlySet<string> = new Set([
   NotificationType.BID_ACCEPTED,
   NotificationType.JOB_STATUS,
   NotificationType.DISPUTE,
+  NotificationType.JOB_ALERT,
 ]);
 
 /** The account-level email switch lives in notificationPrefs under this key (default on). */
@@ -29,6 +32,10 @@ export type NotificationInput = {
   body: string;
   link?: string;
   meta?: Record<string, unknown>;
+  /** false: never email this one (the caller sends its own email). */
+  email?: boolean;
+  /** true: also send as SMS / WhatsApp to users who opted in (key events only). */
+  text?: boolean;
 };
 
 export function isNotificationEnabled(
@@ -52,7 +59,7 @@ export async function createNotifications(
   const userIds = [...new Set(inputs.map((i) => i.userId))];
   const users = await manager.find(User, {
     where: { id: In(userIds) },
-    select: { id: true, notificationPrefs: true, deletedAt: true, email: true, emailVerifiedAt: true },
+    select: { id: true, notificationPrefs: true, deletedAt: true, email: true, emailVerifiedAt: true, language: true },
   });
   const byId = new Map(users.map((u) => [u.id, u]));
   const rows = inputs
@@ -74,14 +81,28 @@ export async function createNotifications(
   if (!rows.length) return out;
   // One multi-row INSERT is atomic on its own; skip TypeORM's extra BEGIN/COMMIT round trips.
   const saved = await manager.save(rows, { transaction: false });
+  const inputFor = new Map(inputs.map((i) => [i.userId, i]));
+  const texts = saved.filter((n) => inputFor.get(n.userId)?.text);
+  if (texts.length) {
+    try {
+      await queueTexts(texts, manager);
+    } catch (err) {
+      logger.warn({ err }, "queueing text messages failed");
+    }
+  }
   for (const n of saved) {
     out.set(n.userId, n);
     const u = byId.get(n.userId);
-    if (u?.emailVerifiedAt && EMAIL_NOTIFICATION_TYPES.has(n.type) && wantsEmail(u.notificationPrefs)) {
+    const input = inputFor.get(n.userId);
+    if (u?.emailVerifiedAt && input?.email !== false && EMAIL_NOTIFICATION_TYPES.has(n.type) && wantsEmail(u.notificationPrefs)) {
       void sendMail({
         to: u.email,
-        subject: `FixLocal: ${n.title}`.slice(0, 200),
-        text: `${n.body}\n\n${n.link ? `Open FixLocal: ${appLink(n.link)}\n\n` : ""}You can turn these emails off in Settings: ${appLink("/settings")}`,
+        ...emails.notification(asLang(u.language), {
+          title: n.title,
+          body: n.body,
+          link: n.link ? appLink(n.link) : null,
+          settings: appLink("/settings"),
+        }),
       });
     }
     try {

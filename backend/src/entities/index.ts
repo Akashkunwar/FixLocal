@@ -20,6 +20,12 @@ export { EmailToken } from "./EmailToken";
 export { Report } from "./Report";
 export { UserTemplate, TEMPLATE_KINDS } from "./UserTemplate";
 export { UserBlock } from "./UserBlock";
+export { JobAlert } from "./JobAlert";
+export { OutboundMessage } from "./OutboundMessage";
+export { ReferralReward } from "./ReferralReward";
+export { CreditEntry } from "./CreditEntry";
+export { JobAlertDigest } from "./JobAlertDigest";
+export { JobAlertMatch } from "./JobAlertMatch";
 
 import { User } from "./User";
 import { TradespersonProfile } from "./TradespersonProfile";
@@ -43,6 +49,12 @@ import { EmailToken } from "./EmailToken";
 import { Report } from "./Report";
 import { UserTemplate } from "./UserTemplate";
 import { UserBlock } from "./UserBlock";
+import { JobAlert } from "./JobAlert";
+import { OutboundMessage } from "./OutboundMessage";
+import { ReferralReward } from "./ReferralReward";
+import { CreditEntry } from "./CreditEntry";
+import { JobAlertDigest } from "./JobAlertDigest";
+import { JobAlertMatch } from "./JobAlertMatch";
 
 export const ALL_ENTITIES = [
   User,
@@ -67,4 +79,10 @@ export const ALL_ENTITIES = [
   Report,
   UserTemplate,
   UserBlock,
+  JobAlert,
+  JobAlertMatch,
+  JobAlertDigest,
+  CreditEntry,
+  ReferralReward,
+  OutboundMessage,
 ];

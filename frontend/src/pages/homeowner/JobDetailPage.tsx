@@ -55,6 +55,7 @@ import { useJobDetail } from "./job/useJobDetail";
 import { ShortlistInvitePanel } from "./job/ShortlistInvitePanel";
 import { SuggestedProsPanel } from "./job/SuggestedProsPanel";
 import { BidComparePanel } from "./job/BidComparePanel";
+import { t } from "../../lib/i18n";
 
 export function JobDetailPage() {
   const s = useJobDetail();
@@ -90,9 +91,9 @@ export function JobDetailPage() {
 
   if (loadError && !job) {
     return (
-      <Shell title="Job">
+      <Shell title={t("Job")}>
         <div className="card p-6 text-slate-700" role="alert">
-          <p className="font-medium">We couldn't open this job.</p>
+          <p className="font-medium">{t("We couldn't open this job.")}</p>
           <p className="mt-1 text-sm text-slate-600">{loadError}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -100,10 +101,10 @@ export function JobDetailPage() {
               className="btn-secondary"
               onClick={() => reload()}
             >
-              Try again
+              {t("Try again")}
             </button>
             <Link to={clientPath()} className="btn-ghost">
-              Back to dashboard
+              {t("Back to dashboard")}
             </Link>
           </div>
         </div>
@@ -113,7 +114,7 @@ export function JobDetailPage() {
 
   if (loading || !job) {
     return (
-      <Shell title="Job">
+      <Shell title={t("Job")}>
         <Spinner />
       </Shell>
     );
@@ -164,12 +165,12 @@ export function JobDetailPage() {
           type="button"
           className="btn-secondary btn-sm"
           onClick={toggleSave}
-          aria-label="Save job"
+          aria-label={t("Save job")}
         >
           <Heart
             className={`h-4 w-4 ${saved ? "fill-rose-500 text-rose-500" : ""}`}
           />
-          {saved ? "Saved" : "Save"}
+          {saved ? t("Saved") : t("Save")}
         </button>
       }
     >
@@ -177,7 +178,7 @@ export function JobDetailPage() {
         <StatusTimeline status={job.status} />
         {job.scheduledStart && (
           <p className="mt-3 text-sm text-slate-600">
-            Visit{" "}
+            {t("Visit")}{" "}
             {job.scheduleStatus === "confirmed" ? "confirmed" : "proposed"}:{" "}
             <strong>{fmtDateTime(job.scheduledStart)}</strong>
             {job.scheduledEnd ? ` – ${fmtDateTime(job.scheduledEnd)}` : ""}
@@ -209,9 +210,9 @@ export function JobDetailPage() {
                 </span>
               )}
               <span>
-                Budget {money(job.budgetMin)} – {money(job.budgetMax)}
+                {t("Budget")}{" "}{money(job.budgetMin)} – {money(job.budgetMax)}
               </span>
-              <span>Max bids {job.maxBids}</span>
+              <span>{t("Max bids")}{" "}{job.maxBids}</span>
             </div>
             {job.photoUrls?.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -237,7 +238,7 @@ export function JobDetailPage() {
                   className="w-full text-sm text-slate-600"
                   data-testid="awaiting-start"
                 >
-                  You can confirm completion once the professional starts work.
+                  {t("You can confirm completion once the professional starts work.")}
                 </p>
               )}
               {job.status === "awarded" && (
@@ -265,8 +266,8 @@ export function JobDetailPage() {
                   onClick={onComplete}
                 >
                   {job.status === "pending_confirmation"
-                    ? "Confirm work is complete"
-                    : "Mark completed"}
+                    ? t("Confirm work is complete")
+                    : t("Mark completed")}
                 </button>
               )}
               {job.status === "completed" && (
@@ -280,7 +281,7 @@ export function JobDetailPage() {
                       navigate(clientPath("jobs/new"));
                     }}
                   >
-                    Repeat this job
+                    {t("Repeat this job")}
                   </button>
                   <button
                     type="button"
@@ -310,7 +311,7 @@ export function JobDetailPage() {
                       }
                     }}
                   >
-                    Save as template
+                    {t("Save as template")}
                   </button>
                 </>
               )}
@@ -320,7 +321,7 @@ export function JobDetailPage() {
                   className="btn-ghost text-red-700 hover:bg-red-50"
                   onClick={onCancel}
                 >
-                  Cancel job
+                  {t("Cancel job")}
                 </button>
               )}
               {(liveWork || job.status === "completed") && (
@@ -329,7 +330,7 @@ export function JobDetailPage() {
                   className="btn-secondary"
                   onClick={() => setShowDispute(true)}
                 >
-                  Open dispute
+                  {t("Open dispute")}
                 </button>
               )}
             </div>
@@ -338,11 +339,10 @@ export function JobDetailPage() {
                 className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200"
                 role="status"
               >
-                The professional marked this job as done. Confirm to release the
-                remaining payment, or open a dispute if something isn't right.
+                {t("The professional marked this job as done. Confirm to release the remaining payment, or open a dispute if something isn't right.")}
                 {job.autoConfirmAt
                   ? `If you don't respond, it will be confirmed automatically on ${fmtDateTime(job.autoConfirmAt)}.`
-                  : "It will be confirmed automatically in a few days if you don't respond."}
+                  : t("It will be confirmed automatically in a few days if you don't respond.")}
               </p>
             )}
             {showDispute && (
@@ -373,10 +373,9 @@ export function JobDetailPage() {
           )}
           {job.cadence && normalizeCadence(job.cadence) !== "one_time" && (
             <p className="rounded-xl bg-violet-50 px-3 py-2 text-xs text-violet-900 ring-1 ring-violet-100">
-              <span className="font-semibold">Cadence preference:</span>{" "}
+              <span className="font-semibold">{t("Cadence preference:")}</span>{" "}
               {cadenceLabel(job.cadence)}
-              {job.cadenceNote ? ` — ${job.cadenceNote}` : ""}. Soft only —
-              negotiate schedule in chat.
+              {job.cadenceNote ? ` — ${job.cadenceNote}` : ""}{t(". Soft only — negotiate schedule in chat.")}
             </p>
           )}
 
@@ -414,12 +413,10 @@ export function JobDetailPage() {
                 />
                 <span>
                   <span className="font-medium text-slate-900">
-                    Allow the professional to show these photos in their
-                    portfolio
+                    {t("Allow the professional to show these photos in their portfolio")}
                   </span>
                   <span className="block text-slate-500">
-                    Only the completion photos are shared, never your address.
-                    You can turn this off at any time.
+                    {t("Only the completion photos are shared, never your address. You can turn this off at any time.")}
                   </span>
                 </span>
               </label>
@@ -454,26 +451,26 @@ export function JobDetailPage() {
 
         <aside className="space-y-4">
           <div className="card p-5">
-            <h3 className="font-semibold text-slate-900">Job summary</h3>
+            <h3 className="font-semibold text-slate-900">{t("Job summary")}</h3>
             <dl className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between gap-2">
-                <dt className="text-slate-500">Status</dt>
+                <dt className="text-slate-500">{t("Status")}</dt>
                 <dd>
                   <Badge status={job.status} />
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-slate-500">Payment</dt>
+                <dt className="text-slate-500">{t("Payment")}</dt>
                 <dd>
                   <Badge status={job.paymentStatus || "pending"} />
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-slate-500">Category</dt>
+                <dt className="text-slate-500">{t("Category")}</dt>
                 <dd className="font-medium">{categoryLabel(job.category)}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-slate-500">Bids</dt>
+                <dt className="text-slate-500">{t("Bids")}</dt>
                 <dd className="font-medium">
                   {
                     bids.filter(
@@ -484,7 +481,7 @@ export function JobDetailPage() {
               </div>
               {job.completedAt && (
                 <div className="flex justify-between gap-2">
-                  <dt className="text-slate-500">Completed</dt>
+                  <dt className="text-slate-500">{t("Completed")}</dt>
                   <dd className="font-medium">{fmtDate(job.completedAt)}</dd>
                 </div>
               )}
@@ -496,7 +493,7 @@ export function JobDetailPage() {
               targetId={
                 bids.find((b) => b.id === job.acceptedBidId)?.tradespersonId
               }
-              label="Report this professional"
+              label={t("Report this professional")}
             />
           )}
           {job.acceptedBidId && (

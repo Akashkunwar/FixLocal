@@ -6,6 +6,14 @@ A local work marketplace. **Clients** post jobs (repairs, cleaning, office and f
 
 The history of features built during the course is in [docs/FEATURE_HISTORY.md](docs/FEATURE_HISTORY.md).
 
+Also built in:
+
+- **Job alerts** for professionals: saved trade/area/budget searches. Each alert is **Daily digest** (the default: one summary around 8 AM IST with every match from the last 24 hours, sent once per day even if the worker runs twice) or **Instant** (a notification and email per matching job, capped per day).
+- **Referral credit**: invite links (`/register?ref=CODE`). When a referred user's first job (₹500 or more) is confirmed complete, both people get ₹100 **FixLocal credit** (simulated, like escrow). A client's credit comes off what they fund at their next hire; a professional's is added to their next payout. One reward per referred account, no self-referral (same email incl. Gmail dots/+tags, same phone, same sign-up device, or the referrer is the other side of the job), a monthly cap per referrer, and the unused part is taken back if that job is refunded or the dispute is lost. Every decision is in the audit log; the ledger is in Settings, the data export and account deletion.
+- **SMS / WhatsApp text alerts** (off by default): a messaging-provider layer with a log driver, **MSG91** SMS and the **WhatsApp Cloud API**. Users verify their mobile number with a one-time code and opt in per channel in Settings. Texts go out for a new bid, being hired, a payment released and job alerts, never between 10 PM and 8 AM IST (held until 8 AM). Setup: [docs/OPERATIONS.md](docs/OPERATIONS.md#sms-and-whatsapp-alerts).
+- **Hindi / English**: the dashboards, job wizard, job pages, bids and comparison, chat, notifications, settings, pro profiles, reviews and disputes are translated (legal pages translate headings only, with a note that the English text applies). The choice is saved on the account and follows the user to other devices; logged out, the device's choice is used. Transactional emails and texts go out in the user's language. The Hindi strings load only when Hindi is chosen.
+- A **notification centre** (`/notifications`), **client spending & history** (CSV export), an **install-app banner** for the PWA and **share buttons** on pro profiles.
+
 ## Contents
 
 - [Architecture](#architecture)
@@ -150,18 +158,20 @@ Backend settings added for launch:
 | `MAIL_PROVIDER` | `console` | `smtp` sends real email through `SMTP_URL` (`smtps://user:pass@host:465`). Production refuses `console` unless `ALLOW_CONSOLE_MAIL=true` |
 | `MAIL_FROM` | `FixLocal <no-reply@fixlocal.local>` | Sender address |
 | `ERROR_WEBHOOK_URL` | empty | Receives a JSON POST for every unexpected 500, unhandled rejection and crash (Slack or Discord webhook, Sentry relay…) |
+| `REFERRAL_REWARD_INR` / `REFERRAL_MONTHLY_CAP` / `REFERRAL_MIN_JOB_INR` | `100` / `10` / `500` | Referral credit per person (0 turns rewards off), rewards per referrer per month, minimum job value |
+| `MESSAGING_ENABLED` | `false` | SMS / WhatsApp alerts. `SMS_DRIVER=log\|msg91` (`MSG91_AUTH_KEY`, `MSG91_TEMPLATE_ID`, `MSG91_SENDER_ID`), `WHATSAPP_DRIVER=log\|cloud` (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE`, `WHATSAPP_API_VERSION`). See docs/OPERATIONS.md |
 | `STORAGE_DRIVER` | `local` | `s3` stores uploads in `S3_BUCKET` (`S3_REGION`, `S3_ENDPOINT` for R2/B2/MinIO, optional `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE`, `S3_PREFIX`). Needed for more than one API instance |
 
 ## Testing
 
 | Command | What it covers |
 | --- | --- |
-| `cd backend && npm test` | 215 API tests on a throwaway database (`fixlocal_test`, Redis DB 15; only DB connection settings are read from `backend/.env`): every audit finding's repro, escrow timing (stage gates, dispute freeze, auto-confirm after a dispute), an 896-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), a sweep proving no GET request changes any table, account-enumeration probes, SEO tags and escaping, and the S3 storage driver (2 of them run only when `S3_TEST_ENDPOINT` points at an S3-compatible server, as in CI) |
+| `cd backend && npm test` | 236 API tests on a throwaway database (`fixlocal_test`, Redis DB 15; only DB connection settings are read from `backend/.env`): every audit finding's repro, escrow timing (stage gates, dispute freeze, auto-confirm after a dispute), an 896-case authorization matrix, concurrency races looped 20×, upload attacks, a malformed-input fuzz test, migrations up/down/up, a performance budget (300 ms, bounded queries per request), a sweep proving no GET request changes any table, account-enumeration probes, SEO tags and escaping, and the S3 storage driver (2 of them run only when `S3_TEST_ENDPOINT` points at an S3-compatible server, as in CI), plus referral credit and abuse checks, the 8 AM digest, the MSG91/WhatsApp drivers, phone codes and quiet hours |
 | `cd backend && npm run test:coverage` | The same with a coverage report |
 | `cd backend && npm run test:tz` | Date logic under three server time zones (UTC, IST, US Pacific) |
-| `cd frontend && npm test` | UI unit tests: bid comparison (highlights, sorting, budget fit), token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary, booking cancellation, blocking, data export, Terms consent, sitemap and the pro-profile SEO shell (60 tests) |
+| `cd frontend && npm test` | UI unit tests: bid comparison (highlights, sorting, budget fit), token refresh, session loss, SSE tickets, chat back-off, image re-encoding, invoice printing, templates, error boundary, booking cancellation, blocking, data export, Terms consent, sitemap, the pro-profile SEO shell, job-alert wording, notification grouping, spending CSV, referrals, the install prompt and Hindi coverage (75 tests) |
 | `cd frontend && npm run size` | Bundle budgets after `npm run build` (entry, React vendor, job wizard, job page); fails if Leaflet reaches the entry chunk |
-| `cd frontend && npm run test:e2e` | 44 Playwright tests in a real browser against a real API, including an axe WCAG 2.1 A/AA and reflow check on 23 pages at 1280 px and 390 px |
+| `cd frontend && npm run test:e2e` | 55 Playwright tests in a real browser against a real API, including an axe WCAG 2.1 A/AA and reflow check on 26 pages (plus the install banner, invite and credit cards, text alerts and the Hindi pages) at 1280 px and 390 px |
 | `npm run lint` / `npm run typecheck` | In both packages; lint fails on any warning |
 
 The end-to-end suite starts its own API on port **3101** with a fresh `fixlocal_e2e` database (Redis DB 14), and a Vite server on port **5174**. It never touches the development database or the servers on 3001/5173. The first run needs `npx playwright install chromium`.

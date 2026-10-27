@@ -7,6 +7,7 @@ import {
 } from "../lib/visitPrep";
 import { ClipboardList } from "lucide-react";
 import clsx from "clsx";
+import { t } from "../lib/i18n";
 
 /** Professional visit-day checklist for awarded / scheduled jobs. */
 export function ProVisitDayCard({ job }: { job: Job }) {
@@ -49,20 +50,20 @@ export function ProVisitDayCard({ job }: { job: Job }) {
             className="font-semibold flex items-center gap-2 text-slate-900"
           >
             <ClipboardList className="h-4 w-4 text-brand-700" />
-            Visit-day checklist
+            {t("Visit-day checklist")}
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Soft prep before you arrive
+            {t("Soft prep before you arrive")}
             {status === "confirmed"
-              ? " (visit confirmed)"
+              ? t(" (visit confirmed)")
               : status === "proposed"
-                ? " (visit proposed)"
-                : " (schedule a visit when ready)"}
+                ? t(" (visit proposed)")
+                : t(" (schedule a visit when ready)")}
             .
           </p>
         </div>
         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-          {doneCount}/{items.length} ready
+          {doneCount}/{items.length} {t("ready")}
         </span>
       </div>
       <ul className="space-y-2" role="list">
@@ -92,14 +93,14 @@ export function ProVisitDayCard({ job }: { job: Job }) {
                       done ? "text-emerald-900" : "text-slate-900"
                     )}
                   >
-                    {item.label}
+                    {t(item.label)}
                   </span>
                   {item.hint && (
                     <span
                       id={`pro-prep-hint-${item.id}`}
                       className="mt-0.5 block text-[11px] text-slate-500"
                     >
-                      {item.hint}
+                      {t(item.hint)}
                     </span>
                   )}
                 </span>

@@ -14,6 +14,7 @@ export const E2E_PASSWORD = "E2e-Password-123";
 
 const backendEnv = {
   NODE_ENV: "development",
+  MESSAGING_ENABLED: "true",
   PORT: String(API_PORT),
   DB_NAME: process.env.E2E_DB_NAME || "fixlocal_e2e",
   JWT_SECRET: "e2e-jwt-secret-that-is-definitely-long-enough",

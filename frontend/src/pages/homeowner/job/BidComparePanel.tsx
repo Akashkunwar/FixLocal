@@ -15,6 +15,7 @@ import {
   type BidSortKey,
 } from "../../../lib/bidCompare";
 import type { JobDetailState } from "./useJobDetail";
+import { t } from "../../../lib/i18n";
 
 /**
  * The client's "pick a pro" screen: a short at-a-glance comparison, sortable bid
@@ -70,12 +71,12 @@ export function BidComparePanel({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 id="bids-heading" className="text-lg font-semibold">
-            Bids ({bids.length})
+            {t("Bids (")}{bids.length})
           </h2>
           <p className="mt-0.5 text-sm text-slate-500">
             {open
-              ? "Compare price, track record and timing, then hire. Your payment is held in (simulated) escrow and released as the work progresses."
-              : "The bids this job received."}
+              ? t("Compare price, track record and timing, then hire. Your payment is held in (simulated) escrow and released as the work progresses.")
+              : t("The bids this job received.")}
           </p>
         </div>
         {ordered.length > 1 && (
@@ -85,16 +86,16 @@ export function BidComparePanel({
                 className="h-4 w-4 text-slate-500"
                 aria-hidden
               />
-              <span className="sr-only sm:not-sr-only">Sort</span>
+              <span className="sr-only sm:not-sr-only">{t("Sort")}</span>
               <select
                 className="input h-9 py-0 text-sm"
-                aria-label="Sort bids"
+                aria-label={t("Sort bids")}
                 value={sortKey}
                 onChange={(e) => setSortKey(e.target.value as BidSortKey)}
               >
                 {BID_SORT_OPTIONS.map((o) => (
                   <option key={o.key} value={o.key}>
-                    {o.label}
+                    {t(o.label)}
                   </option>
                 ))}
               </select>
@@ -106,7 +107,7 @@ export function BidComparePanel({
                   checked={showInactive}
                   onChange={(e) => setShowInactive(e.target.checked)}
                 />
-                Show withdrawn / declined ({inactiveCount})
+                {t("Show withdrawn / declined (")}{inactiveCount})
               </label>
             )}
           </div>
@@ -124,9 +125,9 @@ export function BidComparePanel({
       {hasTools && (
         <details className="group mt-4 rounded-xl ring-1 ring-slate-200 open:bg-slate-50/50">
           <summary className="cursor-pointer select-none rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
-            More comparison tools
+            {t("More comparison tools")}
             <span className="ml-1 font-normal text-slate-500">
-              · best-value score, negotiation timeline, payment split per bid
+              {t("· best-value score, negotiation timeline, payment split per bid")}
             </span>
           </summary>
           <div className="space-y-4 p-3 pt-1">
@@ -136,18 +137,17 @@ export function BidComparePanel({
             {bestValueBlend && job.status === "open" && (
               <div className="rounded-xl bg-sky-50/80 p-3 ring-1 ring-sky-100">
                 <h3 className="text-sm font-semibold text-slate-900">
-                  Best value · match + escrow
+                  {t("Best value · match + escrow")}
                   {Number(bestValueBlend.slaHeatPct ?? 0) > 0
-                    ? " + SLA/heat"
+                    ? t(" + SLA/heat")
                     : ""}
                 </h3>
                 <p className="mt-0.5 text-[11px] text-slate-500">
-                  Blend of match/ranked ({bestValueBlend.matchPct}%) and lower
-                  simulated escrow hold ({bestValueBlend.pricePct}%)
+                  {t("Blend of match/ranked (")}{bestValueBlend.matchPct}{t("%) and lower simulated escrow hold (")}{bestValueBlend.pricePct}%)
                   {Number(bestValueBlend.slaHeatPct ?? 0) > 0
                     ? ` plus response SLA + availability heat (${bestValueBlend.slaHeatPct}%)`
                     : ""}
-                  . Higher is better · admin-tunable (audited).
+                  {t(". Higher is better · admin-tunable (audited).")}
                 </p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {bestValueBlend.rows.map((row) => (
@@ -165,7 +165,7 @@ export function BidComparePanel({
                         </p>
                         {row.bidId === bestValueBlend.bestBidId && (
                           <span className="shrink-0 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                            Best value
+                            {t("Best value")}
                           </span>
                         )}
                       </div>
@@ -173,7 +173,7 @@ export function BidComparePanel({
                         {row.valueScore}
                       </p>
                       <p className="text-[11px] text-slate-500">
-                        Match {row.matchScore.toFixed(0)} · hold{" "}
+                        {t("Match")}{" "}{row.matchScore.toFixed(0)} {t("· hold")}{" "}
                         {money(row.hold)}
                         {Number(bestValueBlend.slaHeatPct ?? 0) > 0 &&
                         row.slaHeatRaw != null
@@ -185,7 +185,7 @@ export function BidComparePanel({
                           href={`#bid-${row.bidId}`}
                           className="inline-block text-[11px] font-medium text-brand-700 no-underline hover:underline"
                         >
-                          Jump to bid
+                          {t("Jump to bid")}
                         </a>
                         <button
                           type="button"
@@ -197,7 +197,7 @@ export function BidComparePanel({
                             })
                           }
                         >
-                          Why this score?
+                          {t("Why this score?")}
                         </button>
                       </div>
                     </div>
@@ -209,11 +209,10 @@ export function BidComparePanel({
             {counterNegotiationSpark && (
               <div className="rounded-xl bg-violet-50/60 p-3 ring-1 ring-violet-100">
                 <h3 className="text-sm font-semibold text-slate-900">
-                  Counter negotiation timeline
+                  {t("Counter negotiation timeline")}
                 </h3>
                 <p className="mt-0.5 text-[11px] text-slate-500">
-                  Suggested amounts over time across bids on this job
-                  (sparkline).
+                  {t("Suggested amounts over time across bids on this job (sparkline).")}
                 </p>
                 <CounterAmountSparkline points={counterNegotiationSpark} />
                 <ul className="mt-2 max-h-28 space-y-0.5 overflow-y-auto text-[11px] text-slate-600">
@@ -225,7 +224,7 @@ export function BidComparePanel({
                       <span className="text-slate-500">
                         {new Date(p.t).toLocaleString()}
                       </span>
-                      <span className="font-medium">{p.label}</span>
+                      <span className="font-medium">{t(p.label)}</span>
                       <span>{money(p.amount)}</span>
                       <span className="text-slate-500">· {p.status}</span>
                     </li>
@@ -237,11 +236,10 @@ export function BidComparePanel({
             {sideBySideWhatIf && job.status === "open" && (
               <div className="overflow-x-auto rounded-xl bg-emerald-50/70 p-3 ring-1 ring-emerald-100">
                 <h3 className="text-sm font-semibold text-slate-900">
-                  Escrow what-if · side-by-side
+                  {t("Escrow what-if · side-by-side")}
                 </h3>
                 <p className="mt-0.5 text-[11px] text-slate-500">
-                  Simulated Deposit / Progress / Completion if you accept each
-                  competing bid (no real charge).
+                  {t("Simulated Deposit / Progress / Completion if you accept each competing bid (no real charge).")}
                 </p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {sideBySideWhatIf.map((row) => (
@@ -253,7 +251,7 @@ export function BidComparePanel({
                         {row.name}
                       </p>
                       <p className="text-[11px] text-slate-500">
-                        Hold {money(row.hold)} · from {row.source}
+                        {t("Hold")}{" "}{money(row.hold)} {t("· from")}{" "}{row.source}
                       </p>
                       <ul className="mt-2 space-y-1 text-[11px] text-slate-700">
                         {row.split.milestones.map((m) => (
@@ -262,7 +260,7 @@ export function BidComparePanel({
                             className="flex justify-between gap-2"
                           >
                             <span>
-                              {m.label}{" "}
+                              {t(m.label)}{" "}
                               <span className="text-slate-500">
                                 ({m.percent}%)
                               </span>
@@ -277,7 +275,7 @@ export function BidComparePanel({
                         href={`#bid-${row.bid.id}`}
                         className="mt-2 inline-block text-[11px] font-medium text-brand-700 no-underline hover:underline"
                       >
-                        Jump to bid
+                        {t("Jump to bid")}
                       </a>
                     </div>
                   ))}
@@ -291,11 +289,11 @@ export function BidComparePanel({
       <div className="mt-4">
         {sortedBids.length === 0 ? (
           <EmptyState
-            title="No bids yet"
+            title={t("No bids yet")}
             description={
               open
-                ? "Verified pros nearby usually bid within a day. Invite a few from Suggested pros above, or browse pros and invite them, to hear back sooner."
-                : "No bids were placed on this job."
+                ? t("Verified pros nearby usually bid within a day. Invite a few from Suggested pros above, or browse pros and invite them, to hear back sooner.")
+                : t("No bids were placed on this job.")
             }
             action={
               open ? (
@@ -303,20 +301,20 @@ export function BidComparePanel({
                   to="/client/pros"
                   className="btn-secondary btn-sm no-underline"
                 >
-                  Find pros
+                  {t("Find pros")}
                 </Link>
               ) : undefined
             }
           />
         ) : visible.length === 0 ? (
           <p className="rounded-xl bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">
-            All bids were withdrawn or declined.{" "}
+            {t("All bids were withdrawn or declined.")}{" "}
             <button
               type="button"
               className="font-medium text-brand-700 underline"
               onClick={() => setShowInactive(true)}
             >
-              Show them
+              {t("Show them")}
             </button>
           </p>
         ) : (

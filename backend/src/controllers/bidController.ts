@@ -1,3 +1,4 @@
+import { applyClientCredit } from "../domain/credits";
 import type { Request, Response } from "express";
 import { isBlockedBetween } from "../utils/blocks";
 import { In, Not } from "typeorm";
@@ -180,6 +181,7 @@ export async function placeBid(req: Request, res: Response) {
     userId: ctx.job.homeownerId,
     type: NotificationType.NEW_BID,
     title: rebid ? "A professional bid again on your job" : "New bid on your job",
+    text: !rebid,
     body: `${pro?.name || "A professional"} ${rebid ? "re-submitted a bid of" : "bid"} ₹${b.amount} on "${ctx.job.title}".`,
     link: `/client/jobs/${ctx.job.id}`,
     meta: { jobId: ctx.job.id, bidId: bid.id },
@@ -405,7 +407,8 @@ export async function acceptBid(req: Request, res: Response) {
     }
     await transitionJob(m, ctx.job.id, "award", patch);
     await createEscrow(m, ctx.job, current.tradespersonId, escrow.amount, req.user!.id);
-    return { accepted: current, escrow, rejected: others.map((o) => o.tradespersonId) };
+    const creditUsed = await applyClientCredit(m, ctx.job.homeownerId, ctx.job.id, escrow.amount);
+    return { accepted: current, escrow, creditUsed, rejected: others.map((o) => o.tradespersonId) };
   });
 
   await invalidateOpenJobsCache();
@@ -416,6 +419,7 @@ export async function acceptBid(req: Request, res: Response) {
       userId: outcome.accepted.tradespersonId,
       type: NotificationType.BID_ACCEPTED,
       title: "Bid accepted!",
+      text: true,
       body: `Your bid on "${ctx.job.title}" was accepted. ${label} is held in simulated escrow.`,
       link: `/professional/jobs/${ctx.job.id}`,
       meta: { jobId: ctx.job.id, bidId: outcome.accepted.id, escrowAmount: outcome.escrow.amount, escrowSource: outcome.escrow.source },

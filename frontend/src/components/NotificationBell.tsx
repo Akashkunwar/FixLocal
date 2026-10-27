@@ -9,31 +9,9 @@ import {
 } from "../api/extras";
 import { fmtDateTime } from "../lib/format";
 import { openSse } from "../lib/sse";
+import { NOTIFICATIONS_CHANGED, notificationHref } from "../lib/notifications";
 import clsx from "clsx";
-
-function inviteAwareLink(n: Notification): string {
-  const meta = n.meta || {};
-  if (meta.invite === true && typeof meta.jobId === "string") {
-    return `/professional/jobs/${meta.jobId}?invite=1#bid-form`;
-  }
-  if (meta.inviteDeclined === true && typeof meta.jobId === "string") {
-    return `/client/jobs/${meta.jobId}`;
-  }
-  if (
-    meta.quoteRevised === true &&
-    typeof meta.jobId === "string" &&
-    typeof meta.bidId === "string"
-  ) {
-    return `/client/jobs/${meta.jobId}?bid=${meta.bidId}#bid-${meta.bidId}`;
-  }
-  if (meta.counterOffer === true && typeof meta.jobId === "string") {
-    return `/professional/jobs/${meta.jobId}?counter=1#bid-form`;
-  }
-  if (meta.quoteViewed === true && typeof meta.jobId === "string") {
-    return `/professional/jobs/${meta.jobId}`;
-  }
-  return n.link || "#";
-}
+import { t } from "../lib/i18n";
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
@@ -89,9 +67,16 @@ export function NotificationBell() {
   useEffect(() => {
     // Fall back to polling when SSE is down; slow safety poll when live.
     const ms = live ? (open ? 45000 : 90000) : open ? 4000 : 15000;
-    const t = window.setInterval(() => load(), ms);
-    return () => clearInterval(t);
+    const timer = window.setInterval(() => load(), ms);
+    return () => clearInterval(timer);
   }, [open, live]);
+
+  useEffect(() => {
+    // The notification centre page marks things read; keep the badge in step.
+    const reload = () => load();
+    window.addEventListener(NOTIFICATIONS_CHANGED, reload);
+    return () => window.removeEventListener(NOTIFICATIONS_CHANGED, reload);
+  }, []);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -128,14 +113,14 @@ export function NotificationBell() {
         className="relative rounded-xl p-2.5 text-slate-600 hover:bg-slate-100 touch-target"
         aria-expanded={open}
         onClick={onOpen}
-        title={live ? "Live notifications (SSE)" : "Notifications (polling)"}
+        title={live ? t("Live notifications (SSE)") : t("Notifications (polling)")}
       >
         <Bell className="h-5 w-5" aria-hidden />
-        <span className="sr-only">Notifications</span>
+        <span className="sr-only">{t("Notifications")}</span>
         {unread > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
             {unread > 9 ? "9+" : unread}
-            <span className="sr-only"> unread</span>
+            <span className="sr-only"> {t("unread")}</span>
           </span>
         )}
       </button>
@@ -143,38 +128,45 @@ export function NotificationBell() {
         <div className="fixed inset-x-3 top-16 z-50 max-h-[70vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lift sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 sm:max-h-none">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <span className="text-sm font-semibold">
-              Notifications
+              {t("Notifications")}
               <span className="ml-2 text-[10px] font-normal text-slate-500">
                 {live ? "live" : "polling"}
               </span>
             </span>
             {unread > 0 && (
               <button type="button" className="text-xs text-brand-700" onClick={markAll}>
-                Mark all read
+                {t("Mark all read")}
               </button>
             )}
           </div>
           <ul className="max-h-[min(20rem,55vh)] overflow-y-auto">
             {items.length === 0 && (
-              <li className="px-4 py-8 text-center text-sm text-slate-500">You're all caught up</li>
+              <li className="px-4 py-8 text-center text-sm text-slate-500">{t("You're all caught up")}</li>
             )}
             {items.map((n) => (
               <li key={n.id}>
                 <Link
-                  to={inviteAwareLink(n)}
+                  to={notificationHref(n)}
                   onClick={() => onClickItem(n)}
                   className={clsx(
                     "block px-4 py-3 hover:bg-slate-50 border-b border-slate-50",
                     !n.read && "bg-brand-50/40"
                   )}
                 >
-                  <p className="text-sm font-medium text-slate-900">{n.title}</p>
+                  <p className="text-sm font-medium text-slate-900">{t(n.title)}</p>
                   <p className="mt-0.5 text-xs text-slate-500 line-clamp-2">{n.body}</p>
                   <p className="mt-1 text-[11px] text-slate-500">{fmtDateTime(n.createdAt)}</p>
                 </Link>
               </li>
             ))}
           </ul>
+          <Link
+            to="/notifications"
+            onClick={() => setOpen(false)}
+            className="block border-t border-slate-100 px-4 py-3 text-center text-sm font-medium text-brand-700"
+          >
+            {t("See all notifications")}
+          </Link>
         </div>
       )}
     </div>

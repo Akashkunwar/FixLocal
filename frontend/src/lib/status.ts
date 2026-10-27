@@ -1,3 +1,4 @@
+import { t } from "./t";
 export function statusClass(status: string) {
   const map: Record<string, string> = {
     open: "bg-teal-50 text-teal-800 ring-1 ring-teal-200",
@@ -64,6 +65,6 @@ export function statusLabel(status: string) {
     TRADESPERSON: "Professional",
     ADMIN: "Admin",
   };
-  if (labels[status]) return labels[status];
-  return status.replace(/_/g, " ");
+  if (labels[status]) return t(labels[status]);
+  return t(status.replace(/_/g, " "));
 }

@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { createDispute } from "../../../api/jobs";
 import { useToast } from "../../../components/Toast";
+import { t } from "../../../lib/i18n";
 
 /** Open a dispute with a reason and up to five evidence files. */
 export function DisputeForm({
@@ -37,20 +38,20 @@ export function DisputeForm({
       className="space-y-3 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200"
     >
       <label className="label" htmlFor="dispute-reason">
-        Why are you disputing?
+        {t("Why are you disputing?")}
       </label>
       <textarea
         id="dispute-reason"
         className="input"
         required
         maxLength={4000}
-        placeholder="Describe the issue clearly for the admin."
+        placeholder={t("Describe the issue clearly for the admin.")}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
       />
       <div>
         <label className="label" htmlFor="dispute-evidence">
-          Evidence (photos or PDF, up to 5)
+          {t("Evidence (photos or PDF, up to 5)")}
         </label>
         <input
           id="dispute-evidence"
@@ -64,16 +65,16 @@ export function DisputeForm({
         />
         {files.length > 0 && (
           <p className="mt-1 text-xs text-slate-600">
-            {files.length} file(s) attached
+            {files.length} {t("file(s) attached")}
           </p>
         )}
       </div>
       <div className="flex gap-2">
         <button type="submit" className="btn-primary btn-sm" disabled={busy}>
-          {busy ? "Submitting…" : "Submit dispute"}
+          {busy ? t("Submitting…") : t("Submit dispute")}
         </button>
         <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>
-          Cancel
+          {t("Cancel")}
         </button>
       </div>
     </form>

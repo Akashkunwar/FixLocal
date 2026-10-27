@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { Flag } from "lucide-react";
 import { createReport } from "../api/client";
 import { useToast } from "./Toast";
+import { t } from "../lib/i18n";
 
 type Props = {
   targetType: "job" | "user" | "message";
@@ -43,7 +44,7 @@ export function ReportButton({ targetType, targetId, label = "Report" }: Props) 
   return (
     <form onSubmit={submit} className="card space-y-2 p-4">
       <label className="label" htmlFor={`report-${targetId}`}>
-        What's wrong?
+        {t("What's wrong?")}
       </label>
       <textarea
         id={`report-${targetId}`}
@@ -52,14 +53,14 @@ export function ReportButton({ targetType, targetId, label = "Report" }: Props) 
         maxLength={2000}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
-        placeholder="Describe the problem so an admin can act on it."
+        placeholder={t("Describe the problem so an admin can act on it.")}
       />
       <div className="flex gap-2">
         <button type="submit" className="btn-primary btn-sm" disabled={busy}>
-          {busy ? "Sending…" : "Send report"}
+          {busy ? t("Sending…") : t("Send report")}
         </button>
         <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>
-          Cancel
+          {t("Cancel")}
         </button>
       </div>
     </form>

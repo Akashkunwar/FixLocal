@@ -9,6 +9,7 @@ import {
 import { useToast } from "./Toast";
 import { proPath } from "../lib/paths";
 import clsx from "clsx";
+import { t } from "../lib/i18n";
 
 export function CompletionPhotosPanel({
   job,
@@ -154,7 +155,7 @@ export function CompletionPhotosPanel({
           {title}
         </p>
         {urls.length === 0 ? (
-          <p className="text-xs text-slate-500 mb-2">None yet</p>
+          <p className="text-xs text-slate-500 mb-2">{t("None yet")}</p>
         ) : (
           <ul className="flex flex-wrap gap-2 mb-2">
             {urls.map((u) => (
@@ -171,7 +172,7 @@ export function CompletionPhotosPanel({
                     type="button"
                     className="absolute -right-1 -top-1 rounded-full bg-slate-900/80 px-1.5 text-[10px] text-white opacity-0 group-hover:opacity-100"
                     onClick={() => onRemove(u, kind)}
-                    aria-label="Remove photo"
+                    aria-label={t("Remove photo")}
                   >
                     ×
                   </button>
@@ -199,7 +200,7 @@ export function CompletionPhotosPanel({
       return (
         <div>
           <p className="text-xs font-semibold text-slate-500 mb-1">{label}</p>
-          <p className="text-xs text-slate-500">None uploaded</p>
+          <p className="text-xs text-slate-500">{t("None uploaded")}</p>
         </div>
       );
     }
@@ -207,7 +208,7 @@ export function CompletionPhotosPanel({
       <div>
         <p className="text-xs font-semibold text-slate-500 mb-1">
           {label}
-          {urls.length > 1 ? " — pick one" : ""}
+          {urls.length > 1 ? t(" — pick one") : ""}
         </p>
         <ul className="flex flex-wrap gap-2" role="listbox" aria-label={label}>
           {urls.map((u) => {
@@ -241,37 +242,37 @@ export function CompletionPhotosPanel({
   return (
     <section className="card p-5 sm:p-6 space-y-4">
       <div>
-        <h2 className="font-semibold text-lg text-slate-900">Before &amp; after</h2>
+        <h2 className="font-semibold text-lg text-slate-900">{t("Before & after")}</h2>
         <p className="text-sm text-slate-500">
-          Completion gallery for this job — upload when finishing work or anytime after.
+          {t("Completion gallery for this job — upload when finishing work or anytime after.")}
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Gallery title="Before" urls={before} kind="before" />
-        <Gallery title="After" urls={after} kind="after" />
+        <Gallery title={t("Before")} urls={before} kind="before" />
+        <Gallery title={t("After")} urls={after} kind="after" />
       </div>
       {canEdit && (
         <div className="space-y-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="label" htmlFor="completion-before">Before photos</label>
+              <label className="label" htmlFor="completion-before">{t("Before photos")}</label>
               <input id="completion-before"
                 className="input"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 multiple
-                aria-label="Before photos"
+                aria-label={t("Before photos")}
                 onChange={(e) => setBeforeFiles(Array.from(e.target.files || []).slice(0, 4))}
               />
             </div>
             <div>
-              <label className="label" htmlFor="completion-after">After photos</label>
+              <label className="label" htmlFor="completion-after">{t("After photos")}</label>
               <input id="completion-after"
                 className="input"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 multiple
-                aria-label="After photos"
+                aria-label={t("After photos")}
                 onChange={(e) => setAfterFiles(Array.from(e.target.files || []).slice(0, 4))}
               />
             </div>
@@ -282,28 +283,28 @@ export function CompletionPhotosPanel({
             disabled={busy}
             onClick={onUpload}
           >
-            {busy ? "Uploading…" : "Upload photos"}
+            {busy ? t("Uploading…") : t("Upload photos")}
           </button>
         </div>
       )}
 
       {canPublishCaseStudy && hasPhotos && job.status === "completed" && !job.photoConsent && (
         <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200">
-          To show these photos in your portfolio, ask the client to allow it on their job page.
+          {t("To show these photos in your portfolio, ask the client to allow it on their job page.")}
         </p>
       )}
       {job.status === "disputed" && canEdit && (
-        <p className="text-xs text-amber-800">Photos can be added but not removed while the job is in dispute.</p>
+        <p className="text-xs text-amber-800">{t("Photos can be added but not removed while the job is in dispute.")}</p>
       )}
       {canPublishCaseStudy && hasPhotos && job.status === "completed" && job.photoConsent && (
         <div className="space-y-3 rounded-xl bg-sky-50 p-4 ring-1 ring-sky-100">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-semibold text-sky-950">Portfolio case study</p>
-              <p className="text-[11px] text-sky-800">Draft autosaves in this browser until you publish.</p>
+              <p className="text-sm font-semibold text-sky-950">{t("Portfolio case study")}</p>
+              <p className="text-[11px] text-sky-800">{t("Draft autosaves in this browser until you publish.")}</p>
               <p className="text-xs text-sky-800">
-                One-click publish before/after to your professional portfolio.
-                {multiPair ? " Pick which pair when several exist." : ""}
+                {t("One-click publish before/after to your professional portfolio.")}
+                {multiPair ? t(" Pick which pair when several exist.") : ""}
               </p>
             </div>
             <button
@@ -311,26 +312,26 @@ export function CompletionPhotosPanel({
               className={showPublish ? "btn-primary btn-sm" : "btn-secondary btn-sm"}
               onClick={() => setShowPublish((v) => !v)}
             >
-              {showPublish ? "Close" : "Publish to portfolio"}
+              {showPublish ? t("Close") : t("Publish to portfolio")}
             </button>
           </div>
           {showPublish && (
             <div className="space-y-3">
               <div>
                 <label className="label" htmlFor="cs-title">
-                  Case study title
+                  {t("Case study title")}
                 </label>
                 <input
                   id="cs-title"
                   className="input"
                   value={publishTitle}
                   onChange={(e) => setPublishTitle(e.target.value)}
-                  placeholder="e.g. Kitchen leak before/after"
+                  placeholder={t("e.g. Kitchen leak before/after")}
                 />
               </div>
               <div>
                 <label className="label" htmlFor="cs-notes">
-                  Notes (optional)
+                  {t("Notes (optional)")}
                 </label>
                 <textarea
                   id="cs-notes"
@@ -338,19 +339,19 @@ export function CompletionPhotosPanel({
                   rows={2}
                   value={publishNotes}
                   onChange={(e) => setPublishNotes(e.target.value)}
-                  placeholder="What you fixed / materials / outcome"
+                  placeholder={t("What you fixed / materials / outcome")}
                 />
               </div>
               {(multiPair || before.length > 0 || after.length > 0) && (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <PairPicker
-                    label="Before photo"
+                    label={t("Before photo")}
                     urls={before}
                     selected={pickBefore}
                     onSelect={setPickBefore}
                   />
                   <PairPicker
-                    label="After photo"
+                    label={t("After photo")}
                     urls={after}
                     selected={pickAfter}
                     onSelect={setPickAfter}
@@ -364,13 +365,13 @@ export function CompletionPhotosPanel({
                   disabled={publishBusy}
                   onClick={onPublish}
                 >
-                  {publishBusy ? "Publishing…" : "Publish case study"}
+                  {publishBusy ? t("Publishing…") : t("Publish case study")}
                 </button>
                 <a
                   href={proPath("profile")}
                   className="btn-ghost btn-sm no-underline"
                 >
-                  Open portfolio
+                  {t("Open portfolio")}
                 </a>
               </div>
             </div>

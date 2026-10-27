@@ -16,6 +16,7 @@ import { openSse } from "../lib/sse";
 import { FileText, Paperclip, X } from "lucide-react";
 import clsx from "clsx";
 import { mergeIntroTemplates } from "../lib/introTemplates";
+import { t } from "../lib/i18n";
 
 function isImageUrl(url: string) {
   return /\.(png|jpe?g|webp)$/i.test(url.split("?")[0] || "");
@@ -181,7 +182,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
   if (denied) {
     return (
       <div className="card p-4 text-sm text-slate-500" role="status">
-        This conversation isn't available to you.
+        {t("This conversation isn't available to you.")}
       </div>
     );
   }
@@ -193,19 +194,19 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
       <div className="border-b border-slate-100 px-4 py-3">
         <h3 className="font-semibold text-slate-900">{title}</h3>
         <p className="text-xs text-slate-500">
-          {live ? "Live" : "Updating periodically"} · text, images, PDF
-          {canQuote ? ", or structured quote" : ""}
+          {live ? t("Live") : t("Updating periodically")} {t("· text, images, PDF")}
+          {canQuote ? t(", or structured quote") : ""}
         </p>
       </div>
       <div ref={listRef} className="max-h-72 space-y-3 overflow-y-auto bg-slate-50/50 px-4 py-4" aria-live="polite">
         {messages.length === 0 && (
           <div className="py-4 text-center space-y-3">
-            <p className="text-sm text-slate-500">No messages yet. Say hello!</p>
+            <p className="text-sm text-slate-500">{t("No messages yet. Say hello!")}</p>
             {canQuote && introChips.length > 0 && (
               <div
                 className="flex flex-wrap justify-center gap-2 px-2"
                 role="group"
-                aria-label="Professional intro message templates"
+                aria-label={t("Professional intro message templates")}
               >
                 {introChips.slice(0, 6).map((tpl) => (
                   <button
@@ -215,7 +216,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
                     onClick={() => setBody(tpl.body)}
                     title={tpl.body}
                   >
-                    {tpl.label}
+                    {t(tpl.label)}
                   </button>
                 ))}
               </div>
@@ -237,7 +238,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
                 )}
               >
                 <p className={clsx("text-[11px] mb-0.5", mine ? "text-brand-100" : "text-slate-500")}>
-                  {m.sender.name || (m.sender.role === "TRADESPERSON" ? "Professional" : "Client")} · {fmtDateTime(m.createdAt)}
+                  {m.sender.name || (m.sender.role === "TRADESPERSON" ? t("Professional") : t("Client"))} · {fmtDateTime(m.createdAt)}
                 </p>
                 {m.quote && (
                   <div
@@ -246,7 +247,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
                       mine ? "bg-brand-800/60" : "bg-amber-50 ring-1 ring-amber-200 text-amber-950"
                     )}
                   >
-                    <p className="font-semibold">Quote / estimate · {money(m.quote.amount)}</p>
+                    <p className="font-semibold">{t("Quote / estimate ·")}{" "}{money(m.quote.amount)}</p>
                     {m.quote.notes && <p className="mt-1 whitespace-pre-wrap opacity-90">{m.quote.notes}</p>}
                     {m.quote.attachmentUrl && (
                       <a
@@ -255,7 +256,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
                         rel="noreferrer"
                         className={clsx("mt-1 inline-block underline", mine ? "text-brand-100" : "text-brand-700")}
                       >
-                        View attachment
+                        {t("View attachment")}
                       </a>
                     )}
                   </div>
@@ -288,7 +289,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
                             mine ? "text-brand-100" : "text-brand-700"
                           )}
                         >
-                          {(url.split("?")[0].split("/").pop() || "File").endsWith(".pdf") ? "PDF attachment" : "Attachment"}
+                          {(url.split("?")[0].split("/").pop() || "File").endsWith(".pdf") ? t("PDF attachment") : t("Attachment")}
                         </a>
                       )
                     )}
@@ -312,7 +313,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
                 type="button"
                 className="text-slate-500 hover:text-slate-700"
                 onClick={() => setFiles((xs) => xs.filter((_, j) => j !== i))}
-                aria-label="Remove file"
+                aria-label={t("Remove file")}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -322,15 +323,15 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
       )}
       {canQuote && showQuote && (
         <div className="space-y-2 border-t border-amber-100 bg-amber-50/60 px-3 py-3">
-          <p className="text-xs font-semibold text-amber-900">Attach a structured quote</p>
+          <p className="text-xs font-semibold text-amber-900">{t("Attach a structured quote")}</p>
           <div className="grid gap-2 sm:grid-cols-2">
             <input
               className="input"
               type="number"
               min={1}
               max={10000000}
-              aria-label="Quote amount in rupees"
-              placeholder="Quote amount (₹)"
+              aria-label={t("Quote amount in rupees")}
+              placeholder={t("Quote amount (₹)")}
               value={quoteAmount}
               onChange={(e) => setQuoteAmount(e.target.value)}
             />
@@ -338,14 +339,14 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
               className="input"
               type="file"
               accept="image/jpeg,image/png,image/webp,application/pdf"
-              aria-label="Quote attachment"
+              aria-label={t("Quote attachment")}
               onChange={(e) => setQuoteFile(e.target.files?.[0] || null)}
             />
           </div>
           <textarea
             className="input"
             rows={2}
-            placeholder="Notes (materials, labour breakdown…)"
+            placeholder={t("Notes (materials, labour breakdown…)")}
             value={quoteNotes}
             onChange={(e) => setQuoteNotes(e.target.value)}
           />
@@ -353,7 +354,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
       )}
       {!canSend ? (
         <p className="border-t border-slate-100 p-3 text-xs text-slate-500">
-          This conversation is read-only.
+          {t("This conversation is read-only.")}
         </p>
       ) : (
       <form onSubmit={onSend} className="flex gap-2 border-t border-slate-100 p-3">
@@ -369,8 +370,8 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
           type="button"
           className="btn-ghost shrink-0 px-2"
           onClick={() => fileRef.current?.click()}
-          aria-label="Attach file"
-          title="Attach image or PDF"
+          aria-label={t("Attach file")}
+          title={t("Attach image or PDF")}
         >
           <Paperclip className="h-5 w-5" />
         </button>
@@ -379,18 +380,18 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
             type="button"
             className={clsx("btn-ghost shrink-0 px-2", showQuote && "bg-amber-100 text-amber-900")}
             onClick={() => setShowQuote((v) => !v)}
-            aria-label="Add quote"
-            title="Attach quote / estimate"
+            aria-label={t("Add quote")}
+            title={t("Attach quote / estimate")}
           >
             <FileText className="h-5 w-5" />
           </button>
         )}
         <input
           className="input"
-          placeholder="Type a message…"
+          placeholder={t("Type a message…")}
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          aria-label="Message"
+          aria-label={t("Message")}
         />
         <button
           type="submit"
@@ -402,7 +403,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
               !(showQuote && Number(quoteAmount) > 0))
           }
         >
-          Send
+          {t("Send")}
         </button>
       </form>
       )}

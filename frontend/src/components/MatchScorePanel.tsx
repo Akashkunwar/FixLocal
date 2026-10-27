@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { X } from "lucide-react";
+import { t } from "../lib/i18n";
 
 export type MatchBreakdown = {
   skills: number;
@@ -93,25 +94,25 @@ export function MatchScorePanel({ open, onClose, name, score, breakdown }: Props
       <button
         type="button"
         className="absolute inset-0 bg-slate-900/40"
-        aria-label="Close match score"
+        aria-label={t("Close match score")}
         onClick={onClose}
       />
       <aside className="relative z-10 flex h-full w-full max-w-md flex-col bg-white shadow-xl">
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">Match explainability</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">{t("Match explainability")}</p>
             <h2 className="text-lg font-semibold text-slate-900">
-              {name || "Verified pro"} · {score.toFixed(0)}/{maxTotal.toFixed(0)}
+              {name || t("Verified pro")} · {score.toFixed(0)}/{maxTotal.toFixed(0)}
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              sk skills · rt rating · rs response · ds distance (max {maxTotal.toFixed(0)})
+              {t("sk skills · rt rating · rs response · ds distance (max")}{" "}{maxTotal.toFixed(0)})
             </p>
           </div>
           <button
             type="button"
             className="btn-ghost btn-sm touch-target"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("Close")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -127,7 +128,7 @@ export function MatchScorePanel({ open, onClose, name, score, breakdown }: Props
                       <span className="mr-1.5 rounded-sm bg-brand-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-brand-800">
                         {p.code}
                       </span>
-                      {p.label}
+                      {t(p.label)}
                     </p>
                     <p className="mt-0.5 text-[11px] text-slate-500">{p.hint(breakdown)}</p>
                   </div>
@@ -151,13 +152,12 @@ export function MatchScorePanel({ open, onClose, name, score, breakdown }: Props
             )}
           >
             <p className="text-sm font-medium text-slate-900">
-              Total {breakdown.total.toFixed(1)} = sk{breakdown.skills.toFixed(0)} + rt
-              {breakdown.rating.toFixed(0)} + rs{breakdown.response.toFixed(0)} + ds
+              {t("Total")}{" "}{breakdown.total.toFixed(1)} {t("= sk")}{breakdown.skills.toFixed(0)} {t("+ rt")}
+              {breakdown.rating.toFixed(0)} {t("+ rs")}{breakdown.response.toFixed(0)} {t("+ ds")}
               {breakdown.distance.toFixed(0)}
             </p>
             <p className="mt-1 text-[11px] text-slate-500">
-              Higher scores usually mean closer skill fit, better reviews, faster replies, and nearer
-              location. Weights are admin-tunable.
+              {t("Higher scores usually mean closer skill fit, better reviews, faster replies, and nearer location. Weights are admin-tunable.")}
             </p>
           </div>
         </div>

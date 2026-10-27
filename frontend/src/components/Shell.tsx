@@ -1,14 +1,17 @@
+import { LanguageToggle, useI18n } from "../lib/i18n";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { dashboardPath } from "../api/client";
 import { NotificationBell } from "./NotificationBell";
 import { EmailVerifyBanner } from "./EmailVerifyBanner";
 import { TermsBanner } from "./TermsBanner";
+import { InstallAppBanner } from "./InstallAppBanner";
 import { SiteFooter } from "./SiteFooter";
 import { useEffect } from "react";
 import { setPageMeta } from "../lib/site";
 import {
   BarChart3,
+  BellRing,
   Bookmark,
   Briefcase,
   ClipboardList,
@@ -18,6 +21,7 @@ import {
   Search,
   Settings,
   UserRound,
+  Wallet,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -47,6 +51,7 @@ const clientLinks: NavItem[] = [
     icon: Search,
   },
   { to: "/client/favorites", label: "Shortlist", icon: Heart },
+  { to: "/client/spending", label: "Spending", icon: Wallet },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -58,6 +63,7 @@ const proLinks: NavItem[] = [
     short: "Jobs",
     icon: Search,
   },
+  { to: "/professional/alerts", label: "Job alerts", short: "Alerts", icon: BellRing },
   { to: "/professional/my-jobs", label: "My jobs", icon: Briefcase },
   {
     to: "/professional/analytics",
@@ -96,6 +102,7 @@ export function Shell({
   children: React.ReactNode;
 }) {
   const { user, logout } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   useEffect(() => setPageMeta(title, description), [title, description]);
 
@@ -146,20 +153,21 @@ export function Shell({
                     )
                   }
                 >
-                  {l.label}
+                  {t(l.label)}
                 </NavLink>
               ))}
             </nav>
           )}
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {user?.role !== "ADMIN" && <LanguageToggle />}
             {!user && (
               <>
                 <Link to="/login" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-700 no-underline hover:bg-slate-100">
-                  Log in
+                  {t("Log in")}
                 </Link>
                 <Link to="/register" className="btn-primary btn-sm no-underline">
-                  Sign up
+                  {t("Sign up")}
                 </Link>
               </>
             )}
@@ -183,10 +191,10 @@ export function Shell({
                   type="button"
                   className="btn-ghost btn-sm touch-target"
                   onClick={onLogout}
-                  aria-label="Log out"
+                  aria-label={t("Log out")}
                 >
                   <LogOut className="h-4 w-4" />
-                  <span className="hidden sm:inline">Log out</span>
+                  <span className="hidden sm:inline">{t("Log out")}</span>
                 </button>
               </>
             )}
@@ -195,6 +203,7 @@ export function Shell({
       </header>
       <TermsBanner />
       <EmailVerifyBanner />
+      <InstallAppBanner />
 
       <main className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8">
         {(title || actions) && (
@@ -239,7 +248,7 @@ export function Shell({
                 }
               >
                 {l.icon && <l.icon className="h-5 w-5" aria-hidden />}
-                <span className="whitespace-nowrap">{l.short ?? l.label}</span>
+                <span className="whitespace-nowrap">{t(l.short ?? l.label)}</span>
               </NavLink>
             ))}
           </div>

@@ -10,6 +10,7 @@ import {
   formatAvailabilitySummary,
   type WeeklyAvailability,
 } from "../lib/availability";
+import { t } from "../lib/i18n";
 
 function toLocalInput(iso?: string | null) {
   if (!iso) return "";
@@ -110,10 +111,10 @@ export function SchedulePanel({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="font-semibold flex items-center gap-2">
-            <CalendarClock className="h-4 w-4 text-brand-700" /> Visit schedule
+            <CalendarClock className="h-4 w-4 text-brand-700" /> {t("Visit schedule")}
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Propose or confirm a visit window on the job timeline.
+            {t("Propose or confirm a visit window on the job timeline.")}
           </p>
         </div>
         <Badge status={status === "none" ? "pending" : status} />
@@ -121,19 +122,19 @@ export function SchedulePanel({
 
       {(blockedDates?.length ?? 0) > 0 && (
         <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-          Blocked dates: {blockedDates!.slice(0, 8).join(", ")}
+          {t("Blocked dates:")}{" "}{blockedDates!.slice(0, 8).join(", ")}
           {(blockedDates!.length > 8) ? "…" : ""}
         </p>
       )}
       {proAvailability && (
         <p className="text-xs text-slate-500 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-          Pro usual hours: {formatAvailabilitySummary(proAvailability)}
+          {t("Pro usual hours:")}{" "}{formatAvailabilitySummary(proAvailability)}
         </p>
       )}
 
       {(job.preferredStart || job.preferredEnd) && (
         <p className="text-sm text-slate-600">
-          Client preferred:{" "}
+          {t("Client preferred:")}{" "}
           <strong>
             {fmtDateTime(job.preferredStart)}
             {job.preferredEnd ? ` – ${fmtDateTime(job.preferredEnd)}` : ""}
@@ -144,7 +145,7 @@ export function SchedulePanel({
       {job.scheduledStart && (
         <div className="rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-950 ring-1 ring-brand-100">
           <p className="font-medium">
-            {status === "confirmed" ? "Confirmed visit" : "Proposed visit"}
+            {status === "confirmed" ? t("Confirmed visit") : t("Proposed visit")}
           </p>
           <p className="mt-0.5">
             {fmtDateTime(job.scheduledStart)}
@@ -174,7 +175,7 @@ export function SchedulePanel({
             }}
           >
             <CalendarPlus className="h-3.5 w-3.5" />
-            Download .ics
+            {t("Download .ics")}
           </button>
           <a
             className="btn-ghost btn-sm touch-target no-underline"
@@ -182,7 +183,7 @@ export function SchedulePanel({
             target="_blank"
             rel="noreferrer"
           >
-            Google Calendar
+            {t("Google Calendar")}
           </a>
           <a
             className="btn-ghost btn-sm touch-target no-underline"
@@ -190,7 +191,7 @@ export function SchedulePanel({
             target="_blank"
             rel="noreferrer"
           >
-            Outlook
+            {t("Outlook")}
           </a>
         </div>
       )}
@@ -199,7 +200,7 @@ export function SchedulePanel({
         <div className="flex flex-wrap gap-2">
           {canAccept && (
             <button type="button" className="btn-primary btn-sm touch-target" disabled={busy} onClick={onAccept}>
-              Accept time
+              {t("Accept time")}
             </button>
           )}
           <button
@@ -207,7 +208,7 @@ export function SchedulePanel({
             className="btn-secondary btn-sm touch-target"
             onClick={() => setShowForm((v) => !v)}
           >
-            {status === "none" ? "Propose time" : "Counter-propose"}
+            {status === "none" ? t("Propose time") : "Counter-propose"}
           </button>
         </div>
       )}
@@ -216,7 +217,7 @@ export function SchedulePanel({
         <form onSubmit={onPropose} className="space-y-3 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
           <div className="grid gap-2 sm:grid-cols-2">
             <div>
-              <label className="label" htmlFor="schedule-start">Start</label>
+              <label className="label" htmlFor="schedule-start">{t("Start")}</label>
               <input
                 id="schedule-start"
                 className="input"
@@ -227,7 +228,7 @@ export function SchedulePanel({
               />
             </div>
             <div>
-              <label className="label" htmlFor="schedule-end">End</label>
+              <label className="label" htmlFor="schedule-end">{t("End")}</label>
               <input
                 id="schedule-end"
                 className="input"
@@ -239,25 +240,25 @@ export function SchedulePanel({
           </div>
           {conflict && (
             <p className="text-xs font-medium text-amber-800 bg-amber-50 rounded-lg px-2.5 py-2 ring-1 ring-amber-200">
-              {conflict} You can still propose — this is only a hint.
+              {conflict} {t("You can still propose — this is only a hint.")}
             </p>
           )}
           <div>
-            <label className="label" htmlFor="schedule-note">Note (optional)</label>
+            <label className="label" htmlFor="schedule-note">{t("Note (optional)")}</label>
             <input
               id="schedule-note"
               className="input"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. morning slot, bring ladder"
+              placeholder={t("e.g. morning slot, bring ladder")}
             />
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="submit" className="btn-primary btn-sm touch-target" disabled={busy}>
-              {busy ? "Saving…" : "Send proposal"}
+              {busy ? t("Saving…") : t("Send proposal")}
             </button>
             <button type="button" className="btn-ghost btn-sm touch-target" onClick={() => setShowForm(false)}>
-              Cancel
+              {t("Cancel")}
             </button>
           </div>
         </form>

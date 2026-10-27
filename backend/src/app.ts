@@ -25,6 +25,10 @@ import reportRoutes from "./routes/reports";
 import fileRoutes from "./routes/files";
 import blockRoutes from "./routes/blocks";
 import seoRoutes from "./routes/seo";
+import jobAlertRoutes from "./routes/jobAlerts";
+import referralRoutes from "./routes/referrals";
+import creditRoutes from "./routes/credits";
+import { logSms, logWhatsApp } from "./services/messaging";
 import { consoleMailer } from "./services/mailer";
 
 export function createApp(): Express {
@@ -106,12 +110,15 @@ export function createApp(): Express {
   app.use("/api/files", fileRoutes);
   app.use("/api/blocks", blockRoutes);
   app.use("/api/seo", seoRoutes);
+  app.use("/api/job-alerts", jobAlertRoutes);
+  app.use("/api/referrals", referralRoutes);
+  app.use("/api/credits", creditRoutes);
   // Old links (/uploads/<name>) go through the same access checks.
   app.get("/uploads/:name", serveFile);
 
   if (!cfg.isProd && process.env.DEV_OUTBOX === "true") {
     app.get("/api/dev/outbox", (_req, res) => {
-      res.json({ emails: consoleMailer.outbox });
+      res.json({ emails: consoleMailer.outbox, texts: [...logSms.outbox, ...logWhatsApp.outbox] });
     });
   }
 

@@ -1,3 +1,4 @@
+import { grantReferralRewards } from "../domain/credits";
 import { LessThan } from "typeorm";
 import { AppDataSource } from "../data-source";
 import { config } from "../config";
@@ -14,6 +15,9 @@ import { transitionJob } from "../domain/jobStateMachine";
 import { releaseRemaining } from "../domain/escrow";
 import { viewedNoReplyState } from "../controllers/bidController";
 import { logger } from "../logger";
+import { sendJobAlertDigests } from "../utils/jobAlertDigest";
+import { flushOutbound } from "../utils/outbound";
+import { JobAlertDigest } from "../entities/JobAlertDigest";
 import { HttpError } from "../http/errors";
 
 const LOCK_KEY = 7_140_291;
@@ -32,6 +36,7 @@ export async function autoConfirmJobs(now = new Date()) {
         await transitionJob(m, job.id, "auto_confirm", { completedAt: now });
         const fresh = await m.findOneOrFail(Job, { where: { id: job.id } });
         const released = await releaseRemaining(m, fresh, null);
+        const rewards = await grantReferralRewards(m, job.id, now);
         await writeAudit(
           {
             actorUserId: SYSTEM_ACTOR_ID,
@@ -44,8 +49,9 @@ export async function autoConfirmJobs(now = new Date()) {
           },
           m
         );
-        return released;
+        return { ...released, rewards };
       });
+      if (result.rewards.length) await createNotifications(result.rewards);
       confirmed += 1;
       const accepted = job.acceptedBidId ? await AppDataSource.getRepository(Bid).findOne({ where: { id: job.acceptedBidId } }) : null;
       const total = result.released.reduce((s, m) => s + Number(m.amount), 0);
@@ -68,6 +74,7 @@ export async function autoConfirmJobs(now = new Date()) {
                   body: `"${job.title}" was confirmed automatically${total ? ` and ₹${total.toFixed(0)} was released` : ""}.`,
                   link: `/professional/jobs/${job.id}`,
                   meta: { jobId: job.id, autoConfirmed: true },
+                  text: total > 0,
                 },
               ]
             : []),
@@ -122,6 +129,10 @@ export async function cleanupExpired(now = new Date()) {
   await AppDataSource.getRepository(IdempotencyKey).delete({ createdAt: LessThan(new Date(now.getTime() - day)) });
   await AppDataSource.getRepository(RefreshToken).delete({ expiresAt: LessThan(new Date(now.getTime() - 7 * day)) });
   await AppDataSource.getRepository(EmailToken).delete({ expiresAt: LessThan(new Date(now.getTime() - 7 * day)) });
+  await AppDataSource.getRepository(JobAlertDigest).delete({ createdAt: LessThan(new Date(now.getTime() - 60 * day)) });
+  await AppDataSource.query(`DELETE FROM "outbound_messages" WHERE "status" IN ('sent', 'failed', 'skipped') AND "createdAt" < $1`, [
+    new Date(now.getTime() - 30 * day),
+  ]);
 }
 
 /** Only one API instance runs the jobs at a time (session-level advisory lock on a dedicated connection). */
@@ -134,8 +145,10 @@ export async function runWorkersOnce(now = new Date()) {
     try {
       const autoConfirmed = await autoConfirmJobs(now);
       const nudges = await sendQuoteViewNudges(now);
+      const digests = await sendJobAlertDigests(now);
+      const texts = await flushOutbound(now);
       await cleanupExpired(now);
-      return { skipped: false, autoConfirmed, nudges };
+      return { skipped: false, autoConfirmed, nudges, digests, texts };
     } finally {
       await runner.query(`SELECT pg_advisory_unlock($1)`, [LOCK_KEY]);
     }

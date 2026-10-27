@@ -1,3 +1,10 @@
+import { OutboundMessage } from "../entities/OutboundMessage";
+import { toE164 } from "../services/messaging";
+import { CreditEntry } from "../entities/CreditEntry";
+import crypto from "node:crypto";
+import { JobAlertMatch } from "../entities/JobAlertMatch";
+import { JobAlertDigest } from "../entities/JobAlertDigest";
+import { asLang, emails } from "../domain/i18n";
 import type { Request, Response } from "express";
 import { EMAIL_PREF_KEY } from "../utils/notifications";
 import { TERMS_VERSION } from "../domain/legal";
@@ -9,6 +16,7 @@ import { User, UserRole } from "../entities/User";
 import { TradespersonProfile, VerificationStatus } from "../entities/TradespersonProfile";
 import { EmailToken, type EmailTokenType } from "../entities/EmailToken";
 import { UserTemplate, TEMPLATE_KINDS, type TemplateKind } from "../entities/UserTemplate";
+import { JobAlert } from "../entities/JobAlert";
 import { AuditAction } from "../entities/AuditLog";
 import { Upload, UploadKind } from "../entities/Upload";
 import { comparePassword, dummyCompare, hashPassword } from "../utils/password";
@@ -76,19 +84,12 @@ async function sendEmailToken(user: User, type: EmailTokenType) {
     repo.create({ userId: user.id, type, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + ttlMs) })
   );
   // Mail goes out in the background so response time doesn't reveal whether an account exists.
-  if (type === "verify") {
-    void sendMail({
-      to: user.email,
-      subject: "Verify your FixLocal email",
-      text: `Hi ${user.name || "there"},\n\nConfirm your email to start using FixLocal:\n${appLink(`/verify-email?token=${raw}`)}\n\nThis link expires in 48 hours.`,
-    });
-  } else {
-    void sendMail({
-      to: user.email,
-      subject: "Reset your FixLocal password",
-      text: `Someone asked to reset the password for this account.\n\nChoose a new password here:\n${appLink(`/reset-password?token=${raw}`)}\n\nThis link expires in 1 hour. If this wasn't you, you can ignore this email.`,
-    });
-  }
+  const lang = asLang(user.language);
+  const mail =
+    type === "verify"
+      ? emails.verify(lang, { name: user.name, link: appLink(`/verify-email?token=${raw}`) })
+      : emails.reset(lang, { link: appLink(`/reset-password?token=${raw}`) });
+  void sendMail({ to: user.email, ...mail });
   return raw;
 }
 
@@ -119,20 +120,28 @@ async function notifyExistingOwner(existing: User) {
   }
   void sendMail({
     to: existing.email,
-    subject: "Someone tried to sign up with your email",
-    text:
-      `Hi ${existing.name || "there"},\n\nSomeone just tried to create a FixLocal account with this email address, ` +
-      `but you already have one.\n\nIf it was you, log in here:\n${appLink("/login")}\n\n` +
-      `Forgot your password? Reset it here:\n${appLink("/forgot-password")}\n\nIf it wasn't you, you can ignore this email; nothing has changed.`,
+    ...emails.existingAccount(asLang(existing.language), {
+      name: existing.name,
+      login: appLink("/login"),
+      forgot: appLink("/forgot-password"),
+    }),
   });
+}
+
+/** Keyed hash of IP + browser at sign-up; only ever compared with the referrer's, never shown or exported. */
+function deviceHash(req: Request) {
+  return crypto.createHmac("sha256", config().jwtSecret).update(`${req.ip}|${req.get("user-agent") || ""}`).digest("hex");
 }
 
 const isUniqueViolation = (err: unknown) => (err as { code?: string } | null)?.code === "23505";
 
 export async function register(req: Request, res: Response) {
-  const { email, password, role, name, phone } = req.valid.body;
+  const { email, password, role, name, phone, referralCode, language } = req.valid.body;
   // Hash first in every case so new and existing addresses take the same time.
   const passwordHash = await hashPassword(password);
+  const referrer = referralCode
+    ? await users().findOne({ where: { referralCode }, select: { id: true, deletedAt: true } })
+    : null;
   const existing = await users().findOne({ where: { email } });
   if (existing) {
     await notifyExistingOwner(existing);
@@ -167,6 +176,9 @@ export async function register(req: Request, res: Response) {
           emailVerifiedAt: autoVerify ? new Date() : null,
           termsAcceptedAt: new Date(),
           termsVersion: TERMS_VERSION,
+          referredById: referrer && !referrer.deletedAt ? referrer.id : null,
+          language: language ?? "en",
+          signupDeviceHash: deviceHash(req),
         })
       );
       if (role === UserRole.TRADESPERSON) {
@@ -258,7 +270,15 @@ export async function updateMe(req: Request, res: Response) {
   if (!user) throw unauthorized("Account not found");
   const body = req.valid.body;
   if (body.name !== undefined) user.name = body.name || undefined;
-  if (body.phone !== undefined) user.phone = body.phone || undefined;
+  if (body.phone !== undefined) {
+    // A different number has to be verified again before texts go to it.
+    if (toE164(body.phone) !== toE164(user.phone)) {
+      user.phoneVerifiedAt = null;
+      user.smsOptIn = false;
+      user.whatsappOptIn = false;
+    }
+    user.phone = body.phone || undefined;
+  }
   if (body.timezone !== undefined) user.timezone = body.timezone;
   if (body.notificationPrefs !== undefined) {
     const merged: Record<string, boolean> = { ...(user.notificationPrefs || {}) };
@@ -271,6 +291,15 @@ export async function updateMe(req: Request, res: Response) {
     user.notificationPrefs = { ...(user.notificationPrefs || {}), [EMAIL_PREF_KEY]: body.emailNotifications };
   }
   if (body.quoteViewNudgeHours !== undefined) user.quoteViewNudgeHours = body.quoteViewNudgeHours;
+  if (body.language !== undefined) user.language = body.language;
+  for (const key of ["smsOptIn", "whatsappOptIn"] as const) {
+    if (body[key] === undefined) continue;
+    if (body[key] && !config().messaging.enabled) throw conflict("Text messages aren't switched on yet", "MESSAGING_OFF");
+    if (body[key] && (!user.phoneVerifiedAt || !toE164(user.phone))) {
+      throw badRequest("Verify your mobile number first", "PHONE_NOT_VERIFIED");
+    }
+    user[key] = body[key];
+  }
   await users().save(user);
   return res.json({ user: toSelfUser(user) });
 }
@@ -388,8 +417,19 @@ export async function deleteAccount(req: Request, res: Response) {
         tokenVersion: user.tokenVersion + 1,
       }
     );
-    await m.query(`UPDATE "users" SET "phone" = NULL, "avatarUrl" = NULL WHERE "id" = $1`, [user.id]);
+    await m.query(
+      `UPDATE "users" SET "phone" = NULL, "avatarUrl" = NULL, "phoneVerifiedAt" = NULL, "smsOptIn" = false, "whatsappOptIn" = false,
+              "phoneCodeHash" = NULL, "phoneCodeExpiresAt" = NULL, "signupDeviceHash" = NULL WHERE "id" = $1`,
+      [user.id]
+    );
     await m.delete(UserTemplate, { userId: user.id });
+    await m.delete(JobAlert, { userId: user.id });
+    await m.delete(JobAlertMatch, { userId: user.id });
+    await m.delete(JobAlertDigest, { userId: user.id });
+    // Credit is personal: it goes with the account. Reward decisions stay (ids only) so a deleted
+    // account can't be used to collect the same referral twice.
+    await m.delete(CreditEntry, { userId: user.id });
+    await m.delete(OutboundMessage, { userId: user.id });
     await m.query(`UPDATE "jobs" SET "status" = 'cancelled' WHERE "homeownerId" = $1 AND "status" = 'open'`, [user.id]);
     await m.query(`UPDATE "bids" SET "status" = 'withdrawn' WHERE "tradespersonId" = $1 AND "status" = 'active'`, [
       user.id,
@@ -474,7 +514,7 @@ export async function exportMyData(req: Request, res: Response) {
   const q = <T = Record<string, unknown>>(sql: string) => AppDataSource.query(sql, [id]) as Promise<T[]>;
   const [account] = await q(
     `SELECT "id", "email", "role", "name", "phone", "avatarUrl", "timezone", "isSuspended", "emailVerifiedAt",
-            "termsAcceptedAt", "termsVersion", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
+            "termsAcceptedAt", "termsVersion", "language", "phoneVerifiedAt", "smsOptIn", "whatsappOptIn", "referralCode", "referredById", "notificationPrefs", "quoteViewNudgeHours", "createdAt", "updatedAt"
        FROM "users" WHERE "id" = $1`
   );
   const [
@@ -492,6 +532,10 @@ export async function exportMyData(req: Request, res: Response) {
     ledger,
     uploads,
     templates,
+    textMessages,
+    credits,
+    referralRewards,
+    jobAlerts,
   ] = await Promise.all([
     q(`SELECT * FROM "tradesperson_profiles" WHERE "userId" = $1`),
     q(`SELECT "id", "title", "description", "category", "status", "budgetMin", "budgetMax", "address", "area", "city",
@@ -519,6 +563,13 @@ export async function exportMyData(req: Request, res: Response) {
       `SELECT "name", "kind", "jobId", "mime", "size", "originalName", "createdAt" FROM "uploads" WHERE "ownerUserId" = $1`
     ),
     q(`SELECT "kind", "position", "data", "createdAt" FROM "user_templates" WHERE "userId" = $1`),
+    q(`SELECT "channel", "body", "status", "createdAt", "sentAt" FROM "outbound_messages" WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 500`),
+    q(`SELECT "kind", "amount", "jobId", "note", "createdAt" FROM "credit_entries" WHERE "userId" = $1 ORDER BY "createdAt"`),
+    q(`SELECT CASE WHEN "referrerId" = $1 THEN 'you_invited' ELSE 'you_were_invited' END AS "role", "status", "reason",
+              "referrerAmount", "referredAmount", "jobId", "createdAt", "reversedAt"
+         FROM "referral_rewards" WHERE "referrerId" = $1 OR "referredId" = $1 ORDER BY "createdAt"`),
+    q(`SELECT "name", "categories", "city", "area", "lat", "lng", "radiusKm", "minBudget", "siteType", "active", "frequency",
+              "matchCount", "lastMatchedAt", "createdAt" FROM "job_alerts" WHERE "userId" = $1`),
   ]);
   const body = {
     exportedAt: new Date().toISOString(),
@@ -539,6 +590,10 @@ export async function exportMyData(req: Request, res: Response) {
     escrowLedger: ledger,
     files: uploads,
     templates,
+    textMessages,
+    credits: { note: "FixLocal credit is simulated, like escrow.", entries: credits },
+    referralRewards,
+    jobAlerts,
   };
   res.setHeader(
     "Content-Disposition",

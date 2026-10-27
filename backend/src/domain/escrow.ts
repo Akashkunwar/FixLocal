@@ -1,3 +1,4 @@
+import { applyProCredit, restoreClientCredit, reverseReferralRewards } from "./credits";
 import type { EntityManager } from "typeorm";
 import { In } from "typeorm";
 import { Bid } from "../entities/Bid";
@@ -221,8 +222,9 @@ export async function releaseMilestone(manager: EntityManager, job: Job, milesto
 
   const payee = await payeeFor(manager, job);
   await ledger(manager, job, [{ type: LedgerType.RELEASE, amount: Number(released.amount), milestoneId: released.id, note: released.label }], actorUserId, payee);
+  const creditAdded = payee ? await applyProCredit(manager, payee, job.id) : 0;
   const paymentStatus = await syncPaymentStatus(manager, job);
-  return { milestone: released, paymentStatus, payeeUserId: payee };
+  return { milestone: released, paymentStatus, payeeUserId: payee, creditAdded };
 }
 
 /** Release every unsettled milestone (client confirmation, auto-confirm, dispute won by the pro). */
@@ -245,8 +247,9 @@ export async function releaseRemaining(manager: EntityManager, job: Job, actorUs
     actorUserId,
     payee
   );
+  const creditAdded = payee && released.length ? await applyProCredit(manager, payee, job.id) : 0;
   const paymentStatus = await syncPaymentStatus(manager, job);
-  return { released, paymentStatus, payeeUserId: payee };
+  return { released, paymentStatus, payeeUserId: payee, creditAdded };
 }
 
 /**
@@ -302,7 +305,11 @@ export async function refundMilestones(
   );
   const paymentStatus = await syncPaymentStatus(manager, job);
   const totalRefunded = round2(refunded.reduce((s, m) => s + Number(m.amount), 0));
-  return { refunded, notRefundable, totalRefunded, paymentStatus };
+  // Credit follows the money: a refund takes back referral credit earned on this job, and a hire
+  // that ends fully refunded gives the client back the credit it used.
+  const creditNotices = refunded.length ? await reverseReferralRewards(manager, job.id, "refunded", actorUserId) : [];
+  if (paymentStatus === PaymentStatus.REFUNDED) await restoreClientCredit(manager, job.homeownerId, job.id);
+  return { refunded, notRefundable, totalRefunded, paymentStatus, creditNotices };
 }
 
 /** Sum of released escrow per professional (ledger is the source of truth). */
