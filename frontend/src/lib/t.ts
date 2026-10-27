@@ -24,6 +24,9 @@ export function loadHindi(): Promise<void> {
 
 export const hindiReady = () => dict !== null;
 
+/** True when `text` has a Hindi entry (lets callers prefer a translated server message). */
+export const hasTranslation = (text: string) => !!dict && Object.prototype.hasOwnProperty.call(dict, text);
+
 export function translate(lang: Lang, text: string): string {
   if (lang !== "hi" || !dict) return text;
   const hit = dict[text];

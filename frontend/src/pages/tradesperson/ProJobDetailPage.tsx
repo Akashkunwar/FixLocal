@@ -41,7 +41,6 @@ import { useToast } from "../../components/Toast";
 import { useAuth } from "../../auth/AuthContext";
 import { categoryLabel, fmtDate, fmtDateTime, money } from "../../lib/format";
 import {
-  addFavorite,
   createReview,
   getJobReview,
   type JobReview,
@@ -54,7 +53,7 @@ import {
   CancellationNote,
 } from "../../components/CancelBookingButton";
 import { StarRating } from "../../components/ui/StarRating";
-import { Heart } from "lucide-react";
+import { SaveJobButton } from "../../components/SaveJobButton";
 import { mergeCounterTemplates } from "../../lib/counterTemplates";
 import {
   normalizeWeeklyAvailability,
@@ -465,19 +464,7 @@ export function ProJobDetailPage() {
           {`${categoryLabel(job.category)} · ${fmtDate(job.createdAt)}`}
         </>
       }
-      actions={
-        <button
-          type="button"
-          className="btn-secondary btn-sm"
-          onClick={() =>
-            addFavorite("job", job.id)
-              .then(() => success("Saved"))
-              .catch((e) => error(e.message))
-          }
-        >
-          <Heart className="h-4 w-4" /> {t("Save")}
-        </button>
-      }
+      actions={<SaveJobButton jobId={job.id} />}
     >
       <div className="mb-6 card p-5">
         <StatusTimeline status={job.status} />

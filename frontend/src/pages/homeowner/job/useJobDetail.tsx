@@ -31,8 +31,6 @@ import {
 } from "../../../api/jobs";
 import {
   getJobReview,
-  addFavorite,
-  removeFavorite,
   listFavorites,
   type JobReview,
 } from "../../../api/extras";
@@ -68,7 +66,6 @@ export function useJobDetail() {
   const [showDispute, setShowDispute] = useState(false);
   const [review, setReview] = useState<JobReview | null>(null);
   const [proReview, setProReview] = useState<JobReview | null>(null);
-  const [saved, setSaved] = useState(false);
   const [proAvailability, setProAvailability] =
     useState<WeeklyAvailability | null>(null);
   const [proBlockedDates, setProBlockedDates] = useState<string[]>([]);
@@ -931,22 +928,6 @@ export function useJobDetail() {
     }
   }
 
-  async function toggleSave() {
-    try {
-      if (saved) {
-        await removeFavorite("job", id!);
-        setSaved(false);
-        success("Removed from saved");
-      } else {
-        await addFavorite("job", id!);
-        setSaved(true);
-        success("Saved job");
-      }
-    } catch (e) {
-      error((e as Error).message);
-    }
-  }
-
   return {
     loadError,
     reload: load,
@@ -1003,7 +984,6 @@ export function useJobDetail() {
     quoteViewedSent,
     refreshInvites,
     review,
-    saved,
     scorePro,
     searchParams,
     selectedInviteIds,
@@ -1037,7 +1017,6 @@ export function useJobDetail() {
     setProBlockedDates,
     setProReview,
     setReview,
-    setSaved,
     setScorePro,
     setSearchParams,
     setSelectedInviteIds,
@@ -1062,7 +1041,6 @@ export function useJobDetail() {
     sideBySideWhatIf,
     success,
     suggestedPros,
-    toggleSave,
     toggleSelectPro,
     tplLabel,
     updateProfile,

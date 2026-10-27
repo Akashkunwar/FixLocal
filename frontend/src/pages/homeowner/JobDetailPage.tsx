@@ -32,7 +32,8 @@ import {
   fmtDateTime,
   money,
 } from "../../lib/format";
-import { Heart, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
+import { SaveJobButton } from "../../components/SaveJobButton";
 import { Suspense, lazy } from "react";
 
 // Below-the-fold and on-demand panels load in their own chunks.
@@ -79,7 +80,6 @@ export function JobDetailPage() {
     proBlockedDates,
     proReview,
     review,
-    saved,
     scorePro,
     searchParams,
     setBestValueExplain,
@@ -87,7 +87,6 @@ export function JobDetailPage() {
     setShowDispute,
     showDispute,
     success,
-    toggleSave,
     updateProfile,
     user,
   } = s;
@@ -168,19 +167,7 @@ export function JobDetailPage() {
           } · Posted ${fmtDate(job.createdAt)}`}
         </>
       }
-      actions={
-        <button
-          type="button"
-          className="btn-secondary btn-sm"
-          onClick={toggleSave}
-          aria-label={t("Save job")}
-        >
-          <Heart
-            className={`h-4 w-4 ${saved ? "fill-rose-500 text-rose-500" : ""}`}
-          />
-          {saved ? t("Saved") : t("Save")}
-        </button>
-      }
+      actions={<SaveJobButton jobId={job.id} />}
     >
       <div className="mb-6 card p-5">
         <StatusTimeline status={job.status} />
