@@ -36,6 +36,7 @@ import { MapPin } from "lucide-react";
 import { SaveJobButton } from "../../components/SaveJobButton";
 import { Suspense, lazy } from "react";
 
+import { errorText } from "../../lib/apiErrors";
 // Below-the-fold and on-demand panels load in their own chunks.
 const AmcProposalCard = lazy(() =>
   import("../../components/AmcProposalCard").then((m) => ({
@@ -59,10 +60,12 @@ import { JobQuestionsPanel } from "../../components/JobQuestionsPanel";
 import { ShortlistInvitePanel } from "./job/ShortlistInvitePanel";
 import { SuggestedProsPanel } from "./job/SuggestedProsPanel";
 import { BidComparePanel } from "./job/BidComparePanel";
-import { t } from "../../lib/i18n";
+import { t, tf } from "../../lib/i18n";
 
+import { useConfirm } from "../../components/ConfirmDialog";
 export function JobDetailPage() {
   const s = useJobDetail();
+  const { prompt } = useConfirm();
   const {
     bestValueExplain,
     bids,
@@ -160,11 +163,10 @@ export function JobDetailPage() {
       subtitle={
         <>
           <CategoryIcon category={job.category} className="mr-1.5" />
-          {`${categoryLabel(job.category)}${
-            job.cadence && normalizeCadence(job.cadence) !== "one_time"
-              ? ` · ${cadenceLabel(job.cadence)}`
-              : ""
-          } · Posted ${fmtDate(job.createdAt)}`}
+          {categoryLabel(job.category)}
+          {job.cadence && normalizeCadence(job.cadence) !== "one_time" ? ` · ${cadenceLabel(job.cadence)}` : ""}
+          {" · "}
+          {tf("Posted {date}", { date: fmtDate(job.createdAt) })}
         </>
       }
       actions={<SaveJobButton jobId={job.id} />}
@@ -174,7 +176,7 @@ export function JobDetailPage() {
         {job.scheduledStart && (
           <p className="mt-3 text-sm text-slate-600">
             {t("Visit")}{" "}
-            {job.scheduleStatus === "confirmed" ? "confirmed" : "proposed"}:{" "}
+            {job.scheduleStatus === "confirmed" ? t("confirmed") : t("proposed")}:{" "}
             <strong>{fmtDateTime(job.scheduledStart)}</strong>
             {job.scheduledEnd ? ` – ${fmtDateTime(job.scheduledEnd)}` : ""}
           </p>
@@ -274,7 +276,7 @@ export function JobDetailPage() {
                     className="btn-secondary"
                     onClick={() => {
                       saveRepeatDraft(job);
-                      success("Prefilling post-job wizard from this job");
+                      success(t("Prefilling post-job wizard from this job"));
                       navigate(clientPath("jobs/new"));
                     }}
                   >
@@ -285,13 +287,18 @@ export function JobDetailPage() {
                     className="btn-ghost"
                     onClick={async () => {
                       const suggested =
-                        (job.title || "Job")
+                        (job.title || t("Job"))
                           .replace(/\s*\(repeat\)\s*$/i, "")
-                          .trim() || "My job template";
-                      const name =
-                        window
-                          .prompt("Name this job template", suggested)
-                          ?.trim() || suggested;
+                          .trim() || t("My job template");
+                      const answer = await prompt({
+                        title: t("Save as a job template"),
+                        label: t("Name this job template"),
+                        defaultValue: suggested,
+                        confirmLabel: t("Save template"),
+                        maxLength: 80,
+                      });
+                      if (answer === null) return;
+                      const name = answer.trim() || suggested;
                       const entry = namedTemplateFromJob(job, name);
                       try {
                         await updateProfile({
@@ -300,10 +307,10 @@ export function JobDetailPage() {
                             entry,
                           ),
                         });
-                        success(`Saved “${entry.name}” to your job templates`);
+                        success(tf("Saved “{name}” to your job templates", { name: entry.name }));
                       } catch (e) {
                         error(
-                          (e as Error).message || "Couldn't save the template",
+                          errorText(e, "Couldn't save the template"),
                         );
                       }
                     }}
@@ -338,7 +345,7 @@ export function JobDetailPage() {
               >
                 {t("The professional marked this job as done. Confirm to release the remaining payment, or open a dispute if something isn't right.")}
                 {job.autoConfirmAt
-                  ? `If you don't respond, it will be confirmed automatically on ${fmtDateTime(job.autoConfirmAt)}.`
+                  ? tf("If you don't respond, it will be confirmed automatically on {autoConfirmAt}.", { autoConfirmAt: fmtDateTime(job.autoConfirmAt) })
                   : t("It will be confirmed automatically in a few days if you don't respond.")}
               </p>
             )}

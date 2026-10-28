@@ -1,5 +1,6 @@
 import type { Job } from "../api/jobs";
 
+import { plural } from "./t";
 export type VisitPrepItem = {
   id: string;
   label: string;
@@ -45,7 +46,7 @@ export function visitPrepItems(job: Job): VisitPrepItem[] {
       id: "photos",
       label: "Photos ready for the pro",
       hint: hasPhotos
-        ? `${job.photoUrls.length} photo(s) on the job.`
+        ? plural(job.photoUrls.length, "{n} photo on the job.", "{n} photos on the job.")
         : "Upload clear photos of the work area so the pro can prepare.",
       autoDone: hasPhotos,
     },
@@ -93,7 +94,7 @@ export function proVisitDayItems(job: Job): VisitPrepItem[] {
       id: "brief",
       label: "Review job brief & photos",
       hint: hasPhotos
-        ? `${job.photoUrls.length} photo(s) on the job — check details before you leave.`
+        ? plural(job.photoUrls.length, "{n} photo on the job — check details before you leave.", "{n} photos on the job — check details before you leave.")
         : "Read the description carefully; ask the client for photos in chat if needed.",
       autoDone: hasPhotos,
     },

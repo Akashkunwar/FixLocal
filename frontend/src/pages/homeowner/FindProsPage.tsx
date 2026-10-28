@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Shell } from "../../components/Shell";
 import { browsePros, type TradespersonProfile } from "../../api/jobs";
-import { heatLevelClass } from "../../lib/availability";
+import { heatLevelClass, bestInviteText } from "../../lib/availability";
 import { addFavorite } from "../../api/extras";
 import { Spinner } from "../../components/ui/Spinner";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -15,6 +15,8 @@ import { Heart, Search, Bookmark, MapPin } from "lucide-react";
 import { ResponseSlaBadge } from "../../components/ui/ResponseSlaBadge";
 import clsx from "clsx";
 
+import { t, tf } from "../../lib/i18n";
+import { errorText } from "../../lib/apiErrors";
 const SAVED_KEY = "fixlocal:savedProSearch";
 
 
@@ -82,7 +84,7 @@ export function FindProsPage() {
       });
       setPros(r.pros);
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     } finally {
       setLoading(false);
     }
@@ -142,7 +144,7 @@ export function FindProsPage() {
       .join(" · ") || "My pro search";
     localStorage.setItem(SAVED_KEY, JSON.stringify({ ...facets, label }));
     setSavedLabel(label);
-    success("Search saved on this device");
+    success(t("Search saved on this device"));
   }
 
   function clearSaved() {
@@ -150,7 +152,7 @@ export function FindProsPage() {
     setSavedLabel(null);
     setFacets(empty);
     load(empty);
-    success("Cleared saved search");
+    success(t("Cleared saved search"));
   }
 
   async function save(userId: string) {
@@ -161,22 +163,22 @@ export function FindProsPage() {
       } catch {
         /* ignore */
       }
-      success("Pro saved");
+      success(t("Pro saved"));
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
   return (
-    <Shell title="Find professionals" subtitle="Browse verified professionals by skill, city, and rating">
+    <Shell title={t("Find professionals")} subtitle={t("Browse verified professionals by skill, city, and rating")}>
       <div className="mb-5 space-y-3">
         <div className="flex flex-wrap gap-2">
           <div className="relative flex-1 min-w-[180px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input
               className="input pl-9"
-              placeholder="Search skills, city, name…"
-              aria-label="Search professionals"
+              placeholder={t("Search skills, city, name…")}
+              aria-label={t("Search professionals")}
               value={facets.q}
               onChange={(e) => setFacets({ ...facets, q: e.target.value })}
               onKeyDown={(e) => e.key === "Enter" && load()}
@@ -184,30 +186,30 @@ export function FindProsPage() {
           </div>
           <input
             className="input w-auto min-w-[120px]"
-            placeholder="City"
-            aria-label="City"
+            placeholder={t("City")}
+            aria-label={t("City")}
             value={facets.city}
             onChange={(e) => setFacets({ ...facets, city: e.target.value })}
           />
           <input
             className="input w-auto min-w-[130px]"
-            placeholder="Neighborhood"
-            aria-label="Neighborhood"
+            placeholder={t("Neighborhood")}
+            aria-label={t("Neighborhood")}
             value={facets.neighborhood}
             onChange={(e) => setFacets({ ...facets, neighborhood: e.target.value })}
           />
           <select
             className="input w-auto"
-            aria-label="Category"
+            aria-label={t("Category")}
             value={facets.category}
             onChange={(e) => setFacets({ ...facets, category: e.target.value })}
           >
-            <option value="">All categories</option>
+            <option value="">{t("All categories")}</option>
             {categoryGroups().map(([group, cats]) => (
               <optgroup key={group} label={group}>
                 {cats.map((c) => (
                   <option key={c.value} value={c.value}>
-                    {c.label}
+                    {t(c.label)}
                   </option>
                 ))}
               </optgroup>
@@ -215,62 +217,62 @@ export function FindProsPage() {
           </select>
           <select
             className="input w-auto"
-            aria-label="Minimum rating"
+            aria-label={t("Minimum rating")}
             value={facets.ratingMin}
             onChange={(e) => setFacets({ ...facets, ratingMin: e.target.value })}
           >
-            <option value="">Any rating</option>
-            <option value="3">3+ stars</option>
-            <option value="4">4+ stars</option>
-            <option value="4.5">4.5+ stars</option>
+            <option value="">{t("Any rating")}</option>
+            <option value="3">{t("3+ stars")}</option>
+            <option value="4">{t("4+ stars")}</option>
+            <option value="4.5">{t("4.5+ stars")}</option>
           </select>
           <input
             className="input w-36"
             type="number"
             min={0}
-            placeholder="Max ₹/hr"
-            aria-label="Maximum hourly rate"
+            placeholder={t("Max ₹/hr")}
+            aria-label={t("Maximum hourly rate")}
             value={facets.rateMax}
             onChange={(e) => setFacets({ ...facets, rateMax: e.target.value })}
           />
           <select
             className="input w-auto"
-            aria-label="Sort by"
+            aria-label={t("Sort by")}
             value={facets.sort}
             onChange={(e) => setFacets({ ...facets, sort: e.target.value })}
           >
-            <option value="rating">Best rated</option>
-            <option value="distance">Nearest (km)</option>
-            <option value="heat">Highest availability heat</option>
+            <option value="rating">{t("Best rated")}</option>
+            <option value="distance">{t("Nearest (km)")}</option>
+            <option value="heat">{t("Highest availability heat")}</option>
           </select>
           <select
             className="input w-auto"
             value={facets.slaTier}
             onChange={(e) => setFacets({ ...facets, slaTier: e.target.value })}
-            title="Response SLA tier"
-            aria-label="Reply speed"
+            title={t("Response SLA tier")}
+            aria-label={t("Reply speed")}
           >
-            <option value="">Any reply SLA</option>
-            <option value="fast_or_better">Fast or better (≤6h)</option>
-            <option value="same_day_or_better">Same-day or better</option>
-            <option value="lightning">Lightning only</option>
-            <option value="fast">Fast</option>
-            <option value="same_day">Same-day</option>
-            <option value="steady">Steady</option>
+            <option value="">{t("Any reply SLA")}</option>
+            <option value="fast_or_better">{t("Fast or better (≤6h)")}</option>
+            <option value="same_day_or_better">{t("Same-day or better")}</option>
+            <option value="lightning">{t("Lightning only")}</option>
+            <option value="fast">{t("Fast")}</option>
+            <option value="same_day">{t("Same-day")}</option>
+            <option value="steady">{t("Steady")}</option>
           </select>
           <input
             className="input w-40"
             type="number"
             min={1}
-            placeholder="Max reply hrs"
+            placeholder={t("Max reply hrs")}
             value={facets.maxResponseHours}
             onChange={(e) => setFacets({ ...facets, maxResponseHours: e.target.value })}
-            title="Max average response hours"
-            aria-label="Maximum average reply hours"
+            title={t("Max average response hours")}
+            aria-label={t("Maximum average reply hours")}
           />
           <label
             className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
-            title="Pros with weekly availability on at least one unblocked day in the next 7 days"
+            title={t("Pros with weekly availability on at least one unblocked day in the next 7 days")}
           >
             <input
               type="checkbox"
@@ -282,33 +284,36 @@ export function FindProsPage() {
                 })
               }
             />
-            Available this week
+            
+            {t("Available this week")}
           </label>
           <select
             className="input w-auto"
             value={facets.minHeat}
             onChange={(e) => setFacets({ ...facets, minHeat: e.target.value })}
-            title="Minimum availability heat score (free hours vs 40h week)"
-            aria-label="Minimum availability heat"
+            title={t("Minimum availability heat score (free hours vs 40h week)")}
+            aria-label={t("Minimum availability heat")}
           >
-            <option value="">Any availability heat</option>
-            <option value="25">Heat 25+</option>
-            <option value="40">Heat 40+</option>
-            <option value="50">Heat 50+</option>
-            <option value="60">Heat 60+</option>
-            <option value="75">Heat 75+</option>
+            <option value="">{t("Any availability heat")}</option>
+            <option value="25">{t("Heat 25+")}</option>
+            <option value="40">{t("Heat 40+")}</option>
+            <option value="50">{t("Heat 50+")}</option>
+            <option value="60">{t("Heat 60+")}</option>
+            <option value="75">{t("Heat 75+")}</option>
           </select>
           <button type="button" className="btn-primary" onClick={() => load()}>
-            Search
+            
+            {t("Search")}
           </button>
         </div>
         <div
           className="flex flex-wrap items-center gap-2"
           role="group"
-          aria-label="Site type filter"
+          aria-label={t("Site type filter")}
         >
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500" id="site-type-label">
-            Site
+            
+            {t("Site")}
           </span>
           <button
             type="button"
@@ -325,7 +330,8 @@ export function FindProsPage() {
               load(next);
             }}
           >
-            Any
+            
+            {t("Any")}
           </button>
           {SITE_TYPES.map((s) => (
             <button
@@ -337,7 +343,7 @@ export function FindProsPage() {
                   ? "bg-brand-700 text-white ring-brand-700"
                   : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50"
               )}
-              title={s.hint}
+              title={t(s.hint)}
               aria-pressed={facets.siteType === s.value}
               onClick={() => {
                 const next = { ...facets, siteType: s.value };
@@ -345,19 +351,20 @@ export function FindProsPage() {
                 load(next);
               }}
             >
-              {s.label}
+              {t(s.label)}
             </button>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <button type="button" className="btn-secondary btn-sm" onClick={saveSearch}>
-            <Bookmark className="h-3.5 w-3.5" /> Save search
+            <Bookmark className="h-3.5 w-3.5" /> {" "}{t("Save search")}
           </button>
           {savedLabel && (
             <>
-              <span className="text-slate-500">Saved: {savedLabel}</span>
+              <span className="text-slate-500">{t("Saved:")}{" "}{savedLabel}</span>
               <button type="button" className="btn-ghost btn-sm" onClick={clearSaved}>
-                Clear
+                
+                {t("Clear")}
               </button>
             </>
           )}
@@ -367,15 +374,17 @@ export function FindProsPage() {
         <Spinner />
       ) : pros.length === 0 ? (
         <EmptyState
-          title="No pros found"
-          description="Playbook: ease heat/SLA filters → try a lead-group hub specialty → save searches → invite from shortlist once you find a match."
+          title={t("No pros found")}
+          description={t("Playbook: ease heat/SLA filters → try a lead-group hub specialty → save searches → invite from shortlist once you find a match.")}
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Link to="/categories/home-repair-and-maintenance" className="btn-secondary no-underline">
-                Open a category hub
+                
+                {t("Open a category hub")}
               </Link>
               <Link to="/client/jobs/new" className="btn-ghost no-underline">
-                Post a job instead
+                
+                {t("Post a job instead")}
               </Link>
             </div>
           }
@@ -404,7 +413,8 @@ export function FindProsPage() {
                         {p.responseSla && <ResponseSlaBadge sla={p.responseSla} compact />}
                         {p.availableThisWeek && (
                           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 ring-1 ring-emerald-200">
-                            Available this week
+                            
+                            {t("Available this week")}
                           </span>
                         )}
                       </div>
@@ -413,7 +423,7 @@ export function FindProsPage() {
                       type="button"
                       className="btn-ghost btn-sm"
                       onClick={() => save(p.userId)}
-                      aria-label="Save pro"
+                      aria-label={t("Save pro")}
                     >
                       <Heart className="h-4 w-4" />
                     </button>
@@ -422,33 +432,35 @@ export function FindProsPage() {
                   <p className="mt-2 text-xs text-slate-500">
                     {p.city || "—"}
                     {p.serviceAreas ? ` · ${String(p.serviceAreas).split(",")[0].trim()}` : ""}
-                    {p.hourlyRateMin != null && ` · ${money(p.hourlyRateMin)}–${money(p.hourlyRateMax)}/hr`}
-                    {p.yearsExperience != null && ` · ${p.yearsExperience} yrs`}
+                    {p.hourlyRateMin != null && tf(" · {hourlyRateMin}–{hourlyRateMax}/hr", { hourlyRateMin: money(p.hourlyRateMin), hourlyRateMax: money(p.hourlyRateMax) })}
+                    {p.yearsExperience != null && tf(" · {yearsExperience} yrs", { yearsExperience: p.yearsExperience })}
                     {p.distanceKm != null && (
                       <span className="ml-1 inline-flex items-center gap-0.5 text-slate-600">
-                        · <MapPin className="inline h-3 w-3" /> ~{p.distanceKm} km
+                        · <MapPin className="inline h-3 w-3" /> ~{p.distanceKm} {" "}{t("km")}
                       </span>
                     )}
                   </p>
                   {!p.availabilityHeat?.clean && (
                     <p className="mt-3 text-[11px] text-slate-500">
-                      Weekly schedule not published — availability unknown.
+                      
+                      {t("Weekly schedule not published — availability unknown.")}
                     </p>
                   )}
                   {p.availabilityHeat?.clean && (
                     <div className="mt-3">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                          Next 7 days
+                          
+                          {t("Next 7 days")}
                         </p>
                         <p className="text-[10px] text-slate-500">
-                          {p.availabilityHeat.totalHours}h · heat {p.availabilityHeat.score}
+                          {p.availabilityHeat.totalHours}{t("h · heat")}{" "}{p.availabilityHeat.score}
                         </p>
                       </div>
                       <div
                         className="mt-1 flex gap-0.5"
-                        title="Availability heat (darker = more free hours)"
-                        aria-label="Availability heat for next 7 days"
+                        title={t("Availability heat (darker = more free hours)")}
+                        aria-label={t("Availability heat for next 7 days")}
                       >
                         {p.availabilityHeat.days.map((d) => (
                           <div
@@ -459,11 +471,11 @@ export function FindProsPage() {
                             )}`}
                             title={
                               d.blocked
-                                ? `${d.date} blocked`
+                                ? tf("{date} blocked", { date: d.date })
                                 : `${d.date}: ${d.hours}h`
                             }
                           >
-                            <span>{d.label}</span>
+                            <span>{t(d.label)}</span>
                           </div>
                         ))}
                       </div>
@@ -471,7 +483,7 @@ export function FindProsPage() {
                   )}
                   {p.bestInviteHint && (
                     <p className="mt-2 rounded-lg bg-sky-50 px-2 py-1.5 text-[11px] text-sky-900 ring-1 ring-sky-100">
-                      {p.bestInviteHint.reason}
+                      {bestInviteText(p.bestInviteHint)}
                     </p>
                   )}
                 </div>

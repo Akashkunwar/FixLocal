@@ -7,6 +7,7 @@ import markerIconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
 import markerShadowUrl from "leaflet/dist/images/marker-shadow.png";
 
 
+import { t } from "../lib/i18n";
 // OpenStreetMap's public tiles are fine for development only; set VITE_MAP_TILE_URL
 // to a provider with a production usage policy before launch.
 const TILE_URL = import.meta.env.VITE_MAP_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -121,10 +122,11 @@ export function MapPinPicker({ lat: rawLat, lng: rawLng, onChange, height = 260,
         className="overflow-hidden rounded-xl ring-1 ring-slate-200"
         style={{ height }}
         role="application"
-        aria-label="Map pin picker — click or drag to set job location"
+        aria-label={t("Map pin picker — click or drag to set job location")}
       />
       <p className="mt-1.5 text-xs text-slate-500">
-        Click the map or drag the pin to set coordinates
+        
+        {t("Click the map or drag the pin to set coordinates")}
         {lat != null && lng != null && (
           <span className="ml-1 font-mono text-slate-600">
             ({lat.toFixed(5)}, {lng.toFixed(5)})

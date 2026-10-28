@@ -30,8 +30,9 @@ import {
   type NamedJobTemplate,
 } from "../../lib/namedJobTemplates";
 import { useAuth } from "../../auth/AuthContext";
-import { t } from "../../lib/i18n";
+import { t, tf } from "../../lib/i18n";
 
+import { errorText } from "../../lib/apiErrors";
 const DRAFT_KEY = JOB_DRAFT_KEY;
 const STEPS = ["Basics", "Budget & location", "Photos & review"] as const;
 
@@ -244,7 +245,7 @@ export function CreateJobPage() {
       siteType: d.siteType || draft.siteType || "residential",
       maxBids: d.maxBids || draft.maxBids || "5",
     });
-    success(`Applied library template “${tpl.name}”`);
+    success(tf("Applied library template “{name}”", { name: tpl.name }));
   }
 
   function canNext() {
@@ -301,10 +302,10 @@ export function CreateJobPage() {
       localStorage.removeItem(DRAFT_KEY);
       clearRepeatBanner();
       setRepeatBanner(null);
-      success("Job posted!");
+      success(t("Job posted!"));
       navigate(clientPath(`jobs/${r.job.id}`));
     } catch (err) {
-      error((err as Error).message || "Could not create job");
+      error(errorText(err, "Could not create job"));
     } finally {
       setBusy(false);
     }
@@ -317,7 +318,7 @@ export function CreateJobPage() {
     localStorage.removeItem(DRAFT_KEY);
     clearRepeatBanner();
     setRepeatBanner(null);
-    success("Draft cleared");
+    success(t("Draft cleared"));
   }
 
   function dismissRepeatBanner() {
@@ -348,7 +349,7 @@ export function CreateJobPage() {
                   : "bg-slate-100 text-slate-600"
             )}
           >
-            {i + 1}. {label}
+            {i + 1}. {t(label)}
           </li>
         ))}
       </ol>
@@ -765,7 +766,7 @@ export function CreateJobPage() {
                     setFiles(await compressImageFiles(picked));
                   } catch (err) {
                     input.value = "";
-                    error((err as Error).message);
+                    error(errorText(err));
                   }
                 }}
               />

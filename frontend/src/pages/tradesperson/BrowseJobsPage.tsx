@@ -183,7 +183,7 @@ export function BrowseJobsPage() {
         .join(" · ") || "My job search";
     localStorage.setItem(SAVED_KEY, JSON.stringify({ ...facets, label }));
     setSavedLabel(label);
-    success("Search saved on this device");
+    success(t("Search saved on this device"));
   }
 
   return (

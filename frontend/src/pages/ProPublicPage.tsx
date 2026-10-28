@@ -33,8 +33,9 @@ import {
   DAY_LABELS,
   normalizeWeeklyAvailability,
 } from "../lib/availability";
-import { t } from "../lib/i18n";
+import { t, tf, plural } from "../lib/i18n";
 
+import { errorText } from "../lib/apiErrors";
 function proDescription(p: TradespersonProfile) {
   const name = p.name || "Professional";
   const rating = p.reviewCount ? ` Rated ${Number(p.averageRating).toFixed(1)}/5 from ${p.reviewCount} reviews.` : "";
@@ -108,7 +109,7 @@ export function ProPublicPage() {
       setShowInvite(false);
       setInviteMessage("");
     } catch (e) {
-      error((e as Error).message || "Invite failed");
+      error(errorText(e, "Invite failed"));
     } finally {
       setInviteBusy(false);
     }
@@ -157,8 +158,8 @@ export function ProPublicPage() {
               className="btn-secondary btn-sm"
               onClick={() =>
                 addFavorite("pro", profile.userId)
-                  .then(() => success("Saved"))
-                  .catch((e) => error(e.message))
+                  .then(() => success(t("Saved")))
+                  .catch((e) => error(errorText(e)))
               }
             >
               <Heart className="h-4 w-4" /> {t("Save")}
@@ -166,7 +167,7 @@ export function ProPublicPage() {
           )}
           <ShareButtons
             url={`${window.location.origin}/pros/${profile.userId}`}
-            title={`${profile.name || "A professional"} on FixLocal`}
+            title={tf("{professional} on FixLocal", { professional: profile.name || "A professional" })}
             text={`${profile.name || "This professional"}${profile.city ? ` (${profile.city})` : ""} is on FixLocal. See their reviews and work:`}
           />
           {user?.role === "HOMEOWNER" && <BlockButton userId={profile.userId} name={profile.name} />}
@@ -249,9 +250,9 @@ export function ProPublicPage() {
                   {profile.responseSla && <ResponseSlaBadge sla={profile.responseSla} />}
                 </div>
                 <p className="mt-1 text-sm text-slate-500">
-                  {profile.yearsExperience != null && `${profile.yearsExperience} years · `}
+                  {profile.yearsExperience != null && `${plural(profile.yearsExperience, "{n} year", "{n} years")} · `}
                   {profile.hourlyRateMin != null &&
-                    `${money(profile.hourlyRateMin)}–${money(profile.hourlyRateMax)}/hr`}
+                    tf("{hourlyRateMin}–{hourlyRateMax}/hr", { hourlyRateMin: money(profile.hourlyRateMin), hourlyRateMax: money(profile.hourlyRateMax) })}
                 </p>
               </div>
             </div>
@@ -393,7 +394,7 @@ export function ProPublicPage() {
                             <a href={mediaUrl(cs.beforeUrl)} target="_blank" rel="noreferrer">
                               <img
                                 src={mediaUrl(cs.beforeUrl)}
-                                alt={`${cs.title} before`}
+                                alt={tf("{title} — before", { title: cs.title })}
                                 className="h-full w-full object-cover hover:opacity-95"
                               />
                             </a>
@@ -411,7 +412,7 @@ export function ProPublicPage() {
                             <a href={mediaUrl(cs.afterUrl)} target="_blank" rel="noreferrer">
                               <img
                                 src={mediaUrl(cs.afterUrl)}
-                                alt={`${cs.title} after`}
+                                alt={tf("{title} — after", { title: cs.title })}
                                 className="h-full w-full object-cover hover:opacity-95"
                               />
                             </a>
@@ -444,7 +445,7 @@ export function ProPublicPage() {
                 {profile.galleryUrls!.map((url) => (
                   <li key={url} className="aspect-4/3 overflow-hidden rounded-xl bg-slate-100">
                     <a href={mediaUrl(url)} target="_blank" rel="noreferrer">
-                      <img src={mediaUrl(url)} alt="Past work" className="h-full w-full object-cover hover:opacity-95" />
+                      <img src={mediaUrl(url)} alt={t("Past work")} className="h-full w-full object-cover hover:opacity-95" />
                     </a>
                   </li>
                 ))}

@@ -17,9 +17,11 @@ import { DEFAULT_COUNTER_STARTERS, mergeCounterTemplates } from "../lib/counterT
 import { DEFAULT_HOMEOWNER_COUNTER_NOTES, mergeHomeownerCounterNotes } from "../lib/homeownerCounterNotes";
 import { DEFAULT_INTRO_STARTERS, mergeIntroTemplates } from "../lib/introTemplates";
 import { deleteNamedJobTemplate, mergeNamedJobTemplates } from "../lib/namedJobTemplates";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
 import { useServerField } from "../lib/useServerField";
 
+import { useConfirm } from "../components/ConfirmDialog";
+import { errorText } from "../lib/apiErrors";
 function supportedZones(): string[] {
   try {
     return Intl.supportedValuesOf("timeZone");
@@ -35,11 +37,11 @@ function timeZones(current?: string) {
   return [...set].sort();
 }
 
-const message = (e: unknown, fallback: string) => (e instanceof Error && e.message) || fallback;
 
 export function SettingsPage() {
   const { user, updateProfile, setSessionUser, clearSession } = useAuth();
   const { success, error } = useToast();
+  const { confirm } = useConfirm();
   const navigate = useNavigate();
 
   // Each card keeps its own unsaved edits when another card saves and `user` changes.
@@ -71,9 +73,9 @@ export function SettingsPage() {
     setBusy(true);
     try {
       await updateProfile({ name: name.trim() || null, phone: phone.trim() || null, timezone });
-      success("Profile updated");
+      success(t("Profile updated"));
     } catch (err) {
-      error(message(err, "Update failed"));
+      error(errorText(err, "Update failed"));
     } finally {
       setBusy(false);
     }
@@ -83,9 +85,9 @@ export function SettingsPage() {
     setPrefsBusy(true);
     try {
       await updateProfile({ notificationPrefs: prefs });
-      success("Notification preferences saved");
+      success(t("Notification preferences saved"));
     } catch (err) {
-      error(message(err, "Couldn't save preferences"));
+      error(errorText(err, "Couldn't save preferences"));
     } finally {
       setPrefsBusy(false);
     }
@@ -94,15 +96,15 @@ export function SettingsPage() {
   async function saveNudge() {
     const n = Number(nudgeHours);
     if (!Number.isFinite(n) || n < 1 || n > 168) {
-      error("Enter 1–168 hours");
+      error(t("Enter 1–168 hours"));
       return;
     }
     setNudgeBusy(true);
     try {
       await updateProfile({ quoteViewNudgeHours: Math.round(n) });
-      success(`Nudge set to ${Math.round(n)}h`);
+      success(tf("Nudge set to {n}h", { n: Math.round(n) }));
     } catch (err) {
-      error(message(err, "Could not save nudge hours"));
+      error(errorText(err, "Could not save nudge hours"));
     } finally {
       setNudgeBusy(false);
     }
@@ -116,20 +118,25 @@ export function SettingsPage() {
       setSessionUser(session.user, session.token);
       setCurrentPassword("");
       setNewPassword("");
-      success("Password changed. Other devices have been signed out.");
+      success(t("Password changed. Other devices have been signed out."));
     } catch (err) {
-      error(message(err, "Couldn't change password"));
+      error(errorText(err, "Couldn't change password"));
     } finally {
       setPwBusy(false);
     }
   }
 
   async function onLogoutEverywhere() {
-    if (!window.confirm("Sign out on every device, including this one?")) return;
+    const ok = await confirm({
+      title: t("Sign out everywhere?"),
+      message: t("Sign out on every device, including this one?"),
+      confirmLabel: t("Sign out everywhere"),
+    });
+    if (!ok) return;
     try {
       await logoutEverywhere();
     } catch (err) {
-      error(message(err, "Couldn't sign out everywhere"));
+      error(errorText(err, "Couldn't sign out everywhere"));
       return;
     }
     clearSession();
@@ -138,14 +145,20 @@ export function SettingsPage() {
 
   async function onDeleteAccount(e: FormEvent) {
     e.preventDefault();
-    if (!window.confirm("Delete your account permanently? Your profile and personal details will be removed.")) return;
+    const ok = await confirm({
+      title: t("Delete your account?"),
+      message: t("Delete your account permanently? Your profile and personal details will be removed."),
+      confirmLabel: t("Delete account"),
+      danger: true,
+    });
+    if (!ok) return;
     setDeleteBusy(true);
     try {
       await deleteAccount(deletePassword);
       clearSession();
       navigate("/", { replace: true });
     } catch (err) {
-      error(message(err, "Couldn't delete account"));
+      error(errorText(err, "Couldn't delete account"));
       setDeleteBusy(false);
     }
   }
@@ -293,9 +306,9 @@ export function SettingsPage() {
                         setNamedBusy(true);
                         try {
                           await updateProfile({ namedJobTemplates: deleteNamedJobTemplate(namedJobs, tpl.id) });
-                          success("Template removed");
+                          success(t("Template removed"));
                         } catch (err) {
-                          error(message(err, "Couldn't remove template"));
+                          error(errorText(err, "Couldn't remove template"));
                         } finally {
                           setNamedBusy(false);
                         }

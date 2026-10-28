@@ -19,6 +19,7 @@ import clsx from "clsx";
 import { mergeIntroTemplates } from "../lib/introTemplates";
 import { t } from "../lib/i18n";
 
+import { errorText } from "../lib/apiErrors";
 function isImageUrl(url: string) {
   return /\.(png|jpe?g|webp)$/i.test(url.split("?")[0] || "");
 }
@@ -155,7 +156,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
       const compressed = images.length ? await compressImageFiles(images) : [];
       setFiles((prev) => [...prev, ...compressed, ...other].slice(0, 4));
     } catch (e) {
-      error((e as Error).message || "Could not read that image");
+      error(errorText(e, "Could not read that image"));
     }
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -179,7 +180,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
       setQuoteFile(null);
       setShowQuote(false);
     } catch (err) {
-      error((err as Error).message || "Could not send");
+      error(errorText(err, "Could not send"));
     } finally {
       setSending(false);
     }
@@ -280,7 +281,7 @@ export function JobChat({ jobId, proId, title = "Messages" }: Props) {
                         <a key={url} href={mediaUrl(url)} target="_blank" rel="noreferrer" className="block">
                           <img
                             src={mediaUrl(url)}
-                            alt="Attachment"
+                            alt={t("Attachment")}
                             className="h-24 w-24 rounded-lg object-cover border border-white/20"
                           />
                         </a>

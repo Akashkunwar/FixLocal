@@ -53,12 +53,17 @@ import {
 } from "../../../lib/homeownerCounterNotes";
 import { type BestValueExplainRow } from "../../../components/BestValueExplainPanel";
 
+import { t, tf, plural } from "../../../lib/i18n";
+import { errorText } from "../../../lib/apiErrors";
+import { useConfirm } from "../../../components/ConfirmDialog";
+import { money } from "../../../lib/format";
 /** All state, data loading and actions for the client job page. */
 export function useJobDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, updateProfile } = useAuth();
   const { success, error } = useToast();
+  const { confirm } = useConfirm();
   const [job, setJob] = useState<Job | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
   const [loading, setLoading] = useState(true);
@@ -274,7 +279,7 @@ export function useJobDetail() {
       }
     } catch (e) {
       if (isAbort(e) || !current()) return;
-      const msg = (e as Error).message || "Failed to load job";
+      const msg = errorText(e, "Failed to load job");
       setLoadError(msg);
       error(msg);
     } finally {
@@ -467,17 +472,15 @@ export function useJobDetail() {
         );
         setInvitingProId(null);
         setInviteMessage("");
-        error(e.message || "Already invited");
+        error(errorText(e, "Already invited"));
         await refreshInvites();
       } else if (e?.code === "INVITE_COOLDOWN") {
-        error(e.message || "Invite cooldown");
+        error(errorText(e, "Invite cooldown"));
         await refreshInvites();
       } else if (e?.code === "SHORTLIST_HEAT_TOO_LOW") {
-        error(
-          e.message || "Pro availability heat too low for shortlist invite",
-        );
+        error(errorText(e, "Pro availability heat too low for shortlist invite"));
       } else {
-        error(e.message || "Invite failed");
+        error(errorText(e, "Invite failed"));
       }
     } finally {
       setInviteBusy(false);
@@ -492,7 +495,7 @@ export function useJobDetail() {
         tradespersonIds: selectedInviteIds,
         message: bulkMessage.trim() || undefined,
       });
-      success(r.message || `Sent ${r.sent} invite(s)`);
+      success(r.message || plural(r.sent, "Sent {n} invite", "Sent {n} invites"));
       const okIds = r.results.filter((x) => x.ok).map((x) => x.tradespersonId);
       setInvitedIds((prev) => [...new Set([...prev, ...okIds])]);
       setSelectedInviteIds([]);
@@ -501,10 +504,10 @@ export function useJobDetail() {
       setBulkMessage("");
       await refreshInvites();
       if (r.stoppedForRateLimit) {
-        error("Invite limit reached mid-batch — remaining pros were skipped");
+        error(t("Invite limit reached mid-batch — remaining pros were skipped"));
       }
     } catch (e) {
-      error((e as Error).message || "Bulk invite failed");
+      error(errorText(e, "Bulk invite failed"));
     } finally {
       setInviteBusy(false);
     }
@@ -519,7 +522,7 @@ export function useJobDetail() {
     const blocked = shortlistSelected.length - eligible.length;
     if (!eligible.length) {
       error(
-        `All selected pros are below heat ≥${shortlistMinHeat} (clean schedules only)`,
+        tf("All selected pros are below heat ≥{shortlistMinHeat} (clean schedules only)", { shortlistMinHeat: shortlistMinHeat }),
       );
       return;
     }
@@ -545,9 +548,9 @@ export function useJobDetail() {
         minHeat: shortlistMinHeat,
       });
       if (blocked > 0) {
-        error(`Skipped ${blocked} pro(s) below heat ≥${shortlistMinHeat}`);
+        error(plural(blocked, "Skipped {n} pro below heat ≥{min}", "Skipped {n} pros below heat ≥{min}", { min: shortlistMinHeat }));
       }
-      success(r.message || `Sent ${r.sent} shortlist invite(s)`);
+      success(r.message || plural(r.sent, "Sent {n} shortlist invite", "Sent {n} shortlist invites"));
       const okIds = r.results.filter((x) => x.ok).map((x) => x.tradespersonId);
       setInvitedIds((prev) => [...new Set([...prev, ...okIds])]);
       setShortlistSelected([]);
@@ -555,10 +558,10 @@ export function useJobDetail() {
       setShortlistBulkMsg("");
       await refreshInvites();
       if (r.stoppedForRateLimit) {
-        error("Invite limit reached mid-batch — remaining pros were skipped");
+        error(t("Invite limit reached mid-batch — remaining pros were skipped"));
       }
     } catch (e) {
-      error((e as Error).message || "Shortlist bulk invite failed");
+      error(errorText(e, "Shortlist bulk invite failed"));
     } finally {
       setInviteBusy(false);
     }
@@ -777,7 +780,7 @@ export function useJobDetail() {
   async function onCounterOffer(bidId: string) {
     const amt = Number(counterAmount);
     if (!Number.isFinite(amt) || amt <= 0) {
-      error("Enter a valid suggested amount");
+      error(t("Enter a valid suggested amount"));
       return;
     }
     setCounterBusy(true);
@@ -786,13 +789,13 @@ export function useJobDetail() {
         suggestedAmount: amt,
         notes: counterNotes.trim() || undefined,
       });
-      success("Counter-offer / revise request sent to the pro");
+      success(t("Counter-offer / revise request sent to the pro"));
       setCounterBidId(null);
       setCounterAmount("");
       setCounterNotes("");
       await load();
     } catch (e) {
-      error((e as Error).message || "Could not send counter-offer");
+      error(errorText(e, "Could not send counter-offer"));
     } finally {
       setCounterBusy(false);
     }
@@ -818,33 +821,30 @@ export function useJobDetail() {
     try {
       const w = await escrowWhatIf(bidId, escrowPreview);
       const lines = (w.milestones || [])
-        .map(
-          (m) =>
-            `  ${m.sequence}. ${m.label} (${m.percent}%) · ₹${Number(m.amount).toFixed(0)}`,
-        )
+        .map((m) => `  ${m.sequence}. ${t(m.label)} (${m.percent}%) · ${money(m.amount)}`)
         .join("\n");
       whatIfNote =
-        `\n\nEscrow what-if (simulated milestone split):\n` +
-        (lines || "  (no milestones)") +
-        `\nTotal hold ₹${Number(w.amount).toFixed(0)}`;
+        `\n\n${t("Escrow what-if (simulated milestone split):")}\n` +
+        (lines || `  ${t("(no milestones)")}`) +
+        `\n${tf("Total hold {amount}", { amount: money(w.amount) })}`;
     } catch {
       /* soft — confirm still works without what-if */
     }
 
     let msg = hasQuote
-      ? `Accept this bid and hold ₹${escrowPreview.toFixed(0)} in simulated escrow from the structured quote? (Payments are simulated — no real charge.)`
-      : `Accept this bid and hold ₹${escrowPreview.toFixed(0)} in simulated escrow from the bid amount? (Payments are simulated — no real charge.)`;
+      ? tf("Hold {amount} in simulated escrow from the structured quote. Payments are simulated — no real charge.", { amount: money(escrowPreview) })
+      : tf("Hold {amount} in simulated escrow from the bid amount. Payments are simulated — no real charge.", { amount: money(escrowPreview) });
     if (differs) {
       const delta = Math.round(escrowPreview - counterSuggested!);
-      const sign = delta > 0 ? "+" : "";
+      const sign = delta > 0 ? "+" : "−";
       msg =
-        `Soft escrow hold preview:\n` +
-        `• Counter suggested ₹${counterSuggested!.toFixed(0)}\n` +
-        `• Final ${hasQuote ? "quote" : "bid"} ₹${escrowPreview.toFixed(0)} (${sign}₹${Math.abs(delta)})\n` +
-        `Simulated escrow will hold ₹${escrowPreview.toFixed(0)}. Continue? (No real charge.)`;
+        `${t("Soft escrow hold preview:")}\n` +
+        `• ${tf("Counter suggested {amount}", { amount: money(counterSuggested!) })}\n` +
+        `• ${hasQuote ? tf("Final quote {amount}", { amount: money(escrowPreview) }) : tf("Final bid {amount}", { amount: money(escrowPreview) })} (${sign}${money(Math.abs(delta))})\n` +
+        tf("Simulated escrow will hold {amount}. No real charge.", { amount: money(escrowPreview) });
     }
     msg += whatIfNote;
-    const ok = confirm(msg);
+    const ok = await confirm({ title: t("Accept this bid?"), message: msg, confirmLabel: t("Accept bid") });
     if (!ok) return;
     try {
       const r = await acceptBid(bid);
@@ -863,36 +863,38 @@ export function useJobDetail() {
       if (e instanceof ApiError && e.code === "QUOTE_CHANGED") {
         const now = Number(e.details?.currentAmount);
         error(
-          `The professional changed their quote${Number.isFinite(now) ? ` to ₹${now.toFixed(0)}` : ""}. Review the new amount and accept again.`,
+          Number.isFinite(now) ? tf("The professional changed their quote to {amount}. Review the new amount and accept again.", { amount: money(now) }) : t("The professional changed their quote. Review the new amount and accept again."),
         );
         setHighlightBidId(bidId);
         load();
         return;
       }
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
   async function onComplete() {
     const pending = job?.status === "pending_confirmation";
-    const ok = confirm(
-      pending
-        ? "Confirm the work is complete? Any payment still held will be released to the professional."
-        : "Mark this job complete now? Any payment still held will be released to the professional, even though they haven't marked the work done.",
-    );
+    const ok = await confirm({
+      title: pending ? t("Confirm the work is complete?") : t("Mark this job complete now?"),
+      message: pending
+        ? t("Any payment still held will be released to the professional.")
+        : t("Any payment still held will be released to the professional, even though they haven't marked the work done."),
+      confirmLabel: pending ? t("Confirm completion") : t("Mark complete"),
+    });
     if (!ok) return;
     try {
       const r = await confirmJobComplete(id!);
       if (r.autoReleased && r.autoReleased.count > 0) {
         success(
-          `Job completed — ${r.autoReleased.count} remaining payment milestone(s) released`,
+          plural(r.autoReleased.count, "Job completed — {n} remaining payment milestone released", "Job completed — {n} remaining payment milestones released"),
         );
       } else {
-        success("Job marked completed");
+        success(t("Job marked completed"));
       }
       load();
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
@@ -902,29 +904,31 @@ export function useJobDetail() {
       setJob(r.job);
       success(
         consent
-          ? "The professional may publish photos from this job"
-          : "Photo publishing turned off",
+          ? t("The professional may publish photos from this job")
+          : t("Photo publishing turned off"),
       );
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
   async function onCancel() {
-    if (
-      !confirm(
-        bids.some((b) => b.status === "active")
-          ? "Cancel this job? Open bids will be closed and the pros told. This can't be undone."
-          : "Cancel this job? This can't be undone.",
-      )
-    )
-      return;
+    const ok = await confirm({
+      title: t("Cancel this job?"),
+      message: bids.some((b) => b.status === "active")
+        ? t("Open bids will be closed and the pros told. This can't be undone.")
+        : t("This can't be undone."),
+      confirmLabel: t("Cancel job"),
+      cancelLabel: t("Keep job"),
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await cancelJob(id!);
-      success("Job cancelled");
+      success(t("Job cancelled"));
       load();
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 

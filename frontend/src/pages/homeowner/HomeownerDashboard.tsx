@@ -20,12 +20,16 @@ import {
   upsertNamedJobTemplate,
 } from "../../lib/namedJobTemplates";
 import { useToast } from "../../components/Toast";
-import { t } from "../../lib/i18n";
+import { t, tf } from "../../lib/i18n";
 
+import { errorText } from "../../lib/apiErrors";
+import { statusLabel } from "../../lib/status";
+import { useConfirm } from "../../components/ConfirmDialog";
 export function HomeownerDashboard() {
   const { user, updateProfile } = useAuth();
   const navigate = useNavigate();
   const { success, error: toastError } = useToast();
+  const { prompt } = useConfirm();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteStats, setInviteStats] = useState<InviteAnalytics | null>(null);
@@ -53,7 +57,7 @@ export function HomeownerDashboard() {
       });
       setJobs(r.jobs);
     } catch (e) {
-      setError((e as Error).message || "Failed to load jobs");
+      setError(errorText(e, "Failed to load jobs"));
     } finally {
       setLoading(false);
     }
@@ -210,7 +214,7 @@ export function HomeownerDashboard() {
         <select className="input w-auto" aria-label={t("Filter by status")} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">{t("All statuses")}</option>
           {["open", "awarded", "in_progress", "pending_confirmation", "completed", "cancelled", "disputed"].map((s) => (
-            <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+            <option key={s} value={s}>{statusLabel(s)}</option>
           ))}
         </select>
         <select className="input w-auto" aria-label={t("Filter by category")} value={category} onChange={(e) => setCategory(e.target.value)}>
@@ -284,7 +288,7 @@ export function HomeownerDashboard() {
                     className="btn-ghost btn-sm"
                     onClick={() => {
                       saveRepeatDraft(job);
-                      success("Prefilling post-job wizard from this job");
+                      success(t("Prefilling post-job wizard from this job"));
                       navigate(clientPath("jobs/new"));
                     }}
                   >
@@ -295,11 +299,17 @@ export function HomeownerDashboard() {
                     className="btn-ghost btn-sm"
                     onClick={async () => {
                       const suggested =
-                        (job.title || "Job").replace(/\s*\(repeat\)\s*$/i, "").trim() ||
+                        (job.title || t("Job")).replace(/\s*\(repeat\)\s*$/i, "").trim() ||
                         "My job template";
-                      const name =
-                        window.prompt("Name this job template", suggested)?.trim() ||
-                        suggested;
+                      const answer = await prompt({
+                        title: t("Save as a job template"),
+                        label: t("Name this job template"),
+                        defaultValue: suggested,
+                        confirmLabel: t("Save template"),
+                        maxLength: 80,
+                      });
+                      if (answer === null) return;
+                      const name = answer.trim() || suggested;
                       const entry = namedTemplateFromJob(job, name);
                       try {
                         await updateProfile({
@@ -308,7 +318,7 @@ export function HomeownerDashboard() {
                             entry
                           ),
                         });
-                        success(`Saved “${entry.name}” to your job templates`);
+                        success(tf("Saved “{name}” to your job templates", { name: entry.name }));
                       } catch (e) {
                         toastError((e as Error).message || "Couldn't save the template");
                       }

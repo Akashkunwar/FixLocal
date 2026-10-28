@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Spinner } from "../../components/ui/Spinner";
 import { money } from "../../lib/format";
 
+import { t } from "../../lib/i18n";
 const PRIMARY: { key: keyof AdminStats; label: string }[] = [
   { key: "totalUsers", label: "Total users" },
   { key: "homeowners", label: "Clients" },
@@ -42,7 +43,7 @@ export function AdminStatsPage() {
   }, []);
 
   return (
-    <Shell title="Admin overview" subtitle="Marketplace health at a glance">
+    <Shell title={t("Admin overview")} subtitle={t("Marketplace health at a glance")}>
       {loadError && !stats ? (
         <p className="card p-6 text-sm text-slate-700" role="alert">
           {loadError}
@@ -63,7 +64,7 @@ export function AdminStatsPage() {
           </div>
 
           <section>
-            <h2 className="font-semibold text-lg mb-3">Jobs by status</h2>
+            <h2 className="font-semibold text-lg mb-3">{t("Jobs by status")}</h2>
             <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {JOBS.map(({ key, label }) => (
                 <div key={key} className="card p-4 text-center">
@@ -78,30 +79,32 @@ export function AdminStatsPage() {
             <section className="card p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="font-semibold text-lg">Match quality (lite)</h2>
+                  <h2 className="font-semibold text-lg">{t("Match quality (lite)")}</h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Open jobs vs nearby verified pros (≤{match.radiusKm} km / same city)
+                    
+                    {t("Open jobs vs nearby verified pros (≤")}{match.radiusKm} {" "}{t("km / same city)")}
                   </p>
                 </div>
                 <Link to="/admin/match" className="btn-secondary btn-sm no-underline">
-                  Full table
+                  
+                  {t("Full table")}
                 </Link>
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-4">
                 <div>
-                  <p className="text-xs text-slate-500">No nearby</p>
+                  <p className="text-xs text-slate-500">{t("No nearby")}</p>
                   <p className="text-xl font-semibold text-rose-700">{match.jobsWithNoNearby}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Thin</p>
+                  <p className="text-xs text-slate-500">{t("Thin")}</p>
                   <p className="text-xl font-semibold">{match.jobsThin}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">OK</p>
+                  <p className="text-xs text-slate-500">{t("OK")}</p>
                   <p className="text-xl font-semibold">{match.jobsOk}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Strong</p>
+                  <p className="text-xs text-slate-500">{t("Strong")}</p>
                   <p className="text-xl font-semibold">{match.jobsStrong}</p>
                 </div>
               </div>
@@ -110,19 +113,19 @@ export function AdminStatsPage() {
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="card p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Active bids</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{t("Active bids")}</p>
               <p className="mt-2 font-display text-3xl font-semibold">{stats.activeBids ?? 0}</p>
             </div>
             <div className="card p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Reviews</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{t("Reviews")}</p>
               <p className="mt-2 font-display text-3xl font-semibold">{stats.totalReviews ?? 0}</p>
             </div>
             <div className="card p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Simulated GMV</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{t("Simulated GMV")}</p>
               <p className="mt-2 font-display text-3xl font-semibold text-brand-800">
                 {money(stats.simulatedGMV ?? 0)}
               </p>
-              <p className="mt-1 text-xs text-slate-500">Sum of accepted bids on completed jobs</p>
+              <p className="mt-1 text-xs text-slate-500">{t("Sum of accepted bids on completed jobs")}</p>
             </div>
           </div>
         </div>

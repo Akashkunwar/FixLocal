@@ -10,6 +10,9 @@ import { mediaUrl } from "../../api/jobs";
 import { Spinner } from "../../components/ui/Spinner";
 import { useToast } from "../../components/Toast";
 
+import { t, tf } from "../../lib/i18n";
+import { errorText } from "../../lib/apiErrors";
+import { statusLabel } from "../../lib/status";
 export function AdminTradespeoplePage() {
   const { success, error } = useToast();
   const [list, setList] = useState<AdminTradesperson[]>([]);
@@ -22,7 +25,7 @@ export function AdminTradespeoplePage() {
       const r = await listTradespeople(st || undefined);
       setList(r.tradespeople);
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     } finally {
       setLoading(false);
     }
@@ -36,24 +39,24 @@ export function AdminTradespeoplePage() {
   async function setVerify(userId: string, next: "verified" | "rejected" | "suspended" | "pending") {
     try {
       await verifyTradesperson(userId, next);
-      success(`Marked ${next}`);
+      success(tf("Marked {status}", { status: statusLabel(next) }));
       load();
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
   return (
-    <Shell title="Verify professionals" subtitle="Approve, reject, or suspend pro accounts">
+    <Shell title={t("Verify professionals")} subtitle={t("Approve, reject, or suspend pro accounts")}>
       <div className="mb-4 flex gap-2">
-        <select className="input w-auto" aria-label="Filter by verification status" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All</option>
-          <option value="pending">Pending</option>
-          <option value="verified">Verified</option>
-          <option value="rejected">Rejected</option>
-          <option value="suspended">Suspended</option>
+        <select className="input w-auto" aria-label={t("Filter by verification status")} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">{t("All")}</option>
+          <option value="pending">{t("Pending")}</option>
+          <option value="verified">{t("Verified")}</option>
+          <option value="rejected">{t("Rejected")}</option>
+          <option value="suspended">{t("Suspended")}</option>
         </select>
-        <button type="button" className="btn-secondary" onClick={() => load()}>Filter</button>
+        <button type="button" className="btn-secondary" onClick={() => load()}>{t("Filter")}</button>
       </div>
       {loading ? (
         <Spinner />
@@ -66,32 +69,33 @@ export function AdminTradespeoplePage() {
                 <p className="text-sm text-slate-500">
                   {p.email}
                   {p.phone ? ` · ${p.phone}` : ""}
-                  {p.emailVerified === false ? " · email not verified" : ""}
+                  {p.emailVerified === false ? t(" · email not verified") : ""}
                 </p>
                 <p className="text-sm text-slate-500">
-                  {p.skills || "No skills listed"}
-                  {p.yearsExperience != null ? ` · ${p.yearsExperience} yrs` : ""}
+                  {p.skills || t("No skills listed")}
+                  {p.yearsExperience != null ? tf(" · {yearsExperience} yrs", { yearsExperience: p.yearsExperience }) : ""}
                 </p>
                 <p className="text-sm text-slate-500">{p.serviceAreas}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Badge status={p.verificationStatus} />
                   {p.licenseDocUrl ? (
                     <a className="text-sm text-brand-700 underline" href={mediaUrl(p.licenseDocUrl)} target="_blank" rel="noreferrer">
-                      View licence / ID document
+                      
+                      {t("View licence / ID document")}
                     </a>
                   ) : (
-                    <span className="text-xs text-amber-700">No licence or ID uploaded yet</span>
+                    <span className="text-xs text-amber-700">{t("No licence or ID uploaded yet")}</span>
                   )}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className="btn-primary btn-sm" onClick={() => setVerify(p.userId, "verified")}>Verify</button>
-                <button type="button" className="btn-secondary btn-sm" onClick={() => setVerify(p.userId, "rejected")}>Reject</button>
-                <button type="button" className="btn-danger btn-sm" onClick={() => setVerify(p.userId, "suspended")}>Suspend</button>
+                <button type="button" className="btn-primary btn-sm" onClick={() => setVerify(p.userId, "verified")}>{t("Verify")}</button>
+                <button type="button" className="btn-secondary btn-sm" onClick={() => setVerify(p.userId, "rejected")}>{t("Reject")}</button>
+                <button type="button" className="btn-danger btn-sm" onClick={() => setVerify(p.userId, "suspended")}>{t("Suspend")}</button>
               </div>
             </li>
           ))}
-          {list.length === 0 && <p className="text-sm text-slate-500">No professionals in this filter.</p>}
+          {list.length === 0 && <p className="text-sm text-slate-500">{t("No professionals in this filter.")}</p>}
         </ul>
       )}
     </Shell>

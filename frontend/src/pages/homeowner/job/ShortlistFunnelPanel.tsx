@@ -1,5 +1,5 @@
 import type { ShortlistInviteAnalytics } from "../../../api/jobs";
-import { t } from "../../../lib/i18n";
+import { t, tf } from "../../../lib/i18n";
 
 /** Rank → invite → bid conversion for pros on the client's shortlist. */
 export function ShortlistFunnelPanel({
@@ -14,7 +14,7 @@ export function ShortlistFunnelPanel({
         <p className="text-xs text-slate-500">
           {t("Rank → invite → bid conversion for pros on your shortlist")}
           {funnel.avgRankBid != null
-            ? ` · avg rank of bidders #${funnel.avgRankBid}`
+            ? tf(" · avg rank of bidders #{avgRankBid}", { avgRankBid: funnel.avgRankBid })
             : ""}
         </p>
       </div>
@@ -29,7 +29,7 @@ export function ShortlistFunnelPanel({
             </p>
             <p className="text-xl font-bold text-slate-900">{s.count}</p>
             <p className="text-[11px] text-slate-500">
-              {s.stage === "ranked" ? "pool" : `${s.rate}%`}
+              {s.stage === "ranked" ? t("pool") : `${s.rate}%`}
             </p>
           </div>
         ))}

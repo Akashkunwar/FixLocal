@@ -7,7 +7,7 @@ import {
   type BidHighlight,
 } from "../../../lib/bidCompare";
 import { HighlightChips, ProAvatar } from "./BidCard";
-import { t } from "../../../lib/i18n";
+import { t, tf, plural } from "../../../lib/i18n";
 
 const dash = <span className="text-slate-300">—</span>;
 
@@ -155,11 +155,11 @@ export function BidGlance({
                 </td>
                 <td className="px-3 py-2.5 whitespace-nowrap">
                   {b.etaDays != null
-                    ? `${b.etaDays} day${b.etaDays === 1 ? "" : "s"}`
+                    ? plural(b.etaDays, "{n} day", "{n} days")
                     : dash}
                 </td>
                 <td className="px-3 py-2.5 whitespace-nowrap">
-                  {b.distanceKm != null ? `~${b.distanceKm} km` : dash}
+                  {b.distanceKm != null ? tf("~{distanceKm} km", { distanceKm: b.distanceKm }) : dash}
                 </td>
                 <td className="px-3 py-2.5 text-right">
                   <a

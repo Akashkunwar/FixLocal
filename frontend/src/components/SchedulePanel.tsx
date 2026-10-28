@@ -12,6 +12,7 @@ import {
 } from "../lib/availability";
 import { t } from "../lib/i18n";
 
+import { errorText } from "../lib/apiErrors";
 function toLocalInput(iso?: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -80,11 +81,11 @@ export function SchedulePanel({
         end: end ? new Date(end).toISOString() : undefined,
         note: note || undefined,
       });
-      success("Visit window proposed");
+      success(t("Visit window proposed"));
       setShowForm(false);
       onChanged?.();
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -94,10 +95,10 @@ export function SchedulePanel({
     setBusy(true);
     try {
       await acceptSchedule(job.id);
-      success("Visit time confirmed");
+      success(t("Visit time confirmed"));
       onChanged?.();
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -168,9 +169,9 @@ export function SchedulePanel({
             onClick={() => {
               try {
                 downloadVisitIcs(job);
-                success("Calendar file downloaded (.ics, Asia/Kolkata)");
+                success(t("Calendar file downloaded (.ics, Asia/Kolkata)"));
               } catch (err) {
-                error((err as Error).message || "Could not export calendar");
+                error(errorText(err, "Could not export calendar"));
               }
             }}
           >
@@ -208,7 +209,7 @@ export function SchedulePanel({
             className="btn-secondary btn-sm touch-target"
             onClick={() => setShowForm((v) => !v)}
           >
-            {status === "none" ? t("Propose time") : "Counter-propose"}
+            {status === "none" ? t("Propose time") : t("Counter-propose")}
           </button>
         </div>
       )}

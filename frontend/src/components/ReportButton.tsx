@@ -4,6 +4,7 @@ import { createReport } from "../api/client";
 import { useToast } from "./Toast";
 import { t } from "../lib/i18n";
 
+import { errorText } from "../lib/apiErrors";
 type Props = {
   targetType: "job" | "user" | "message";
   targetId?: string | null;
@@ -24,11 +25,11 @@ export function ReportButton({ targetType, targetId, label = "Report" }: Props) 
     setBusy(true);
     try {
       await createReport(targetType, targetId, reason.trim());
-      success("Report sent. An admin will review it.");
+      success(t("Report sent. An admin will review it."));
       setOpen(false);
       setReason("");
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     } finally {
       setBusy(false);
     }

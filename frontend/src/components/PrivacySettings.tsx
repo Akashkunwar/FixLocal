@@ -4,10 +4,10 @@ import { downloadMyData, listBlocks, unblockUser, type BlockedUser } from "../ap
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "./Toast";
 import { roleLabel } from "../lib/format";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
 
-const message = (e: unknown, fallback: string) => (e instanceof Error && e.message) || fallback;
 
+import { errorText } from "../lib/apiErrors";
 /** Email opt-out, data download and the blocked-users list (Settings). */
 export function PrivacySettings() {
   const { user, updateProfile } = useAuth();
@@ -38,7 +38,7 @@ export function PrivacySettings() {
       await updateProfile({ emailNotifications: !emailOn });
       success(emailOn ? "Email updates turned off" : "Email updates turned on");
     } catch (err) {
-      error(message(err, "Couldn't save"));
+      error(errorText(err, "Couldn't save"));
     } finally {
       setEmailBusy(false);
     }
@@ -48,9 +48,9 @@ export function PrivacySettings() {
     setExportBusy(true);
     try {
       await downloadMyData();
-      success("Your data download has started");
+      success(t("Your data download has started"));
     } catch (err) {
-      error(message(err, "Couldn't prepare your data"));
+      error(errorText(err, "Couldn't prepare your data"));
     } finally {
       setExportBusy(false);
     }
@@ -60,9 +60,9 @@ export function PrivacySettings() {
     try {
       await unblockUser(b.userId);
       setBlocks((list) => (list ?? []).filter((x) => x.userId !== b.userId));
-      success(`${b.name} unblocked`);
+      success(tf("{name} unblocked", { name: b.name }));
     } catch (err) {
-      error(message(err, "Couldn't unblock"));
+      error(errorText(err, "Couldn't unblock"));
     }
   }
 

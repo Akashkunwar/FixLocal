@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { Dialog } from "./ui/Dialog";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
 
 export type MatchBreakdown = {
   skills: number;
@@ -25,15 +25,15 @@ function partsFor(max: typeof DEFAULT_MAX) {
       max: max.skills,
       hint: (b: MatchBreakdown) =>
         b.skillHits?.length
-          ? `Hits: ${b.skillHits.join(", ")}`
-          : "No strong skill overlap with this category",
+          ? tf("Matches: {skills}", { skills: b.skillHits.join(", ") })
+          : t("No strong skill overlap with this category"),
     },
     {
       key: "rating" as const,
       code: "rt",
       label: "Rating",
       max: max.rating,
-      hint: () => "From average rating + review confidence",
+      hint: () => t("From average rating + review confidence"),
     },
     {
       key: "response" as const,
@@ -42,8 +42,8 @@ function partsFor(max: typeof DEFAULT_MAX) {
       max: max.response,
       hint: (b: MatchBreakdown) =>
         b.avgResponseHours != null
-          ? `~${b.avgResponseHours}h avg job→bid`
-          : "Unknown history → mid score",
+          ? tf("~{hours}h average from job post to bid", { hours: b.avgResponseHours })
+          : t("No history yet → middle score"),
     },
     {
       key: "distance" as const,
@@ -52,8 +52,8 @@ function partsFor(max: typeof DEFAULT_MAX) {
       max: max.distance,
       hint: (b: MatchBreakdown) =>
         b.distanceKm != null
-          ? `~${b.distanceKm} km away`
-          : "City / service-area soft match (no coords)",
+          ? tf("~{distanceKm} km away", { distanceKm: b.distanceKm })
+          : t("City / service-area soft match (no coords)"),
     },
   ];
 }

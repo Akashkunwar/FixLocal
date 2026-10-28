@@ -1,5 +1,6 @@
 import { Suspense, lazy, type ComponentProps } from "react";
 
+import { t } from "../lib/i18n";
 // Leaflet (~150 kB) is only needed once someone places a pin, so it lives in its own chunk.
 const load = () => import("./MapPinPicker");
 const MapPinPicker = lazy(() => load().then((m) => ({ default: m.MapPinPicker })));
@@ -22,7 +23,8 @@ export function LazyMapPinPicker(props: Props) {
             style={{ height }}
             role="status"
           >
-            Loading map…
+            
+            {t("Loading map…")}
           </div>
         </div>
       }

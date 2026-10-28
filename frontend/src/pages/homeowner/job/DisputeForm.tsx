@@ -1,8 +1,9 @@
 import { FormEvent, useState } from "react";
 import { createDispute } from "../../../api/jobs";
 import { useToast } from "../../../components/Toast";
-import { t } from "../../../lib/i18n";
+import { t, plural } from "../../../lib/i18n";
 
+import { errorText } from "../../../lib/apiErrors";
 /** Open a dispute with a reason and up to five evidence files. */
 export function DisputeForm({
   jobId,
@@ -23,10 +24,10 @@ export function DisputeForm({
     setBusy(true);
     try {
       await createDispute(jobId, { reason, files });
-      success("Dispute opened with evidence");
+      success(t("Dispute opened with evidence"));
       onOpened();
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -65,7 +66,7 @@ export function DisputeForm({
         />
         {files.length > 0 && (
           <p className="mt-1 text-xs text-slate-600">
-            {files.length} {t("file(s) attached")}
+            {plural(files.length, "{n} file attached", "{n} files attached")}
           </p>
         )}
       </div>

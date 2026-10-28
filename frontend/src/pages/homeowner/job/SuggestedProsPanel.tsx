@@ -7,8 +7,10 @@ import { InviteHistoryList } from "./InviteHistoryList";
 import { Send, Users, Info, BarChart3 } from "lucide-react";
 import { upsertTextTemplate } from "../../../lib/textTemplates";
 import type { JobDetailState } from "./useJobDetail";
-import { t } from "../../../lib/i18n";
+import { t, tf, plural } from "../../../lib/i18n";
 
+import { errorText } from "../../../lib/apiErrors";
+import { fmtTime } from "../../../lib/format";
 export function SuggestedProsPanel({
   s,
   job,
@@ -113,7 +115,7 @@ export function SuggestedProsPanel({
                               checked={selected}
                               disabled={disabledInvite}
                               onChange={() => toggleSelectPro(p.userId)}
-                              aria-label={`Select ${p.name || "pro"}`}
+                              aria-label={tf("Select {pro}", { pro: p.name || "pro" })}
                             />
                           )}
                           <div className="min-w-0">
@@ -172,7 +174,7 @@ export function SuggestedProsPanel({
                             {(p.heatBoost != null && p.heatBoost > 0) ||
                             p.availabilityHeat?.clean ? (
                               <p className="text-[10px] text-emerald-700">
-                                {p.heatBoost ? `+${p.heatBoost} heat` : "heat"}
+                                {p.heatBoost ? tf("+{heatBoost} heat", { heatBoost: p.heatBoost }) : t("heat")}
                                 {p.availabilityHeat?.clean
                                   ? ` · ${p.availabilityHeat.score}`
                                   : ""}
@@ -193,7 +195,7 @@ export function SuggestedProsPanel({
                                 already
                                   ? t("Already invited")
                                   : inCool
-                                    ? `Cooldown until ${new Date(cool!.cooldownUntil!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                                    ? tf("Cooldown until {time}", { time: fmtTime(cool!.cooldownUntil!) })
                                     : t("Invite to bid")
                               }
                             >
@@ -214,10 +216,9 @@ export function SuggestedProsPanel({
                 {bulkMode && (
                   <div className="rounded-xl bg-brand-50 p-3 ring-1 ring-brand-100 space-y-3">
                     <p className="text-sm font-medium text-brand-950">
-                      {selectedInviteIds.length} {t("pro")}
-                      {selectedInviteIds.length === 1 ? "" : "s"} {t("selected")}
+                      {plural(selectedInviteIds.length, "{n} pro selected", "{n} pros selected")}
                       {inviteQuota
-                        ? ` · ${inviteQuota.remaining} invites left on this job`
+                        ? tf(" · {remaining} invites left on this job", { remaining: inviteQuota.remaining })
                         : ""}
                     </p>
                     {!bulkConfirmOpen ? (
@@ -267,7 +268,7 @@ export function SuggestedProsPanel({
                           >
                             {inviteBusy
                               ? t("Sending…")
-                              : `Send ${selectedInviteIds.length} invite${selectedInviteIds.length === 1 ? "" : "s"}`}
+                              : plural(selectedInviteIds.length, "Send {n} invite", "Send {n} invites")}
                           </button>
                           <button
                             type="button"
@@ -288,7 +289,7 @@ export function SuggestedProsPanel({
                     <p className="text-sm font-medium text-brand-950">
                       {t("Invite")}{" "}
                       {suggestedPros.find((x) => x.userId === invitingProId)
-                        ?.name || "pro"}{" "}
+                        ?.name || t("pro")}{" "}
                       {t("to bid?")}
                     </p>
                     <div>
@@ -340,11 +341,10 @@ export function SuggestedProsPanel({
                                 ),
                               });
                               setTplLabel("");
-                              success("Invite template saved");
+                              success(t("Invite template saved"));
                             } catch (e) {
                               error(
-                                (e as Error).message ||
-                                  "Couldn't save template",
+                                errorText(e, "Couldn't save template"),
                               );
                             }
                           }}

@@ -140,7 +140,7 @@ export function Dialog({
               {title}
             </h2>
             {description && (
-              <div id={descId} className="mt-1 text-sm text-slate-600">
+              <div id={descId} className="mt-1 whitespace-pre-line text-sm text-slate-600">
                 {description}
               </div>
             )}

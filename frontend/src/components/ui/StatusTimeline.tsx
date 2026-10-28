@@ -1,6 +1,6 @@
 import clsx from "clsx";
-import { JOB_TIMELINE, timelineIndex } from "../../lib/status";
-import { t } from "../../lib/i18n";
+import { JOB_TIMELINE, statusLabel, timelineIndex } from "../../lib/status";
+import { t, tf } from "../../lib/i18n";
 
 const labels: Record<string, string> = {
   open: "Posted",
@@ -15,7 +15,7 @@ export function StatusTimeline({ status }: { status: string }) {
   if (status === "cancelled" || status === "disputed") {
     return (
       <div className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-800 ring-1 ring-rose-200">
-        {t("Job is")}{" "}<strong>{status}</strong>
+        {t("Job is")}{" "}<strong>{statusLabel(status)}</strong>
       </div>
     );
   }
@@ -37,7 +37,7 @@ export function StatusTimeline({ status }: { status: string }) {
           ))}
         </div>
         <p className="mt-2 text-sm text-slate-500">
-          {t("Step")}{" "}{Math.max(0, idx) + 1} {t("of")}{" "}{JOB_TIMELINE.length} ·{" "}
+          {tf("Step {n} of {total}", { n: Math.max(0, idx) + 1, total: JOB_TIMELINE.length })} ·{" "}
           <strong className="text-slate-900">{t(labels[current])}</strong>
           {idx + 1 < JOB_TIMELINE.length && (
             <span className="text-slate-500">

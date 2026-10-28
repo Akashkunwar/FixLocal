@@ -16,6 +16,7 @@ import { useAuth } from "../auth/AuthContext";
 import { listJobs } from "../api/jobs";
 import { t } from "../lib/i18n";
 
+import { errorText } from "../lib/apiErrors";
 export function FavoritesPage() {
   const { user } = useAuth();
   const { success, error } = useToast();
@@ -34,7 +35,7 @@ export function FavoritesPage() {
       const r = await listFavorites();
       setItems(r.favorites);
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     } finally {
       setLoading(false);
     }
@@ -64,10 +65,10 @@ export function FavoritesPage() {
   async function remove(type: "job" | "pro", id: string) {
     try {
       await removeFavorite(type, id);
-      success("Removed");
+      success(t("Removed"));
       load();
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
@@ -87,11 +88,11 @@ export function FavoritesPage() {
         notes: noteDraft,
         tags,
       });
-      success("Shortlist updated");
+      success(t("Shortlist updated"));
       setEditingId(null);
       load();
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
@@ -255,7 +256,7 @@ export function FavoritesPage() {
                           editingId === f.id ? setEditingId(null) : startEdit(f)
                         }
                       >
-                        {editingId === f.id ? t("Cancel") : "Note/tags"}
+                        {editingId === f.id ? t("Cancel") : t("Note/tags")}
                       </button>
                     )}
                     <button

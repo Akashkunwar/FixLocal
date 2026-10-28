@@ -13,6 +13,9 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { useToast } from "../../components/Toast";
 import { fmtDateTime } from "../../lib/format";
 
+import { t, tf } from "../../lib/i18n";
+import { errorText } from "../../lib/apiErrors";
+import { statusLabel } from "../../lib/status";
 const ACTIONS = [
   "",
   "user_suspend",
@@ -63,7 +66,7 @@ export function AdminAuditPage() {
       const r = await listAuditLogs({ action: a || undefined, limit: 80 });
       setLogs(r.logs);
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     } finally {
       setLoading(false);
     }
@@ -75,17 +78,18 @@ export function AdminAuditPage() {
   }, []);
 
   return (
-    <Shell title="Audit log" subtitle="Suspend, disputes, force-cancel, verification, match-weight + best-value blend changes (+ rollback), and notes">
+    <Shell title={t("Audit log")} subtitle={t("Suspend, disputes, force-cancel, verification, match-weight + best-value blend changes (+ rollback), and notes")}>
       <div className="mb-4 flex flex-wrap gap-2">
-        <select className="input w-auto" aria-label="Filter by action" value={action} onChange={(e) => setAction(e.target.value)}>
+        <select className="input w-auto" aria-label={t("Filter by action")} value={action} onChange={(e) => setAction(e.target.value)}>
           {ACTIONS.map((a) => (
             <option key={a || "all"} value={a}>
-              {a ? a.replace(/_/g, " ") : "All actions"}
+              {a ? statusLabel(a) : t("All actions")}
             </option>
           ))}
         </select>
         <button type="button" className="btn-secondary" onClick={() => load()}>
-          Filter
+          
+          {t("Filter")}
         </button>
       </div>
 
@@ -97,26 +101,26 @@ export function AdminAuditPage() {
           setNoteBusy(true);
           try {
             await createAdminNote({ note: note.trim() });
-            success("Audit note saved");
+            success(t("Audit note saved"));
             setNote("");
             await load(action);
           } catch (err) {
-            error((err as Error).message || "Failed to save note");
+            error(errorText(err, "Failed to save note"));
           } finally {
             setNoteBusy(false);
           }
         }}
       >
-        <label className="label" htmlFor="audit-note">Optional admin note</label>
+        <label className="label" htmlFor="audit-note">{t("Optional admin note")}</label>
         <textarea id="audit-note"
           className="input"
           rows={2}
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="e.g. Verified escrow source on job X, demo note for wave 10…"
+          placeholder={t("e.g. Verified escrow source on job X, demo note for wave 10…")}
         />
         <button type="submit" className="btn-secondary btn-sm" disabled={noteBusy || !note.trim()}>
-          {noteBusy ? "Saving…" : "Add note"}
+          {noteBusy ? t("Saving…") : t("Add note")}
         </button>
       </form>
 
@@ -124,8 +128,8 @@ export function AdminAuditPage() {
         <Spinner />
       ) : logs.length === 0 ? (
         <EmptyState
-          title="No audit entries yet"
-          description="Suspend a user, resolve a dispute, or force-cancel a job to populate this log."
+          title={t("No audit entries yet")}
+          description={t("Suspend a user, resolve a dispute, or force-cancel a job to populate this log.")}
         />
       ) : (
         <ul className="grid gap-3">
@@ -138,10 +142,11 @@ export function AdminAuditPage() {
                     <span className="text-xs text-slate-500">{fmtDateTime(log.createdAt)}</span>
                   </div>
                   <p className="mt-2 text-sm font-medium text-slate-900">
-                    {log.summary || log.action.replace(/_/g, " ")}
+                    {log.summary || statusLabel(log.action)}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    By {log.actorEmail || log.actorUserId}
+                    
+                    {t("By")}{" "}{log.actorEmail || log.actorUserId}
                     {log.targetType ? ` · ${log.targetType}` : ""}
                     {log.targetId ? ` ${log.targetId.slice(0, 8)}…` : ""}
                   </p>
@@ -149,27 +154,30 @@ export function AdminAuditPage() {
                     Boolean(log.meta?.before) &&
                     !auditMeta(log)?.rollback && (
                     <p className="mt-1 text-[11px] text-slate-500">
-                      before sk{auditMeta(log).before?.skills}/rt{auditMeta(log).before?.rating}/rs
-                      {auditMeta(log).before?.response}/ds{auditMeta(log).before?.distance}
+                      
+                      {t("before sk")}{auditMeta(log).before?.skills}{t("/rt")}{auditMeta(log).before?.rating}{t("/rs")}
+                      {auditMeta(log).before?.response}{t("/ds")}{auditMeta(log).before?.distance}
                       {auditMeta(log).beforeHeatWeight != null ||
                       auditMeta(log).before?.heatWeight != null
-                        ? ` · heat ${auditMeta(log).beforeHeatWeight ?? auditMeta(log).before?.heatWeight}`
+                        ? tf(" · heat {heatWeight}", { heatWeight: auditMeta(log).beforeHeatWeight ?? auditMeta(log).before?.heatWeight })
                         : ""}
-                      {auditMeta(log).preset ? ` · preset ${auditMeta(log).preset}` : ""}
+                      {auditMeta(log).preset ? tf(" · preset {preset}", { preset: auditMeta(log).preset }) : ""}
                     </p>
                   )}
                   {log.action === "best_value_blend_update" &&
                     Boolean(log.meta?.before) &&
                     !auditMeta(log)?.rollback && (
                     <p className="mt-1 text-[11px] text-slate-500">
-                      before mt{auditMeta(log).before?.matchPct}/px{auditMeta(log).before?.pricePct}
+                      
+                      {t("before mt")}{auditMeta(log).before?.matchPct}{t("/px")}{auditMeta(log).before?.pricePct}
                       {auditMeta(log).before?.slaHeatPct != null
-                        ? `/sh${auditMeta(log).before?.slaHeatPct}`
+                        ? tf("/sh{slaHeatPct}", { slaHeatPct: auditMeta(log).before?.slaHeatPct })
                         : ""}
                       {" → "}
-                      after mt{auditMeta(log).after?.matchPct}/px{auditMeta(log).after?.pricePct}
+                      
+                      {t("after mt")}{auditMeta(log).after?.matchPct}{t("/px")}{auditMeta(log).after?.pricePct}
                       {auditMeta(log).after?.slaHeatPct != null
-                        ? `/sh${auditMeta(log).after?.slaHeatPct}`
+                        ? tf("/sh{slaHeatPct}", { slaHeatPct: auditMeta(log).after?.slaHeatPct })
                         : ""}
                     </p>
                   )}
@@ -181,7 +189,7 @@ export function AdminAuditPage() {
                     type="button"
                     className="btn-secondary btn-sm"
                     disabled={rollbackId === log.id}
-                    title="Restore the clean before snapshot from this audit row"
+                    title={t("Restore the clean before snapshot from this audit row")}
                     onClick={async () => {
                       setRollbackId(log.id);
                       try {
@@ -189,13 +197,13 @@ export function AdminAuditPage() {
                         success(r.message || "Match weights rolled back");
                         await load(action);
                       } catch (e) {
-                        error((e as Error).message || "Rollback failed");
+                        error(errorText(e, "Rollback failed"));
                       } finally {
                         setRollbackId(null);
                       }
                     }}
                   >
-                    {rollbackId === log.id ? "Rolling back…" : "Rollback weights + heat"}
+                    {rollbackId === log.id ? t("Rolling back…") : t("Rollback weights + heat")}
                   </button>
                 )}
                 {log.action === "best_value_blend_update" &&
@@ -205,7 +213,7 @@ export function AdminAuditPage() {
                     type="button"
                     className="btn-secondary btn-sm"
                     disabled={rollbackId === log.id}
-                    title="Restore the clean before best-value blend from this audit row"
+                    title={t("Restore the clean before best-value blend from this audit row")}
                     onClick={async () => {
                       setRollbackId(log.id);
                       try {
@@ -213,13 +221,13 @@ export function AdminAuditPage() {
                         success(r.message || "Best-value blend rolled back");
                         await load(action);
                       } catch (e) {
-                        error((e as Error).message || "Blend rollback failed");
+                        error(errorText(e, "Blend rollback failed"));
                       } finally {
                         setRollbackId(null);
                       }
                     }}
                   >
-                    {rollbackId === log.id ? "Rolling back…" : "Rollback blend"}
+                    {rollbackId === log.id ? t("Rolling back…") : t("Rollback blend")}
                   </button>
                 )}
               </div>

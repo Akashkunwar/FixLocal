@@ -1,3 +1,4 @@
+import { plural, t, tf } from "./t";
 export type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export type TimeWindow = { start: string; end: string };
@@ -111,14 +112,14 @@ export function availabilityConflictHint(
 
   const dateKey = localDateKey(start);
   if (blockedDates?.includes(dateKey)) {
-    return `Pro has blocked ${dateKey} and is unavailable that day.`;
+    return tf("Pro has blocked {date} and is unavailable that day.", { date: dateKey });
   }
 
   if (!weekly) return null;
   const day = JS_DAY_TO_KEY[start.getDay()];
   const slot = weekly[day];
   if (!slot || !slot.enabled) {
-    return `Pro is typically unavailable on ${DAY_LABELS[day]}.`;
+    return tf("Pro is typically unavailable on {day}.", { day: t(DAY_LABELS[day]) });
   }
   const startMin = start.getHours() * 60 + start.getMinutes();
   const end = endIso ? new Date(endIso) : null;
@@ -135,18 +136,18 @@ export function availabilityConflictHint(
   });
   if (!fits) {
     const desc = windows.map((w) => `${w.start}–${w.end}`).join(", ");
-    return `Proposed time is outside the pro's usual ${DAY_LABELS[day]} window(s) (${desc}).`;
+    return plural(windows.length, "Proposed time is outside the pro's usual {day} window ({times}).", "Proposed time is outside the pro's usual {day} windows ({times}).", { day: t(DAY_LABELS[day]), times: desc });
   }
   return null;
 }
 
 export function formatAvailabilitySummary(weekly?: WeeklyAvailability | null): string {
-  if (!weekly) return "Not set";
+  if (!weekly) return t("Not set");
   const parts = DAY_KEYS.filter((d) => weekly[d]?.enabled).map((d) => {
     const windows = dayWindows(weekly[d]);
-    return `${DAY_LABELS[d]} ${windows.map((w) => `${w.start}–${w.end}`).join(" & ")}`;
+    return `${t(DAY_LABELS[d])} ${windows.map((w) => `${w.start}–${w.end}`).join(" & ")}`;
   });
-  return parts.length ? parts.join(" · ") : "No days marked available";
+  return parts.length ? parts.join(" · ") : t("No days marked available");
 }
 
 
@@ -270,15 +271,35 @@ export function buildBestInviteHint(
   const norm = normalizeWeeklyAvailability(weekly);
   const windows = dayWindows(norm[best.key]);
   const win = [...windows].sort((a, b) => a.start.localeCompare(b.start))[0];
-  const when = best.idx === 0 ? "today" : best.idx === 1 ? "tomorrow" : full[best.key];
-  return {
+  const hint = {
     dayKey: best.key,
     dayLabel: full[best.key] || best.key,
     date: best.date,
     start: win.start,
     end: win.end,
-    reason: `Best time to invite: ${when} ${win.start}–${win.end} (pro usually free then)`,
   };
+  return { ...hint, reason: bestInviteText(hint) };
+}
+
+const FULL_DAY: Record<string, string> = {
+  mon: "Monday",
+  tue: "Tuesday",
+  wed: "Wednesday",
+  thu: "Thursday",
+  fri: "Friday",
+  sat: "Saturday",
+  sun: "Sunday",
+};
+
+/**
+ * "Best time to invite: today 09:00–18:00 …" built from the hint's fields, so it is translated
+ * (the server's `reason` is English-only).
+ */
+export function bestInviteText(h: { dayKey: string; date: string; start: string; end: string }, now = new Date()): string {
+  const today = localDateKey(now);
+  const tomorrow = localDateKey(new Date(now.getTime() + 86_400_000));
+  const when = h.date === today ? t("today") : h.date === tomorrow ? t("tomorrow") : t(FULL_DAY[h.dayKey] || h.dayKey);
+  return tf("Best time to invite: {when} {start}–{end} (pro usually free then)", { when, start: h.start, end: h.end });
 }
 
 /** Tailwind-ish heat cell class by level. */

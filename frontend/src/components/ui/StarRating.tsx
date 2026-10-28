@@ -1,6 +1,7 @@
 import { Star } from "lucide-react";
 import clsx from "clsx";
 
+import { tf, plural } from "../../lib/i18n";
 export function StarRating({
   value,
   onChange,
@@ -13,7 +14,7 @@ export function StarRating({
   readonly?: boolean;
 }) {
   return (
-    <div className="inline-flex items-center gap-0.5" role={readonly ? "img" : "radiogroup"} aria-label={`${value} of 5 stars`}>
+    <div className="inline-flex items-center gap-0.5" role={readonly ? "img" : "radiogroup"} aria-label={tf("{v} of 5 stars", { v: value })}>
       {[1, 2, 3, 4, 5].map((n) => (
         <button
           key={n}
@@ -23,7 +24,7 @@ export function StarRating({
           onClick={() => onChange?.(n)}
           role={readonly ? undefined : "radio"}
           aria-checked={readonly ? undefined : n === value}
-          aria-label={`${n} star${n > 1 ? "s" : ""}`}
+          aria-label={plural(n, "{n} star", "{n} stars")}
         >
           <Star
             style={{ width: size, height: size }}

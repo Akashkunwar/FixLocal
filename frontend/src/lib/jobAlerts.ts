@@ -1,3 +1,4 @@
+import { t, tf } from "./t";
 import type { JobAlertCriteria } from "../api/features";
 import { categoryLabel, money } from "./format";
 
@@ -30,10 +31,10 @@ export function criteriaOf(d: AlertDraft, pin: { lat: number; lng: number } | nu
 /** One line describing an alert, e.g. "Plumbing, Electrical · within 5 km · ₹1,000+". */
 export function describeAlert(a: JobAlertCriteria) {
   const bits = [
-    a.categories.length ? a.categories.map(categoryLabel).join(", ") : "Any category",
-    a.radiusKm ? `within ${a.radiusKm} km of your base` : [a.area, a.city].filter(Boolean).join(", ") || "anywhere",
-    a.minBudget ? `${money(a.minBudget)}+ budget` : null,
-    a.siteType === "office" ? "offices" : a.siteType === "residential" ? "homes" : null,
+    a.categories.length ? a.categories.map(categoryLabel).join(", ") : t("Any category"),
+    a.radiusKm ? tf("within {km} km of your base", { km: a.radiusKm }) : [a.area, a.city].filter(Boolean).join(", ") || t("anywhere"),
+    a.minBudget ? tf("{amount}+ budget", { amount: money(a.minBudget) }) : null,
+    a.siteType === "office" ? t("offices") : a.siteType === "residential" ? t("homes") : null,
   ];
   return bits.filter(Boolean).join(" · ");
 }

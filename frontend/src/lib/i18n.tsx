@@ -28,7 +28,7 @@ import {
  * Where the choice lives: on the account when logged in (synced across devices), and in
  * localStorage on this device (used when logged out and as the start-up language).
  */
-export { t, translate, loadHindi, currentLang, type Lang } from "./t";
+export { t, tf, plural, interpolate, translate, loadHindi, currentLang, type Lang } from "./t";
 export const LANG_KEY = "fixlocal:lang";
 export const HTML_LANG: Record<Lang, string> = { en: "en-IN", hi: "hi" };
 

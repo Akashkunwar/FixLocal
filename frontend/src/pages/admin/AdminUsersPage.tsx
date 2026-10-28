@@ -8,8 +8,12 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { useToast } from "../../components/Toast";
 import { fmtDate } from "../../lib/format";
 
+import { t, tf } from "../../lib/i18n";
+import { errorText } from "../../lib/apiErrors";
+import { useConfirm } from "../../components/ConfirmDialog";
 export function AdminUsersPage() {
   const { success, error } = useToast();
+  const { confirm } = useConfirm();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState("");
@@ -29,7 +33,7 @@ export function AdminUsersPage() {
       });
       setUsers(r.users);
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     } finally {
       setLoading(false);
     }
@@ -43,31 +47,36 @@ export function AdminUsersPage() {
   async function toggleSuspend(u: AdminUser) {
     const next = !u.isSuspended;
     const label = next ? "Suspend" : "Unsuspend";
-    if (!confirm(`${label} ${u.email}?`)) return;
+    const ok = await confirm({
+      title: next ? tf("Suspend {email}?", { email: u.email }) : tf("Unsuspend {email}?", { email: u.email }),
+      confirmLabel: t(label),
+      danger: next,
+    });
+    if (!ok) return;
     try {
       await setUserSuspended(u.id, next);
-      success(`${u.email} ${next ? "suspended" : "unsuspended"}`);
+      success(next ? tf("{email} suspended", { email: u.email }) : tf("{email} unsuspended", { email: u.email }));
       load();
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
   return (
-    <Shell title="Users" subtitle="Search, filter, and suspend clients or professionals">
+    <Shell title={t("Users")} subtitle={t("Search, filter, and suspend clients or professionals")}>
       <div className="mb-4 flex flex-wrap gap-2">
         <input
           className="input min-w-[200px] flex-1"
-          placeholder="Search name, email, phone…"
+          placeholder={t("Search name, email, phone…")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
         />
-        <select className="input w-auto" aria-label="Filter by role" value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="">All roles</option>
-          <option value="HOMEOWNER">Clients</option>
-          <option value="TRADESPERSON">Professionals</option>
-          <option value="ADMIN">Admins</option>
+        <select className="input w-auto" aria-label={t("Filter by role")} value={role} onChange={(e) => setRole(e.target.value)}>
+          <option value="">{t("All roles")}</option>
+          <option value="HOMEOWNER">{t("Clients")}</option>
+          <option value="TRADESPERSON">{t("Professionals")}</option>
+          <option value="ADMIN">{t("Admins")}</option>
         </select>
         <label className="inline-flex items-center gap-2 text-sm text-slate-600 px-2">
           <input
@@ -75,15 +84,16 @@ export function AdminUsersPage() {
             checked={suspendedOnly}
             onChange={(e) => setSuspendedOnly(e.target.checked)}
           />
-          Suspended only
+          
+          {t("Suspended only")}
         </label>
-        <button type="button" className="btn-secondary" onClick={load}>Filter</button>
+        <button type="button" className="btn-secondary" onClick={load}>{t("Filter")}</button>
       </div>
 
       {loading ? (
         <Spinner />
       ) : users.length === 0 ? (
-        <EmptyState title="No users found" description="Try a different search or filter." />
+        <EmptyState title={t("No users found")} description={t("Try a different search or filter.")} />
       ) : (
         <ul className="grid gap-3">
           {users.map((u) => (
@@ -95,7 +105,7 @@ export function AdminUsersPage() {
                   <Badge status={u.role.toLowerCase()} />
                   {u.verificationStatus && <Badge status={u.verificationStatus} />}
                   {u.isSuspended && <Badge status="suspended" />}
-                  <span className="text-xs text-slate-500">Joined {fmtDate(u.createdAt)}</span>
+                  <span className="text-xs text-slate-500">{t("Joined")}{" "}{fmtDate(u.createdAt)}</span>
                 </div>
               </div>
               {u.role !== "ADMIN" && (
@@ -104,7 +114,7 @@ export function AdminUsersPage() {
                   className={u.isSuspended ? "btn-primary btn-sm" : "btn-danger btn-sm"}
                   onClick={() => toggleSuspend(u)}
                 >
-                  {u.isSuspended ? "Unsuspend" : "Suspend"}
+                  {u.isSuspended ? t("Unsuspend") : t("Suspend")}
                 </button>
               )}
             </li>

@@ -1,5 +1,5 @@
 import { Dialog } from "./ui/Dialog";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
 
 export type BestValueExplainRow = {
   bidId: string;
@@ -74,7 +74,7 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
               {row.matchPct}{t("% × matchNorm (")}{row.matchNorm.toFixed(2)}) + {row.pricePct}{t("% × priceNorm (")}
               {row.priceNorm.toFixed(2)})
               {slaHeatPct > 0 && row.slaHeatNorm != null
-                ? ` + ${slaHeatPct}% × slaHeatNorm (${row.slaHeatNorm.toFixed(2)})`
+                ? tf(" + {slaHeatPct}% × slaHeatNorm ({slaHeatNorm})", { slaHeatPct, slaHeatNorm: row.slaHeatNorm.toFixed(2) })
                 : ""}{" "}
               → {row.valueScore}
             </p>

@@ -13,11 +13,12 @@ import {
   type Notification,
 } from "../api/extras";
 import { NOTIFICATION_GROUPS, NOTIFICATIONS_CHANGED, dayLabel, notificationHref } from "../lib/notifications";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
 import { useRequestGuard } from "../lib/useQuery";
 import { errorText } from "../lib/apiErrors";
 import { isAbort } from "../api/client";
 
+import { fmtTime } from "../lib/format";
 const PAGE = 20;
 
 export function NotificationsPage() {
@@ -94,7 +95,7 @@ export function NotificationsPage() {
       setUnreadCount(0);
       window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
@@ -102,7 +103,7 @@ export function NotificationsPage() {
   return (
     <Shell
       title={t("Notifications")}
-      subtitle={unreadCount ? `${unreadCount} unread` : t("You're all caught up")}
+      subtitle={unreadCount ? tf("{unreadCount} unread", { unreadCount }) : t("You're all caught up")}
       actions={
         <button type="button" className="btn-secondary btn-sm" onClick={markAll} disabled={!unreadCount}>
           <CheckCheck className="h-4 w-4" aria-hidden /> {t("Mark all read")}
@@ -169,7 +170,7 @@ export function NotificationsPage() {
                       </span>
                       <span className="mt-0.5 block text-sm text-slate-600">{n.body}</span>
                       <span className="mt-1 block text-xs text-slate-500">
-                        {new Date(n.createdAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
+                        {fmtTime(n.createdAt)}
                       </span>
                     </span>
                   </Link>
@@ -180,7 +181,7 @@ export function NotificationsPage() {
           {items.length < total && (
             <div className="p-3 text-center">
               <button type="button" className="btn-secondary btn-sm" onClick={loadMore} disabled={more}>
-                {more ? t("Loading…") : `Show older (${total - items.length} more)`}
+                {more ? t("Loading…") : tf("Show older ({items} more)", { items: total - items.length })}
               </button>
             </div>
           )}

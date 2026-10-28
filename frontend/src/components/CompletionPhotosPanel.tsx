@@ -11,6 +11,7 @@ import { proPath } from "../lib/paths";
 import clsx from "clsx";
 import { t } from "../lib/i18n";
 
+import { errorText } from "../lib/apiErrors";
 export function CompletionPhotosPanel({
   job,
   canEdit,
@@ -85,18 +86,18 @@ export function CompletionPhotosPanel({
 
   async function onUpload() {
     if (!beforeFiles.length && !afterFiles.length) {
-      error("Choose at least one before or after photo");
+      error(t("Choose at least one before or after photo"));
       return;
     }
     setBusy(true);
     try {
       await uploadCompletionPhotos(job.id, { before: beforeFiles, after: afterFiles });
-      success("Completion photos uploaded");
+      success(t("Completion photos uploaded"));
       setBeforeFiles([]);
       setAfterFiles([]);
       onChanged();
     } catch (e) {
-      error((e as Error).message || "Upload failed");
+      error(errorText(e, "Upload failed"));
     } finally {
       setBusy(false);
     }
@@ -105,16 +106,16 @@ export function CompletionPhotosPanel({
   async function onRemove(url: string, kind: "before" | "after") {
     try {
       await removeCompletionPhoto(job.id, { url, kind });
-      success("Photo removed");
+      success(t("Photo removed"));
       onChanged();
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
   async function onPublish() {
     if (!hasPhotos) {
-      error("Add before/after photos first");
+      error(t("Add before/after photos first"));
       return;
     }
     setPublishBusy(true);
@@ -133,7 +134,7 @@ export function CompletionPhotosPanel({
         /* ignore */
       }
     } catch (e) {
-      error((e as Error).message || "Publish failed");
+      error(errorText(e, "Publish failed"));
     } finally {
       setPublishBusy(false);
     }

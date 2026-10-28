@@ -41,7 +41,7 @@ export function LandingPage() {
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-700 text-white">
             <Wrench className="h-4 w-4" />
           </span>
-          <span className="font-display text-xl font-semibold">FixLocal</span>
+          <span className="font-display text-xl font-semibold">{t("FixLocal")}</span>
         </div>
         <div className="flex items-center gap-2">
           <LanguageToggle />
@@ -97,8 +97,8 @@ export function LandingPage() {
             {/* Demo accounts are only advertised in demo builds (M-9), never on a real deployment. */}
             {import.meta.env.VITE_DEMO_MODE === "true" && (
               <div className="mt-6 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
-                <p className="text-xs text-slate-500">Demo logins · Password123!</p>
-                <p className="mt-1 text-sm font-medium text-slate-800">Client home@ · Professional pro@ · Admin admin@fixlocal.local</p>
+                <p className="text-xs text-slate-500">{t("Demo logins · Password123!")}</p>
+                <p className="mt-1 text-sm font-medium text-slate-800">{t("Client home@ · Professional pro@ · Admin admin@fixlocal.local")}</p>
               </div>
             )}
           </div>
@@ -145,7 +145,8 @@ export function LandingPage() {
         </div>
         <details className="mt-6 card p-4">
           <summary className="cursor-pointer text-sm font-semibold text-slate-800">
-            All postable categories ({CATEGORIES.length})
+            
+            {t("All postable categories (")}{CATEGORIES.length})
           </summary>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {categoryGroups().map(([group, cats]) => (
@@ -158,7 +159,7 @@ export function LandingPage() {
                         to={clientPath(`pros?category=${encodeURIComponent(c.value)}`)}
                         className="inline-flex items-center gap-1.5 text-slate-700 no-underline hover:text-brand-800 hover:underline"
                       >
-                        <CategoryIcon category={c.value} size="sm" /> {c.label}
+                        <CategoryIcon category={c.value} size="sm" /> {t(c.label)}
                       </Link>
                     </li>
                   ))}

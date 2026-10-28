@@ -13,7 +13,7 @@ import {
   suggestNextVisitIso,
   type JobCadence,
 } from "../lib/jobCadence";
-import { money } from "../lib/format";
+import { money, displayLocale, getDisplayTimeZone } from "../lib/format";
 import {
   formatCustomPackage,
   softRatePackages,
@@ -28,8 +28,9 @@ import {
 } from "../lib/ics";
 import { useToast } from "./Toast";
 import { Calendar, RefreshCw } from "lucide-react";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
 
+import { errorText } from "../lib/apiErrors";
 const PROPOSE_CADENCES = CADENCE_OPTIONS.filter((o) => o.value !== "one_time");
 
 export type AmcFillPackage = {
@@ -131,14 +132,14 @@ export function AmcProposalCard({
     if (p.hint) {
       setNote((prev) => (prev.trim() ? prev : p.hint || ""));
     }
-    success(`Filled from ${p.source === "custom" ? "portfolio" : "soft"} package`);
+    success(p.source === "custom" ? t("Filled from portfolio package") : t("Filled from soft package"));
   }
 
   async function onPropose(e: FormEvent) {
     e.preventDefault();
     const min = Number(amountMin);
     if (!packageLabel.trim() || !Number.isFinite(min) || min < 0) {
-      error("Add a package name and amount");
+      error(t("Add a package name and amount"));
       return;
     }
     setBusy(true);
@@ -151,10 +152,10 @@ export function AmcProposalCard({
         unit: unit.trim() || undefined,
         note: note.trim() || undefined,
       });
-      success("Recurring / AMC proposal sent to client");
+      success(t("Recurring / AMC proposal sent to client"));
       onChanged?.();
     } catch (err) {
-      error((err as Error).message || "Could not send proposal");
+      error(errorText(err, "Could not send proposal"));
     } finally {
       setBusy(false);
     }
@@ -164,7 +165,7 @@ export function AmcProposalCard({
     e.preventDefault();
     const min = Number(amountMin);
     if (!packageLabel.trim() || !Number.isFinite(min) || min < 0) {
-      error("Add a package name and amount");
+      error(t("Add a package name and amount"));
       return;
     }
     setBusy(true);
@@ -177,10 +178,10 @@ export function AmcProposalCard({
         unit: unit.trim() || undefined,
         note: note.trim() || undefined,
       });
-      success("AMC / recurring request sent to professional");
+      success(t("AMC / recurring request sent to professional"));
       onChanged?.();
     } catch (err) {
-      error((err as Error).message || "Could not send request");
+      error(errorText(err, "Could not send request"));
     } finally {
       setBusy(false);
     }
@@ -204,7 +205,7 @@ export function AmcProposalCard({
       setShowCounter(false);
       onChanged?.();
     } catch (err) {
-      error((err as Error).message || "Reply failed");
+      error(errorText(err, "Reply failed"));
     } finally {
       setBusy(false);
     }
@@ -237,7 +238,7 @@ export function AmcProposalCard({
       setShowCounter(false);
       onChanged?.();
     } catch (err) {
-      error((err as Error).message || "Reply failed");
+      error(errorText(err, "Reply failed"));
     } finally {
       setBusy(false);
     }
@@ -264,7 +265,8 @@ export function AmcProposalCard({
   }, [showAcceptedHint, hasProposal, repliedAt, proposedAt, proposalCadence]);
 
   const nextVisitLabel = nextVisitIso
-    ? new Date(nextVisitIso).toLocaleString(undefined, {
+    ? new Date(nextVisitIso).toLocaleString(displayLocale(), {
+        timeZone: getDisplayTimeZone(),
         weekday: "short",
         day: "numeric",
         month: "short",
@@ -438,11 +440,11 @@ export function AmcProposalCard({
           {proposal.replyNote && (
             <p className="mt-1 text-xs">
               <span className="font-semibold">
-                {status === "requested" ? "Note:" : "Reply:"}
+                {status === "requested" ? t("Note:") : t("Reply:")}
               </span>{" "}
               {proposal.replyNote}
               {proposal.replyCadence
-                ? ` · preferred ${cadenceLabel(proposal.replyCadence)}`
+                ? tf(" · preferred {replyCadence}", { replyCadence: cadenceLabel(proposal.replyCadence) })
                 : ""}
             </p>
           )}
