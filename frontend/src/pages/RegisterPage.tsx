@@ -1,14 +1,15 @@
-import { useI18n } from "../lib/i18n";
+import { tf, useI18n } from "../lib/i18n";
 import { FormEvent, useEffect, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { dashboardPath, resendConfirmation } from "../api/client";
 import { useToast } from "../components/Toast";
-import { Gift, Wrench } from "lucide-react";
+import { Gift } from "lucide-react";
 import { safeNext } from "../lib/paths";
 import clsx from "clsx";
 
 import { errorText } from "../lib/apiErrors";
+import { AuthTopBar } from "../components/AuthTopBar";
 const ROLE_CARDS = [
   {
     role: "HOMEOWNER" as const,
@@ -106,14 +107,11 @@ export function RegisterPage() {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
         <section className="card w-full max-w-lg p-8 space-y-4" aria-labelledby="check-inbox">
-          <div className="flex items-center gap-2 text-brand-800">
-            <Wrench className="h-5 w-5" aria-hidden />
-            <span className="font-display text-lg font-semibold">{t("FixLocal")}</span>
-          </div>
+          <AuthTopBar />
           <h1 id="check-inbox" className="font-display text-2xl font-semibold">{t("Check your inbox")}</h1>
           <p className="text-sm text-slate-600" role="status">
             
-            {t("We've sent a link to")}{" "}<strong>{sentTo}</strong>{t(". Open it to confirm your email, then log in. If you already have an account with this address, the email explains how to get back in.")}
+            {tf("We've sent a link to {email}. Open it to confirm your email, then log in. If you already have an account with this address, the email explains how to get back in.", { email: sentTo })}
           </p>
           <Link className="btn-primary w-full no-underline" to={loginTo}>
             
@@ -143,12 +141,9 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+    <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
       <form onSubmit={onSubmit} className="card w-full max-w-lg p-8 space-y-4">
-        <div className="flex items-center gap-2 text-brand-800">
-          <Wrench className="h-5 w-5" />
-          <span className="font-display text-lg font-semibold">{t("FixLocal")}</span>
-        </div>
+        <AuthTopBar />
         <div>
           <h1 className="font-display text-2xl font-semibold">{t("Create your account")}</h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -226,6 +221,6 @@ export function RegisterPage() {
           {t("Already have an account?")}{" "}<Link to="/login">{t("Log in")}</Link>
         </p>
       </form>
-    </div>
+    </main>
   );
 }

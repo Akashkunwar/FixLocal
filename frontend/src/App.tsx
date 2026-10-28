@@ -11,6 +11,7 @@ import { CLIENT_ROOT, LEGACY_CLIENT_ROOT, LEGACY_PRO_ROOT, PRO_ROOT } from "./li
 import { useI18n } from "./lib/i18n";
 import { Keyed } from "./components/Keyed";
 
+import { SkipLink } from "./components/SkipLink";
 function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) {
   return lazy(() => load().then((m) => ({ default: m[name] })));
 }
@@ -103,6 +104,7 @@ export default function App() {
   useI18n(); // re-render the route tree (not remount it) when the language changes
   return (
     <ErrorBoundary resetKey={location.pathname}>
+      <SkipLink />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<HomeRedirect />} />

@@ -3,11 +3,14 @@ import { Link } from "react-router-dom";
 import { Wrench } from "lucide-react";
 import { SiteFooter } from "../components/SiteFooter";
 import { SITE, setPageMeta } from "../lib/site";
-import { currentLang, t } from "../lib/i18n";
+import { currentLang, LanguageToggle, t } from "../lib/i18n";
+import { useAuth } from "../auth/AuthContext";
+import { dashboardPath } from "../api/client";
 
 function PublicPage({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   useEffect(() => setPageMeta(t(title), description), [title, description]);
   const hi = currentLang() === "hi";
+  const { user } = useAuth();
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
@@ -15,7 +18,14 @@ function PublicPage({ title, description, children }: { title: string; descripti
           <Link to="/" className="flex items-center gap-2 font-display text-lg font-semibold text-brand-800 no-underline">
             <Wrench className="h-5 w-5" aria-hidden /> {SITE.name}
           </Link>
-          <Link to="/login" className="text-sm text-slate-600">{t("Log in")}</Link>
+          <div className="flex items-center gap-3">
+            <LanguageToggle />
+            {user ? (
+              <Link to={dashboardPath(user.role)} className="text-sm text-slate-600">{t("Dashboard")}</Link>
+            ) : (
+              <Link to="/login" className="text-sm text-slate-600">{t("Log in")}</Link>
+            )}
+          </div>
         </div>
       </header>
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
@@ -185,7 +195,7 @@ export function PrivacyPage() {
 }
 
 export function NotFoundPage() {
-  useEffect(() => setPageMeta("Page not found"), []);
+  useEffect(() => setPageMeta(t("Page not found")), []);
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-6 text-center">

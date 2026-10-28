@@ -1,6 +1,6 @@
 import { CategoryIcon, LeadGroupIcon } from "../components/CategoryIcon";
 import { useEffect } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { setPageMeta } from "../lib/site";
 import { ArrowLeft, ArrowRight, Briefcase, Search, Wrench } from "lucide-react";
 import {
@@ -13,17 +13,18 @@ import {
 import { clientPath, proPath } from "../lib/paths";
 import { useAuth } from "../auth/AuthContext";
 
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
+import { NotFoundPage } from "./LegalPages";
 export function LeadGroupHubPage() {
   const { groupSlug } = useParams<{ groupSlug: string }>();
   const group = leadGroupFromSlug(groupSlug || "");
   const { user } = useAuth();
   useEffect(() => {
-    if (group) setPageMeta(`${group} near you`, `${group}: ${leadGroupBlurb(group)} Compare quotes from verified local professionals on FixLocal.`);
+    if (group) setPageMeta(tf("{group} near you", { group: t(group) }), `${group}: ${leadGroupBlurb(group)} Compare quotes from verified local professionals on FixLocal.`);
   }, [group]);
 
   if (!group) {
-    return <Navigate to="/" replace />;
+    return <NotFoundPage />;
   }
 
   const cats = categoriesForLeadGroup(group);

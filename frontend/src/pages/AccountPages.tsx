@@ -5,14 +5,18 @@ import { useAuth } from "../auth/AuthContext";
 
 import { t } from "../lib/i18n";
 import { errorText } from "../lib/apiErrors";
+import { AuthTopBar } from "../components/AuthTopBar";
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-6">
+      <div className="w-full max-w-md">
+        <AuthTopBar />
+      </div>
       <div className="card w-full max-w-md space-y-4 p-8">
         <h1 className="font-display text-2xl font-semibold text-slate-900">{title}</h1>
         {children}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -115,9 +119,13 @@ export function ResetPasswordPage() {
     <Card title={t("Choose a new password")}>
       <form onSubmit={submit} className="space-y-4">
         {err && (
-          <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
-            {err}
-          </p>
+          <div className="space-y-1 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
+            <p>{err}</p>
+            {/* An expired or mistyped link is the usual cause: never leave the user stuck here. */}
+            <Link to="/forgot-password" className="font-semibold text-rose-800 underline">
+              {t("Request a new link")}
+            </Link>
+          </div>
         )}
         <div>
           <label className="label" htmlFor="new-password">
@@ -165,8 +173,9 @@ export function VerifyEmailPage() {
   const { user, refreshUser } = useAuth();
   const token = params.get("token") || "";
   const [state, setState] = useState<"working" | "done" | "failed">(token ? "working" : "failed");
-  const [message, setMessage] = useState(token ? "Verifying your email…" : "This link is missing its token.");
+  const [message, setMessage] = useState(token ? t("Verifying your email…") : t("This link is missing its token."));
   const started = useRef(false);
+  const refreshed = useRef(false);
 
   useEffect(() => {
     if (!token || started.current) return;
@@ -175,13 +184,20 @@ export function VerifyEmailPage() {
       .then(async () => {
         setState("done");
         setMessage(t("Your email is verified."));
-        if (user) await refreshUser().catch(() => undefined);
       })
       .catch((e) => {
         setState("failed");
-        setMessage((e as Error).message);
+        setMessage(errorText(e, "This link isn't valid. Ask for a new one."));
       });
-  }, [token, user, refreshUser]);
+  }, [token]);
+
+  // The session may finish restoring after verification succeeds: refresh once a user is there,
+  // so the "confirm your email" banner disappears without a reload.
+  useEffect(() => {
+    if (state !== "done" || !user || refreshed.current) return;
+    refreshed.current = true;
+    refreshUser().catch(() => undefined);
+  }, [state, user, refreshUser]);
 
   return (
     <Card title={state === "done" ? t("Email verified") : state === "failed" ? t("Couldn't verify") : t("Verifying")}>

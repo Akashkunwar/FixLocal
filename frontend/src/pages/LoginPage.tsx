@@ -8,6 +8,7 @@ import { safeNext } from "../lib/paths";
 import { useToast } from "../components/Toast";
 
 import { errorText } from "../lib/apiErrors";
+import { AuthTopBar } from "../components/AuthTopBar";
 export function LoginPage() {
   const { user, login, loading } = useAuth();
   const { t } = useI18n();
@@ -62,7 +63,10 @@ export function LoginPage() {
         </div>
         <p className="text-sm text-brand-200">{t("Local services, handled with care.")}</p>
       </div>
-      <div className="flex items-center justify-center p-6">
+      <main className="flex flex-col items-center justify-center gap-4 p-6">
+        <div className="w-full max-w-md">
+          <AuthTopBar logoClassName="lg:invisible" />
+        </div>
         <form onSubmit={onSubmit} className="card w-full max-w-md p-8 space-y-4">
           <div>
             <h1 className="font-display text-2xl font-semibold text-slate-900">{t("Welcome back")}</h1>
@@ -141,7 +145,7 @@ export function LoginPage() {
             </div>
           )}
         </form>
-      </div>
+      </main>
     </div>
   );
 }
