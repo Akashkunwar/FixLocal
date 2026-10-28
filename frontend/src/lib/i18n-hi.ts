@@ -1597,7 +1597,7 @@ export const HI: Record<string, string> = {
   "All actions": "सभी कार्रवाइयाँ",
   "Audit note saved": "ऑडिट नोट सेव हो गया",
   "Optional admin note": "एडमिन नोट (ज़रूरी नहीं)",
-  "e.g. Verified escrow source on job X, demo note for wave 10…": "जैसे: काम X पर एस्क्रो का स्रोत जाँचा, वेव 10 का डेमो नोट…",
+  "e.g. Checked the escrow source on this job with both parties…": "जैसे: दोनों पक्षों के साथ इस काम के एस्क्रो का स्रोत जाँचा…",
   "Add note": "नोट जोड़ें",
   "No audit entries yet": "अभी कोई ऑडिट एंट्री नहीं",
   "Suspend a user, resolve a dispute, or force-cancel a job to populate this log.": "यह लॉग भरने के लिए किसी यूज़र को निलंबित करें, कोई विवाद सुलझाएँ, या कोई काम रद्द करें।",

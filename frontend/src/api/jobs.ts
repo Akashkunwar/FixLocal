@@ -136,7 +136,7 @@ export type Bid = {
   distanceKm?: number | null;
   jobToBidHours?: number | null;
   inviteToBidHours?: number | null;
-  /** Wave 21: match score for best-value blend on bid compare */
+  /** Match score for best-value blend on bid compare */
   matchScore?: number | null;
   heatBoost?: number | null;
   rankedScore?: number | null;
@@ -436,11 +436,6 @@ export function markJobDone(id: string) {
 /** Client: confirm the work is complete and release the remaining payment. */
 export function confirmJobComplete(id: string) {
   return api<CompletionResult>(`/api/jobs/${id}/confirm`, { method: "POST", headers: { "Idempotency-Key": `confirm-${id}` } });
-}
-
-/** Legacy combined endpoint (marks done for pros, confirms for clients). */
-export function completeJob(id: string) {
-  return api<CompletionResult>(`/api/jobs/${id}/complete`, { method: "POST" });
 }
 
 export function setPhotoConsent(id: string, consent: boolean) {
@@ -992,14 +987,6 @@ export function declineCounterOffer(bidId: string, body: { notes?: string } = {}
     body: JSON.stringify(body),
   });
 }
-
-export function checkViewedNoReply(bidId: string) {
-  return api<{
-    bidId: string;
-    viewedNoReply: Bid["viewedNoReply"];
-  }>(`/api/bids/${bidId}/viewed-no-reply`);
-}
-
 
 export function startJob(jobId: string) {
   return api<{ job: Job }>(`/api/jobs/${jobId}/start`, { method: "POST" });

@@ -303,8 +303,7 @@ export function ProJobDetailPage() {
     setQuoteEditAmount(String(myBid.counterOffer.suggestedAmount));
     setQuoteEditNotes(myBid.counterOffer.notes || "");
     setShowQuoteEdit(true);
-    // Prefill once per counter-offer (keyed by its request time), not on every bid refresh.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- prefill once per counter-offer (keyed by its request time), not on every bid refresh
   }, [
     fromCounter,
     myBid?.id,

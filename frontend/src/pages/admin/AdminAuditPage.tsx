@@ -117,7 +117,7 @@ export function AdminAuditPage() {
           rows={2}
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder={t("e.g. Verified escrow source on job X, demo note for wave 10…")}
+          placeholder={t("e.g. Checked the escrow source on this job with both parties…")}
         />
         <button type="submit" className="btn-secondary btn-sm" disabled={noteBusy || !note.trim()}>
           {noteBusy ? t("Saving…") : t("Add note")}

@@ -172,8 +172,7 @@ export function BrowseJobsPage() {
     return () => {
       cancelled = true;
     };
-    // `load` is recreated every render; it reads the facets passed in, not stale state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rerun only when the URL filters change; `load` is recreated every render and reads the facets passed in, not stale state
   }, [urlCategory, urlSite]);
 
   function saveSearch() {

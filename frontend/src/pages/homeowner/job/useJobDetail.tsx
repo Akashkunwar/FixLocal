@@ -290,7 +290,7 @@ export function useJobDetail() {
   useEffect(() => {
     load();
     return () => loadAbort.current?.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when the job id changes; `load` is recreated every render and aborts any older request itself
   }, [id]);
 
   // Deep-link from Favorites: ?shortlistInvite=id1,id2
@@ -313,7 +313,7 @@ export function useJobDetail() {
     }
   }, [shortlistPros, searchParams, setSearchParams]);
 
-  // Wave 17: deep-link quote-Δ notify → highlight bid card
+  // Deep-link quote-Δ notify → highlight bid card
   useEffect(() => {
     const bidParam = searchParams.get("bid");
     const hash = typeof window !== "undefined" ? window.location.hash : "";
@@ -337,7 +337,7 @@ export function useJobDetail() {
     };
   }, [bids, searchParams]);
 
-  // Wave 17: soft pro alert when homeowner views a revised quote
+  // Soft pro alert when homeowner views a revised quote
   useEffect(() => {
     if (!job || job.status !== "open") return;
     const revised = bids.filter(
@@ -594,7 +594,7 @@ export function useJobDetail() {
     return rows;
   }, [competingBids, whatIfCustom]);
 
-  /** Wave 21–23: best-value blend = match + lower escrow (+ optional SLA/heat). */
+  /** Best-value blend = match + lower escrow (+ optional SLA/heat). */
   const bestValueBlend = useMemo(() => {
     const slaTierPoints = (tier?: string | null) => {
       if (tier === "lightning") return 20;
@@ -675,7 +675,7 @@ export function useJobDetail() {
     };
   }, [competingBids, bestValueWeights]);
 
-  /** Wave 22: soft counter amount hint from peer best-value bids when clean. */
+  /** Soft counter amount hint from peer best-value bids when clean. */
   const peerBestValueCounterHint = useMemo(() => {
     if (!bestValueBlend?.clean || !bestValueBlend.rows.length) return null;
     const peers = bestValueBlend.rows.filter((r) => r.bidId !== counterBidId);
@@ -696,7 +696,7 @@ export function useJobDetail() {
     };
   }, [bestValueBlend, counterBidId]);
 
-  /** Wave 21: counter negotiation timeline points across this job's bids. */
+  /** Counter negotiation timeline points across this job's bids. */
   const counterNegotiationSpark = useMemo(() => {
     const points: {
       t: number;

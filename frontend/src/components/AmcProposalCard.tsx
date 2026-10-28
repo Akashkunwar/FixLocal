@@ -116,8 +116,7 @@ export function AmcProposalCard({
     if (proposal?.amountMax != null) setAmountMax(String(proposal.amountMax));
     if (proposal?.unit) setUnit(proposal.unit);
     if (proposal?.note) setNote(proposal.note);
-    // Re-sync the form only when a new proposal arrives, so in-progress edits aren't overwritten.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-sync the form only when a new proposal arrives, so in-progress edits aren't overwritten
   }, [proposal?.proposedAt]);
 
   function applyPackage(p: AmcFillPackage) {
