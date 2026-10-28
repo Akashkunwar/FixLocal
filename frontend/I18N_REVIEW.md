@@ -4,7 +4,7 @@ Grok Bot drafted these Hindi strings on 27–28 Oct 2026 for the frontend i18n s
 
 Conventions used: *bid* → बोली, *quote* → कोटेशन, *escrow* → एस्क्रो, *invite* → न्योता, *pro* → प्रो, *job* → काम, *milestone* → किस्त. `{name}` placeholders must stay as they are (a test checks this).
 
-1000 strings.
+1002 strings.
 
 | English | Hindi |
 | --- | --- |
@@ -298,7 +298,7 @@ Conventions used: *bid* → बोली, *quote* → कोटेशन, *escro
 | All actions | सभी कार्रवाइयाँ |
 | Audit note saved | ऑडिट नोट सेव हो गया |
 | Optional admin note | एडमिन नोट (ज़रूरी नहीं) |
-| e.g. Verified escrow source on job X, demo note for wave 10… | जैसे: काम X पर एस्क्रो का स्रोत जाँचा, वेव 10 का डेमो नोट… |
+| e.g. Checked the escrow source on this job with both parties… | जैसे: दोनों पक्षों के साथ इस काम के एस्क्रो का स्रोत जाँचा… |
 | Add note | नोट जोड़ें |
 | No audit entries yet | अभी कोई ऑडिट एंट्री नहीं |
 | Suspend a user, resolve a dispute, or force-cancel a job to populate this log. | यह लॉग भरने के लिए किसी यूज़र को निलंबित करें, कोई विवाद सुलझाएँ, या कोई काम रद्द करें। |
@@ -1008,3 +1008,5 @@ Conventions used: *bid* → बोली, *quote* → कोटेशन, *escro
 | I bid on work | मैं काम पर बोली लगाता/लगाती हूँ |
 | Describe the job, compare bids from verified professionals, and hire. | काम बताएँ, वेरिफ़ाइड प्रोफ़ेशनल की बोलियों की तुलना करें और काम पर रखें। |
 | Build a portfolio, get admin-verified, then bid on open jobs near you. | पोर्टफ़ोलियो बनाएँ, एडमिन से वेरिफ़ाई कराएँ, फिर अपने आसपास के खुले कामों पर बोली लगाएँ। |
+| We couldn't find that. The link may be wrong or out of date. | यह नहीं मिला। लिंक ग़लत या पुराना हो सकता है। |
+| This link is invalid or has expired. Ask for a new one. | यह लिंक ग़लत है या इसकी समय-सीमा ख़त्म हो गई। नया लिंक मँगाएँ। |
