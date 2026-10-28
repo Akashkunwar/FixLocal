@@ -18,6 +18,7 @@ import {
 import { viewer } from "./jobController";
 import { conflict, forbidden } from "../http/errors";
 import { revokeThreadStreams } from "../utils/sse";
+import { roundRupees } from "../domain/money";
 
 const jobRepo = () => AppDataSource.getRepository(Job);
 
@@ -124,7 +125,7 @@ export async function cancelBooking(req: Request, res: Response) {
     const back = byPro ? await clawBackReleased(m, job, v.id, note) : { clawedBack: 0, creditReturned: 0 };
     const refund = await refundMilestones(m, job, "all_unreleased", v.id, note);
     const paymentStatus = (await m.findOneOrFail(Job, { where: { id: job.id } })).paymentStatus;
-    return { ...refund, paymentStatus, totalRefunded: Math.round((refund.totalRefunded + back.clawedBack) * 100) / 100 };
+    return { ...refund, paymentStatus, totalRefunded: roundRupees(refund.totalRefunded + back.clawedBack) };
   });
   const otherParty = byClient ? ctx.acceptedProId : ctx.job.homeownerId;
   if (otherParty) {

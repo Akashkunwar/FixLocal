@@ -9,6 +9,7 @@ import { AuditAction, SYSTEM_ACTOR_ID, writeAudit } from "../utils/audit";
 import { istParts } from "./time";
 import type { NotificationInput } from "../utils/notifications";
 import { NotificationType } from "../entities/Notification";
+import { roundRupees } from "./money";
 
 /**
  * FixLocal credit (simulated, like escrow).
@@ -20,7 +21,6 @@ import { NotificationType } from "../entities/Notification";
  * - Reversed: if that job is refunded or its dispute is lost, any unused part is taken back.
  */
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 async function lock(m: EntityManager, userId: string) {
   await m.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`credits:${userId}`]);
@@ -28,11 +28,11 @@ async function lock(m: EntityManager, userId: string) {
 
 export async function creditBalance(m: EntityManager, userId: string): Promise<number> {
   const [row] = await m.query(`SELECT COALESCE(SUM("amount"), 0) AS "balance" FROM "credit_entries" WHERE "userId" = $1`, [userId]);
-  return round2(Number(row.balance));
+  return roundRupees(Number(row.balance));
 }
 
 async function add(m: EntityManager, userId: string, kind: CreditKind, amount: number, extra: Partial<CreditEntry> = {}) {
-  await m.insert(CreditEntry, { userId, kind, amount: round2(amount), ...extra });
+  await m.insert(CreditEntry, { userId, kind, amount: roundRupees(amount), ...extra });
 }
 
 /** Normalise an email for duplicate checks: case, Gmail dots and +tags. */
@@ -229,7 +229,7 @@ export async function reverseReferralRewards(m: EntityManager, jobId: string, re
 export async function applyClientCredit(m: EntityManager, clientId: string, jobId: string, escrowAmount: number) {
   if (!(escrowAmount > 0)) return 0;
   await lock(m, clientId);
-  const use = round2(Math.min(await creditBalance(m, clientId), escrowAmount));
+  const use = roundRupees(Math.min(await creditBalance(m, clientId), escrowAmount));
   if (use <= 0) return 0;
   await add(m, clientId, "applied_payment", -use, { jobId, note: "Used at hire: you funded this much less" });
   return use;
@@ -252,7 +252,7 @@ export async function restoreClientCredit(m: EntityManager, clientId: string, jo
        FROM "credit_entries" WHERE "userId" = $1 AND "jobId" = $2`,
     [clientId, jobId]
   );
-  const back = round2(Math.min(amount, Number(row.open)));
+  const back = roundRupees(Math.min(amount, Number(row.open)));
   if (back > 0) await add(m, clientId, "restored", back, { jobId, note: "Refunded: credit returned" });
   return back;
 }
@@ -266,5 +266,5 @@ export async function creditUsedOnJob(m: EntityManager, userId: string, jobId: s
        FROM "credit_entries" WHERE "userId" = $1 AND "jobId" = $2`,
     [userId, jobId]
   );
-  return { appliedToPayment: round2(Number(row.payment) - Number(row.restored)), addedToPayout: round2(Number(row.payout)) };
+  return { appliedToPayment: roundRupees(Number(row.payment) - Number(row.restored)), addedToPayout: roundRupees(Number(row.payout)) };
 }

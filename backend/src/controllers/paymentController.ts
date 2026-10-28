@@ -12,6 +12,7 @@ import { toBillingParty, toJob, toMilestone } from "../serializers";
 import { milestoneReleaseBlock, releaseMilestone as releaseMilestoneTx } from "../domain/escrow";
 import { assertOwnerOrAdmin, assertPrivateAccess, loadJobContext } from "../policies/jobPolicy";
 import { viewer } from "./jobController";
+import { roundRupees } from "../domain/money";
 
 export { splitEscrow as previewEscrowSplit } from "../domain/escrow";
 
@@ -24,7 +25,7 @@ export async function listMilestones(req: Request, res: Response) {
     order: { sequence: "ASC" },
   });
   const sum = (statuses: MilestoneStatus[]) =>
-    Math.round(milestones.filter((m) => statuses.includes(m.status)).reduce((s, m) => s + Number(m.amount), 0) * 100) / 100;
+    roundRupees(milestones.filter((m) => statuses.includes(m.status)).reduce((s, m) => s + Number(m.amount), 0));
 
   const partyIds = [job.homeownerId, ctx.acceptedProId].filter((x): x is string => !!x);
   const parties = await AppDataSource.getRepository(User).find({ where: { id: In(partyIds) } });

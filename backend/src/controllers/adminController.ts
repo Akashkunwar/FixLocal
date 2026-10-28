@@ -28,6 +28,7 @@ import { refundMilestones } from "../domain/escrow";
 import { mean } from "../domain/analytics";
 import { signedUrl } from "../services/files";
 import { badRequest, notFound } from "../http/errors";
+import { roundRupees } from "../domain/money";
 
 async function suspendUser(userId: string, suspend: boolean) {
   const repo = AppDataSource.getRepository(User);
@@ -263,7 +264,7 @@ export async function adminStats(_req: Request, res: Response) {
       simulatedGMV: released,
       escrowReleased: released,
       escrowRefunded: refunded,
-      escrowOutstanding: Math.round((Number(l.held || 0) - released - refunded) * 100) / 100,
+      escrowOutstanding: roundRupees(Number(l.held || 0) - released - refunded),
     },
   });
 }

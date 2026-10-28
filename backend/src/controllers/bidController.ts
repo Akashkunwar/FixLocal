@@ -38,6 +38,7 @@ import { filesOf } from "../middleware/upload";
 import { discardFiles, fileRef, publicUrl, publicUrls, storeUploads } from "../services/files";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { logger } from "../logger";
+import { roundRupees } from "../domain/money";
 
 const bidRepo = () => AppDataSource.getRepository(Bid);
 
@@ -468,7 +469,7 @@ export async function acceptBid(req: Request, res: Response) {
           ? {
               holdAmount: outcome.escrow.amount,
               counterSuggested,
-              delta: Math.round((outcome.escrow.amount - (counterSuggested || 0)) * 100) / 100,
+              delta: roundRupees(outcome.escrow.amount - (counterSuggested || 0)),
               note: "The counter was addressed with a different final amount — escrow holds the accepted amount.",
             }
           : null,
@@ -544,7 +545,7 @@ export async function updateBidQuote(req: Request, res: Response) {
   if (!saved.changed) return res.json({ bid: toBid(saved.bid), message: "No quote changes" });
 
   const amountDelta =
-    nextAmount != null && prevAmount != null ? Math.round((nextAmount - prevAmount) * 100) / 100 : nextAmount;
+    nextAmount != null && prevAmount != null ? roundRupees(nextAmount - prevAmount) : nextAmount;
   const parts: string[] = [];
   if (amountDelta != null && prevAmount != null && amountDelta !== 0) {
     parts.push(`amount ${amountDelta > 0 ? "+" : "−"}₹${Math.abs(amountDelta).toFixed(0)}`);
@@ -709,7 +710,7 @@ export async function escrowWhatIf(req: Request, res: Response) {
       ? {
           suggestedAmount: Number(counter.suggestedAmount),
           status: counter.status,
-          deltaVsAmount: Math.round((preview.amount - Number(counter.suggestedAmount)) * 100) / 100,
+          deltaVsAmount: roundRupees(preview.amount - Number(counter.suggestedAmount)),
         }
       : null,
   });

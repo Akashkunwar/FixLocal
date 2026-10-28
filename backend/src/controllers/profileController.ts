@@ -21,6 +21,7 @@ import { filesOf } from "../middleware/upload";
 import { assertOwnedRefs, deleteUploadByRef, fileRef, nameFromRef, storeUploads } from "../services/files";
 import { badRequest, forbidden, notFound } from "../http/errors";
 import { viewer } from "./jobController";
+import { roundRupees } from "../domain/money";
 
 const profiles = () => AppDataSource.getRepository(TradespersonProfile);
 const MAX_GALLERY = 12;
@@ -391,7 +392,7 @@ export async function getMyEarnings(req: Request, res: Response) {
   const released = await releasedTotalsByJob(AppDataSource.manager, proId);
   const won = await wonBids(proId);
   const count = (s: JobStatus) => won.filter((b) => b.job?.status === s).length;
-  const totalEarned = Math.round([...released.values()].reduce((s, r) => s + r.total, 0) * 100) / 100;
+  const totalEarned = roundRupees([...released.values()].reduce((s, r) => s + r.total, 0));
   const activeBids = await AppDataSource.getRepository(Bid).count({ where: { tradespersonId: proId, status: BidStatus.ACTIVE } });
   return res.json({
     earnings: {
@@ -443,7 +444,7 @@ export async function getMyAnalytics(req: Request, res: Response) {
   for (let i = 5; i >= 0; i--) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 15));
     const key = monthKeyInZone(d, tz);
-    months.push({ month: key, amount: Math.round((byMonth.get(key) || 0) * 100) / 100 });
+    months.push({ month: key, amount: roundRupees(byMonth.get(key) || 0) });
   }
 
   const samples = allBids
@@ -461,7 +462,7 @@ export async function getMyAnalytics(req: Request, res: Response) {
     });
     return { label: w === 0 ? "now" : `-${w}w`, hours: mean(slice.map((s) => s.hours)), n: slice.length };
   });
-  const totalEarned = Math.round([...released.values()].reduce((s, r) => s + r.total, 0) * 100) / 100;
+  const totalEarned = roundRupees([...released.values()].reduce((s, r) => s + r.total, 0));
   return res.json({
     analytics: {
       jobsWon: won.length,

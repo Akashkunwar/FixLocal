@@ -2,8 +2,8 @@ import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { User } from "../entities/User";
 import { monthKeyInZone } from "../domain/time";
+import { roundRupees } from "../domain/money";
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
 
 type JobRow = {
   id: string;
@@ -96,9 +96,9 @@ export async function getMySpending(req: Request, res: Response) {
       createdAt: j.createdAt,
       completedAt: j.completedAt,
       agreedAmount: j.escrowAmount != null ? Number(j.escrowAmount) : null,
-      paid: r2(m.paid),
-      refunded: r2(m.refunded),
-      inEscrow: r2(Math.max(0, m.held - m.paid - m.refunded)),
+      paid: roundRupees(m.paid),
+      refunded: roundRupees(m.refunded),
+      inEscrow: roundRupees(Math.max(0, m.held - m.paid - m.refunded)),
       pro: j.proId ? { id: j.proId, name: j.proName || "Professional" } : null,
     };
   });
@@ -109,26 +109,26 @@ export async function getMySpending(req: Request, res: Response) {
   for (let i = 11; i >= 0; i--) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 15));
     const key = monthKeyInZone(d, user.timezone);
-    months.push({ month: key, amount: r2(byMonth.get(key) || 0) });
+    months.push({ month: key, amount: roundRupees(byMonth.get(key) || 0) });
   }
   const count = (...s: string[]) => jobs.filter((j) => s.includes(j.status)).length;
 
   return res.json({
     spending: {
       totals: {
-        paid: r2(paid),
-        inEscrow: r2(inEscrow),
-        refunded: r2(refunded),
+        paid: roundRupees(paid),
+        inEscrow: roundRupees(inEscrow),
+        refunded: roundRupees(refunded),
         jobsPosted: jobs.length,
         jobsCompleted: count("completed"),
         jobsActive: count("awarded", "in_progress", "pending_confirmation", "disputed"),
         jobsOpen: count("open", "bidding_closed"),
         jobsCancelled: count("cancelled"),
-        averageJob: byCategory.size ? r2(paid / [...byCategory.values()].reduce((s, c) => s + c.jobs, 0)) : 0,
+        averageJob: byCategory.size ? roundRupees(paid / [...byCategory.values()].reduce((s, c) => s + c.jobs, 0)) : 0,
       },
       months,
-      byCategory: [...byCategory.values()].map((c) => ({ ...c, paid: r2(c.paid) })).sort((a, b) => b.paid - a.paid),
-      topPros: [...byPro.values()].map((p) => ({ ...p, paid: r2(p.paid) })).sort((a, b) => b.paid - a.paid).slice(0, 5),
+      byCategory: [...byCategory.values()].map((c) => ({ ...c, paid: roundRupees(c.paid) })).sort((a, b) => b.paid - a.paid),
+      topPros: [...byPro.values()].map((p) => ({ ...p, paid: roundRupees(p.paid) })).sort((a, b) => b.paid - a.paid).slice(0, 5),
       jobs: history,
       note: "Payments on FixLocal are simulated during the pilot.",
     },

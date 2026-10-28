@@ -7,6 +7,7 @@ import { LedgerEntry, LedgerType, PAYOUT_TYPES } from "../entities/LedgerEntry";
 import { MilestoneStatus, PaymentMilestone } from "../entities/PaymentMilestone";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { paymentProvider } from "../services/payments";
+import { roundRupees } from "./money";
 
 export const MILESTONE_TEMPLATE = [
   { label: "Deposit", percent: 30 },
@@ -14,16 +15,15 @@ export const MILESTONE_TEMPLATE = [
   { label: "Completion", percent: 30 },
 ];
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export function splitEscrow(totalAmount: number) {
-  const total = round2(Number(totalAmount));
+  const total = roundRupees(Number(totalAmount));
   if (!Number.isFinite(total) || total <= 0) return { amount: 0, milestones: [] as SplitRow[] };
   let allocated = 0;
   const milestones: SplitRow[] = MILESTONE_TEMPLATE.map((tmpl, i) => {
     const isLast = i === MILESTONE_TEMPLATE.length - 1;
-    const amount = isLast ? round2(total - allocated) : round2((total * tmpl.percent) / 100);
-    allocated = round2(allocated + amount);
+    const amount = isLast ? roundRupees(total - allocated) : roundRupees((total * tmpl.percent) / 100);
+    allocated = roundRupees(allocated + amount);
     return { label: tmpl.label, sequence: i + 1, percent: tmpl.percent, amount };
   });
   return { amount: total, milestones };
@@ -34,9 +34,9 @@ type SplitRow = { label: string; sequence: number; percent: number; amount: numb
 /** Escrow is funded from the structured quote when present, otherwise the bid amount. */
 export function escrowAmountFromBid(bid: { amount: number | string; quoteAmount?: number | string | null }) {
   const q = Number(bid.quoteAmount);
-  if (Number.isFinite(q) && q > 0) return { amount: round2(q), source: "quote" as const };
+  if (Number.isFinite(q) && q > 0) return { amount: roundRupees(q), source: "quote" as const };
   const a = Number(bid.amount);
-  return { amount: Number.isFinite(a) && a > 0 ? round2(a) : 0, source: "bid" as const };
+  return { amount: Number.isFinite(a) && a > 0 ? roundRupees(a) : 0, source: "bid" as const };
 }
 
 async function lockJob(manager: EntityManager, jobId: string): Promise<JobStatus> {
@@ -99,8 +99,8 @@ const CLIENT_TYPE: Record<Movement, LedgerType> = { hold: LedgerType.HOLD, relea
  */
 function milestoneEntries(milestones: PaymentMilestone[], movement: Movement, note?: string) {
   return milestones.flatMap((m) => {
-    const credit = round2(Number(m.creditAmount || 0));
-    const client = round2(Number(m.amount) - credit);
+    const credit = roundRupees(Number(m.creditAmount || 0));
+    const client = roundRupees(Number(m.amount) - credit);
     const label = note ?? m.label;
     return [
       { type: CLIENT_TYPE[movement], amount: client, milestoneId: m.id, note: label },
@@ -120,7 +120,7 @@ async function ledger(
   const provider = paymentProvider();
   const rows = [];
   for (const e of entries) {
-    const amount = round2(e.amount);
+    const amount = roundRupees(e.amount);
     const payerUserId = e.payerUserId === undefined ? job.homeownerId : e.payerUserId;
     // Milestone + movement type is unique (a milestone is held, then released or refunded once).
     const { reference } = await provider.record({
@@ -162,10 +162,10 @@ export async function createEscrow(
   creditAmount = 0
 ): Promise<PaymentMilestone[]> {
   const split = splitEscrow(amount);
-  let creditLeft = round2(Math.max(0, Math.min(creditAmount, split.amount)));
+  let creditLeft = roundRupees(Math.max(0, Math.min(creditAmount, split.amount)));
   const rows = split.milestones.map((m, i) => {
-    const credit = round2(Math.min(creditLeft, m.amount));
-    creditLeft = round2(creditLeft - credit);
+    const credit = roundRupees(Math.min(creditLeft, m.amount));
+    creditLeft = roundRupees(creditLeft - credit);
     return manager.create(PaymentMilestone, {
       jobId: job.id,
       label: m.label,
@@ -321,8 +321,8 @@ export async function refundMilestones(
   await ledger(manager, job, milestoneEntries(refunded, "refund", note), actorUserId, payee);
   const paymentStatus = await syncPaymentStatus(manager, job);
   // The client gets back what they paid; the credit-funded part goes back to their credit balance.
-  const totalRefunded = round2(refunded.reduce((s, m) => s + Number(m.amount) - Number(m.creditAmount || 0), 0));
-  const creditReturned = round2(refunded.reduce((s, m) => s + Number(m.creditAmount || 0), 0));
+  const totalRefunded = roundRupees(refunded.reduce((s, m) => s + Number(m.amount) - Number(m.creditAmount || 0), 0));
+  const creditReturned = roundRupees(refunded.reduce((s, m) => s + Number(m.creditAmount || 0), 0));
   // Credit follows the money: a refund takes back referral credit earned on this job.
   const creditNotices = refunded.length ? await reverseReferralRewards(manager, job.id, "refunded", actorUserId) : [];
   if (creditReturned > 0) await restoreClientCredit(manager, job.homeownerId, job.id, creditReturned);
@@ -348,8 +348,8 @@ export async function clawBackReleased(manager: EntityManager, job: Job, actorUs
   const payee = await payeeFor(manager, job);
   const entries = milestoneEntries(rows, "refund", note).map((e) => (e.type === LedgerType.REFUND ? { ...e, type: LedgerType.CLAWBACK } : e));
   await ledger(manager, job, entries, actorUserId, payee);
-  const clawedBack = round2(rows.reduce((s, m) => s + Number(m.amount) - Number(m.creditAmount || 0), 0));
-  const credit = round2(rows.reduce((s, m) => s + Number(m.creditAmount || 0), 0));
+  const clawedBack = roundRupees(rows.reduce((s, m) => s + Number(m.amount) - Number(m.creditAmount || 0), 0));
+  const credit = roundRupees(rows.reduce((s, m) => s + Number(m.creditAmount || 0), 0));
   const creditReturned = credit > 0 ? await restoreClientCredit(manager, job.homeownerId, job.id, credit) : 0;
   await syncPaymentStatus(manager, job);
   return { clawedBack, creditReturned };
