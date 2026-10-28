@@ -78,12 +78,16 @@ describe("who can see bids (H-1)", () => {
     expect(JSON.stringify(res.body)).not.toContain("Rival One");
   });
 
-  it("a pro without a bid can't list bids", async () => {
+  it("a pro without a bid sees an empty list, never other pros' bids", async () => {
     const owner = await client();
     const job = await createJob(owner);
     await placeBid(await pro(), job.id);
     const stranger = await pro();
-    expect((await api().get(`/api/jobs/${job.id}/bids`).set(stranger.auth)).status).toBe(403);
+    const res = await api().get(`/api/jobs/${job.id}/bids`).set(stranger.auth);
+    expect(res.status).toBe(200);
+    expect(res.body.bids).toEqual([]);
+    const pending = await pro({ proStatus: "pending" });
+    expect((await api().get(`/api/jobs/${job.id}/bids`).set(pending.auth)).status).toBe(403);
     expect((await api().get(`/api/jobs/${job.id}/bids`).set((await client()).auth)).status).toBe(403);
   });
 

@@ -58,12 +58,6 @@ const MESSAGES: Record<JobAction, string> = {
   resolve_complete: "Job is not in dispute",
 };
 
-export function assertTransition(job: Pick<Job, "status">, action: JobAction) {
-  if (!canTransition(job.status, action)) {
-    throw conflict(MESSAGES[action], "INVALID_STATUS", { status: job.status });
-  }
-}
-
 /**
  * Atomic status change: only succeeds if the row is still in an allowed status.
  * Returns the previous status.

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { roundRupees } from "../domain/money";
 
 const blankToUndefined = (v: unknown) => (v === "" || v === null ? undefined : v);
 
@@ -21,19 +22,28 @@ export const email = z
   .pipe(z.email({ message: "Enter a valid email address" }));
 
 export const MONEY_MAX = 10_000_000;
-const roundMoney = (n: number) => Math.round(n * 100) / 100;
 
 export const money = z.coerce
   .number({ message: "Must be a number" })
   .finite()
   .gt(0, "Must be greater than 0")
   .max(MONEY_MAX, `Must be at most ${MONEY_MAX}`)
-  .transform(roundMoney);
+  .transform(roundRupees);
 
 export const optionalMoney = z.preprocess(blankToUndefined, money.optional());
+
+/** Smallest amount that can fund escrow: split three ways, no milestone may round to ₹0. */
+export const MIN_ESCROW_INR = 10;
+export const escrowMoney = z.coerce
+  .number({ message: "Must be a number" })
+  .finite()
+  .min(MIN_ESCROW_INR, `Must be at least ₹${MIN_ESCROW_INR}`)
+  .max(MONEY_MAX, `Must be at most ${MONEY_MAX}`)
+  .transform(roundRupees);
+export const optionalEscrowMoney = z.preprocess(blankToUndefined, escrowMoney.optional());
 export const optionalNonNegativeMoney = z.preprocess(
   blankToUndefined,
-  z.coerce.number().finite().min(0).max(MONEY_MAX).transform(roundMoney).optional()
+  z.coerce.number().finite().min(0).max(MONEY_MAX).transform(roundRupees).optional()
 );
 
 export const optionalInt = (min: number, max: number) =>

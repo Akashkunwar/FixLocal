@@ -145,7 +145,7 @@ Simple relations:
 - One tradesperson has one profile.
 - One job can have one dispute.
 
-TypeORM creates this when the backend starts (`synchronize` in development).
+Migrations in `backend/src/migrations` create and change these tables (`synchronize` is off).
 
 ## 6. How the folders are arranged
 

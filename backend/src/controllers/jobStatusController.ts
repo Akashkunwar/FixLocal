@@ -6,7 +6,7 @@ import { NotificationType } from "../entities/Notification";
 import { createNotification, createNotifications } from "../utils/notifications";
 import { toJob } from "../serializers";
 import { transitionJob } from "../domain/jobStateMachine";
-import { refundMilestones, releaseRemaining } from "../domain/escrow";
+import { clawBackReleased, refundMilestones, releaseRemaining } from "../domain/escrow";
 import { config } from "../config";
 import {
   assertAwardedProOrAdmin,
@@ -18,6 +18,7 @@ import {
 import { viewer } from "./jobController";
 import { conflict, forbidden } from "../http/errors";
 import { revokeThreadStreams } from "../utils/sse";
+import { roundRupees } from "../domain/money";
 
 const jobRepo = () => AppDataSource.getRepository(Job);
 
@@ -101,8 +102,9 @@ export async function completeJob(req: Request, res: Response) {
 
 /**
  * Call off a hire before work starts (client or hired pro).
- * Rules (simulated escrow): every milestone still held is refunded to the client; a deposit the
- * client already released stays with the professional.
+ * Rules (simulated escrow): every milestone still held is refunded to the client. A deposit the
+ * client already released stays with the professional if the client cancels, and goes back to the
+ * client if the professional cancels.
  */
 export async function cancelBooking(req: Request, res: Response) {
   const ctx = await loadJobContext(req.valid.params.id);
@@ -118,7 +120,12 @@ export async function cancelBooking(req: Request, res: Response) {
   const refund = await AppDataSource.transaction(async (m) => {
     await transitionJob(m, ctx.job.id, "cancel_booking", { cancellationReason: reason, cancelledBy: who });
     const job = await m.findOneOrFail(Job, { where: { id: ctx.job.id } });
-    return refundMilestones(m, job, "all_unreleased", v.id, `Booking cancelled by the ${who}${reason ? `: ${reason}` : ""}`);
+    const note = `Booking cancelled by the ${who}${reason ? `: ${reason}` : ""}`;
+    // The pro walking away before starting doesn't keep the deposit: it goes back to the client.
+    const back = byPro ? await clawBackReleased(m, job, v.id, note) : { clawedBack: 0, creditReturned: 0 };
+    const refund = await refundMilestones(m, job, "all_unreleased", v.id, note);
+    const paymentStatus = (await m.findOneOrFail(Job, { where: { id: job.id } })).paymentStatus;
+    return { ...refund, paymentStatus, totalRefunded: roundRupees(refund.totalRefunded + back.clawedBack) };
   });
   const otherParty = byClient ? ctx.acceptedProId : ctx.job.homeownerId;
   if (otherParty) {

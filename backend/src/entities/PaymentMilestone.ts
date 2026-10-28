@@ -46,6 +46,10 @@ export class PaymentMilestone {
   @Column({ type: "int" })
   percent!: number;
 
+  /** How much of `amount` FixLocal funded from the client's referral credit (the rest the client paid). */
+  @Column({ type: "decimal", precision: 10, scale: 2, transformer: numeric, default: 0 })
+  creditAmount!: number;
+
   @Column({
     type: "enum",
     enum: MilestoneStatus,

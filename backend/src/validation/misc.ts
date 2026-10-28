@@ -2,7 +2,7 @@ import { z } from "zod";
 import { DisputeResolution, DisputeStatus } from "../entities/Dispute";
 import { FavoriteTargetType } from "../entities/Favorite";
 import { NotificationType } from "../entities/Notification";
-import { boolish, enumOf, fileRefString, id, isoDate, limit, optionalText, page, requiredText } from "./common";
+import { MIN_ESCROW_INR, boolish, enumOf, fileRefString, id, isoDate, limit, optionalText, page, requiredText } from "./common";
 
 // ---- disputes ----
 export const createDisputeBody = z.object({ reason: requiredText(4000) });
@@ -37,17 +37,23 @@ export const userIdParams = z.object({ userId: id });
 export const reviewReplyBody = z.object({ reply: z.string().trim().max(1000) });
 export const jobIdOnlyParams = z.object({ jobId: id });
 
+/**
+ * "Older than" cursor: the id of the last item seen (exact, ties broken by id), or a date for older
+ * clients (dates lose the database's microseconds, so prefer the id the API returns as nextBefore).
+ */
+const pageCursor = z.preprocess((v) => (v === "" ? undefined : v), z.union([z.string().uuid(), isoDate]).optional());
+
 // ---- messages ----
 export const threadQuery = z.object({
   pro: z.preprocess((v) => (v === "" ? undefined : v), id.optional()),
-  before: z.preprocess((v) => (v === "" ? undefined : v), isoDate.optional()),
+  before: pageCursor,
   limit: limit(100),
   ticket: z.string().max(200).optional(),
 });
 export const sendMessageBody = z
   .object({
     body: optionalText(4000),
-    quoteAmount: z.preprocess((v) => (v === "" || v == null ? undefined : v), z.coerce.number().finite().gt(0).max(10_000_000).optional()),
+    quoteAmount: z.preprocess((v) => (v === "" || v == null ? undefined : v), z.coerce.number().finite().min(MIN_ESCROW_INR).max(10_000_000).optional()),
     quoteNotes: optionalText(2000),
     quote: z.unknown().optional(),
   })
@@ -65,7 +71,7 @@ export const sendMessageBody = z
     const legacyAmount = legacy?.amount != null ? Number(legacy.amount) : undefined;
     return {
       body: v.body,
-      quoteAmount: v.quoteAmount ?? (legacyAmount && legacyAmount > 0 && legacyAmount <= 10_000_000 ? legacyAmount : undefined),
+      quoteAmount: v.quoteAmount ?? (legacyAmount && legacyAmount >= MIN_ESCROW_INR && legacyAmount <= 10_000_000 ? legacyAmount : undefined),
       quoteNotes: v.quoteNotes ?? (legacy?.notes ? String(legacy.notes).slice(0, 2000) : undefined),
     };
   });
@@ -79,7 +85,7 @@ export const listNotificationsQuery = z.object({
     z.array(enumOf(NotificationType, "Invalid notification type")).max(20).optional()
   ),
   limit: limit(50),
-  before: z.preprocess((v) => (v === "" ? undefined : v), isoDate.optional()),
+  before: pageCursor,
   ticket: z.string().max(200).optional(),
 });
 

@@ -20,7 +20,8 @@ let pubsub = false;
 type Envelope =
   | { kind: "notification"; userId: string; payload: unknown }
   | { kind: "message"; jobId: string; tradespersonId: string; payload: unknown }
-  | { kind: "revoke"; jobId: string; keepTradespersonId: string | null };
+  | { kind: "revoke"; jobId: string; keepTradespersonId: string | null }
+  | { kind: "revoke_thread"; jobId: string; tradespersonId: string };
 
 export async function initSseFanout() {
   pubsub = await redisSubscribe(CHANNEL, (raw) => {
@@ -89,6 +90,8 @@ function deliver(env: Envelope) {
         if (c.thread && c.thread.jobId === env.jobId && c.thread.tradespersonId !== env.keepTradespersonId) {
           close(c.id);
         }
+      } else if (env.kind === "revoke_thread") {
+        if (c.thread && c.thread.jobId === env.jobId && c.thread.tradespersonId === env.tradespersonId) close(c.id);
       } else if (env.kind === "notification" && !c.thread && c.userId === env.userId) {
         send(c.res, "notification", env.payload);
       } else if (
@@ -122,6 +125,11 @@ export function publishMessage(jobId: string, tradespersonId: string, payload: u
 /** After an award or cancellation, drop open chat streams of pros who lost access. */
 export function revokeThreadStreams(jobId: string, keepTradespersonId: string | null) {
   return dispatch({ kind: "revoke", jobId, keepTradespersonId });
+}
+
+/** Drop the open streams of one (job, professional) thread only, e.g. after that pro withdraws. */
+export function revokeOneThread(jobId: string, tradespersonId: string) {
+  return dispatch({ kind: "revoke_thread", jobId, tradespersonId });
 }
 
 export function streamCount(userId?: string) {

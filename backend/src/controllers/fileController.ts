@@ -2,27 +2,13 @@ import { pipeline } from "stream/promises";
 import type { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { Upload } from "../entities/Upload";
-import { verifyAccessToken } from "../auth/tokens";
-import { getAuthState } from "../auth/authState";
-import { canAccessUpload, type Viewer } from "../policies/jobPolicy";
+import { bearerViewer } from "../middleware/auth";
+import { canAccessUpload } from "../policies/jobPolicy";
 import { PUBLIC_KINDS, verifySignedUrl } from "../services/files";
 import { blobStore } from "../services/storage";
 import { forbidden, notFound, unauthorized } from "../http/errors";
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/;
-
-async function bearerViewer(req: Request): Promise<Viewer | null> {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) return null;
-  try {
-    const claims = verifyAccessToken(header.slice(7));
-    const state = await getAuthState(claims.sub);
-    if (!state || state.deleted || state.isSuspended || state.tokenVersion !== claims.tv) return null;
-    return { id: state.id, role: state.role, proVerified: state.proVerified };
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Serves stored files. Public kinds (gallery, avatars, published case studies) are open;

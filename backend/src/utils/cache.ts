@@ -61,15 +61,6 @@ export async function cacheSetJson(key: string, value: unknown, ttlSec = 60): Pr
   }
 }
 
-export async function cacheDel(key: string): Promise<void> {
-  if (!cacheReady() || !client) return;
-  try {
-    await client.del(key);
-  } catch {
-    /* cache is best-effort */
-  }
-}
-
 async function openJobsVersion(): Promise<string> {
   if (!cacheReady() || !client) return "0";
   try {
@@ -126,7 +117,15 @@ export async function redisPublish(channel: string, message: string): Promise<bo
   }
 }
 
+const testResets: (() => void)[] = [];
+
+/** In-memory state that lives outside Redis (e.g. rate-limit counters without Redis) and must reset with it. */
+export function onTestCacheFlush(fn: () => void) {
+  testResets.push(fn);
+}
+
 export async function flushTestCache(): Promise<void> {
+  for (const fn of testResets) fn();
   if (!cacheReady() || !client) return;
   await client.flushDb();
 }

@@ -20,22 +20,22 @@ export async function loadJobToBidSamples(
   if (!proIds.length) return out;
   for (const id of proIds) out[id] = [];
 
-  const bids = await AppDataSource.getRepository(Bid)
-    .createQueryBuilder("b")
-    .leftJoinAndSelect("b.job", "job")
-    .where("b.tradespersonId IN (:...ids)", { ids: proIds })
-    .orderBy("b.createdAt", "DESC")
-    .take(Math.min(proIds.length * takePerPro, 2000))
-    .getMany();
-
-  const counts: Record<string, number> = {};
-  for (const bid of bids) {
-    const uid = bid.tradespersonId;
-    counts[uid] = (counts[uid] || 0) + 1;
-    if (counts[uid] > takePerPro) continue;
-    const h = hoursBetween(bid.job?.createdAt, bid.createdAt);
+  // Each pro's latest bids, ranked per pro: a busy pro can't crowd quieter pros out of a shared LIMIT.
+  const rows: { tradespersonId: string; bidAt: Date; jobAt: Date | null }[] = await AppDataSource.query(
+    `SELECT r."tradespersonId", r."bidAt", r."jobAt" FROM (
+       SELECT b."tradespersonId", b."createdAt" AS "bidAt", j."createdAt" AS "jobAt",
+              ROW_NUMBER() OVER (PARTITION BY b."tradespersonId" ORDER BY b."createdAt" DESC) AS n
+         FROM "bids" b LEFT JOIN "jobs" j ON j."id" = b."jobId"
+        WHERE b."tradespersonId" = ANY($1)) r
+      WHERE r.n <= $2
+      ORDER BY r."bidAt" DESC`,
+    [proIds, takePerPro]
+  );
+  for (const r of rows) {
+    const bidAt = new Date(r.bidAt);
+    const h = hoursBetween(r.jobAt ? new Date(r.jobAt) : null, bidAt);
     if (h == null) continue;
-    out[uid].push({ hours: h, at: bid.createdAt });
+    out[r.tradespersonId].push({ hours: h, at: bidAt });
   }
   return out;
 }

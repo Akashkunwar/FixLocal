@@ -73,10 +73,20 @@ export async function acceptSchedule(req: Request, res: Response) {
   if (ctx.job.scheduleProposedByUserId === req.user!.id && req.user!.role !== UserRole.ADMIN) {
     throw badRequest("The other party must accept your proposal", "CANNOT_SELF_ACCEPT");
   }
-  const updated = await AppDataSource.getRepository(Job).update(
-    { id: ctx.job.id, scheduleStatus: ScheduleStatus.PROPOSED },
-    { scheduleStatus: ScheduleStatus.CONFIRMED }
-  );
+  // Confirm exactly the proposal that was checked above: if the other party re-proposed in between
+  // (new time or new proposer) or the job left a schedulable status, nothing changes.
+  const updated = await AppDataSource.getRepository(Job)
+    .createQueryBuilder()
+    .update()
+    .set({ scheduleStatus: ScheduleStatus.CONFIRMED })
+    .where(`"id" = :id AND "scheduleStatus" = :proposed AND "scheduledStart" = :start AND "status" IN (:...ok)`, {
+      id: ctx.job.id,
+      proposed: ScheduleStatus.PROPOSED,
+      start: ctx.job.scheduledStart,
+      ok: SCHEDULABLE,
+    })
+    .andWhere(`"scheduleProposedByUserId" IS NOT DISTINCT FROM :by`, { by: ctx.job.scheduleProposedByUserId ?? null })
+    .execute();
   if (!updated.affected) throw conflict("The proposal changed; reload and try again", "STALE_PROPOSAL");
   const notifyId = otherParty(ctx, req.user!.id);
   if (notifyId) {

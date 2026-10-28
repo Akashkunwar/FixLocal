@@ -14,13 +14,22 @@ export async function listNotifications(req: Request, res: Response) {
     .createQueryBuilder("n")
     .where("n.userId = :userId", { userId: req.user!.id })
     .orderBy("n.createdAt", "DESC")
+    .addOrderBy("n.id", "DESC")
     .take(limit ?? 30);
   if (unread) qb.andWhere("n.read = false");
-  if (before) qb.andWhere("n.createdAt < :before", { before });
+  if (typeof before === "string") {
+    qb.andWhere(
+      `(n."createdAt", n."id") < (SELECT c."createdAt", c."id" FROM "notifications" c WHERE c."id" = :before)`,
+      { before }
+    );
+  } else if (before) {
+    qb.andWhere("n.createdAt < :before", { before });
+  }
   if (types?.length) qb.andWhere("n.type IN (:...types)", { types });
   const [rows, total] = await qb.getManyAndCount();
   const unreadCount = await repo().count({ where: { userId: req.user!.id, read: false } });
-  return res.json({ notifications: rows.map(toNotification), unreadCount, total });
+  const nextBefore = rows.length === (limit ?? 30) ? rows[rows.length - 1].id : null;
+  return res.json({ notifications: rows.map(toNotification), unreadCount, total, nextBefore });
 }
 
 export async function markNotificationRead(req: Request, res: Response) {

@@ -26,6 +26,14 @@ export async function blockUser(req: Request, res: Response) {
   if (!target) throw notFound("User not found");
   if (target.role === UserRole.ADMIN) throw badRequest("Support staff can't be blocked; report the message instead", "INVALID_TARGET");
   await blocks().createQueryBuilder().insert().into(UserBlock).values({ blockerId: req.user!.id, blockedId: targetId }).orIgnore().execute();
+  // A pro's live bids on the other person's open jobs end with the block (they could never be hired).
+  await AppDataSource.query(
+    `UPDATE "bids" b SET "status" = 'withdrawn'
+       FROM "jobs" j
+      WHERE j."id" = b."jobId" AND b."status" = 'active' AND j."status" IN ('open', 'bidding_closed')
+        AND ((b."tradespersonId" = $1 AND j."homeownerId" = $2) OR (b."tradespersonId" = $2 AND j."homeownerId" = $1))`,
+    [req.user!.id, targetId]
+  );
   return res.status(201).json({ blocked: true, userId: targetId });
 }
 

@@ -14,6 +14,8 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["src/**/*.test.{ts,tsx}", "src/test/**", "src/main.tsx", "src/vite-env.d.ts"],
+      // A little under today's numbers (lines 62.9, statements 59.2, functions 47.8, branches 48.2).
+      thresholds: { lines: 58, statements: 55, functions: 44, branches: 44 },
     },
   },
 });

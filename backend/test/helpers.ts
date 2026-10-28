@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import http from "http";
 import bcrypt from "bcryptjs";
 import request from "supertest";
@@ -9,7 +8,6 @@ import { AppDataSource } from "../src/data-source";
 import { User, UserRole } from "../src/entities/User";
 import { TradespersonProfile, VerificationStatus } from "../src/entities/TradespersonProfile";
 import { signAccessToken } from "../src/auth/tokens";
-import { invalidateAuthState } from "../src/auth/authState";
 
 export const PASSWORD = "Correct-Horse-42";
 // Hash once (cost 4) so factories stay fast; login still exercises bcrypt.compare.
@@ -114,14 +112,6 @@ export const client = (opts?: Parameters<typeof makeUser>[1]) => makeUser(UserRo
 export const pro = (opts?: Parameters<typeof makeUser>[1]) => makeUser(UserRole.TRADESPERSON, opts);
 export const admin = (opts?: Parameters<typeof makeUser>[1]) => makeUser(UserRole.ADMIN, opts);
 
-/** Re-issue a token after the user's tokenVersion changed. */
-export async function refreshToken(u: TestUser): Promise<TestUser> {
-  const user = await AppDataSource.getRepository(User).findOneOrFail({ where: { id: u.user.id } });
-  await invalidateAuthState(user.id);
-  const token = signAccessToken(user);
-  return { user, token, auth: { Authorization: `Bearer ${token}` } };
-}
-
 export const jobInput = (overrides: Record<string, unknown> = {}) => ({
   title: "Fix leaking kitchen tap",
   description: "Tap drips all night; washer probably worn out.",
@@ -199,8 +189,6 @@ export async function png(): Promise<Buffer> {
 }
 
 export const pdf = () => Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n");
-
-export const randomId = () => crypto.randomUUID();
 
 export async function uploadedFileCount(): Promise<number> {
   const fs = await import("fs");

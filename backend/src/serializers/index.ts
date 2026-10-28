@@ -59,17 +59,6 @@ export function toSelfUser(user: User) {
   };
 }
 
-/** Safe to show to any signed-in user. */
-export function toPublicUser(user: Pick<User, "id" | "name" | "role" | "avatarUrl"> | null | undefined) {
-  if (!user) return null;
-  return {
-    id: user.id,
-    name: user.name ?? null,
-    role: user.role,
-    avatarUrl: publicUrl(user.avatarUrl),
-  };
-}
-
 /** Name + contact, only between the client and the hired professional (or admins). */
 export function toContactUser(user: Pick<User, "id" | "name" | "email" | "phone" | "role"> | null | undefined) {
   if (!user) return null;
@@ -281,6 +270,12 @@ export function toReview(r: Review) {
     reviewerName: r.reviewer?.name || (r.direction === "client_to_pro" ? "Client" : "Professional"),
     jobTitle: r.job?.title,
   };
+}
+
+/** Reviews on a public profile: no reviewer id and no job title (those identify the client). */
+export function toPublicReview(r: Review) {
+  const { reviewerId: _reviewer, jobTitle: _title, ...rest } = toReview(r);
+  return rest;
 }
 
 export function toNotification(n: Notification) {

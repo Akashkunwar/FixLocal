@@ -25,6 +25,10 @@ export enum BidStatus {
 @Index(["tradespersonId"])
 @Index("UQ_bid_job_pro", ["jobId", "tradespersonId"], { unique: true })
 @Index("UQ_bid_one_accepted_per_job", ["jobId"], { unique: true, where: `"status" = 'accepted'` })
+@Index("IDX_bids_quote_view_nudge", ["quoteViewedAt"], {
+  where: `"status" = 'active' AND "quoteViewedNudgeSentAt" IS NULL`,
+})
+@Index(["tradespersonId", "createdAt"])
 @Check("CHK_bid_amount", `"amount" > 0`)
 @Check("CHK_bid_quote_amount", `"quoteAmount" IS NULL OR "quoteAmount" > 0`)
 @Check("CHK_bid_eta", `"etaDays" IS NULL OR ("etaDays" >= 0 AND "etaDays" <= 365)`)
