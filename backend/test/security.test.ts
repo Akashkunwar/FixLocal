@@ -1,3 +1,4 @@
+import { consoleMailer } from "../src/services/mailer";
 import { describe, expect, it, vi } from "vitest";
 import { api, client, PASSWORD, uniqueEmail } from "./helpers";
 import { overrideConfig } from "../src/config";
@@ -57,20 +58,21 @@ describe("rate limiting (H-7)", () => {
     }
   });
 
-  it("caps the mail any one address can be sent, whoever asks", async () => {
+  it("caps the mail one client can send to one address, quietly", async () => {
     overrideConfig({ rateLimitEnabled: true });
     await flushTestCache();
     try {
       const email = uniqueEmail("bomb");
       const statuses: number[] = [];
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 7; i++) {
         const res = await api()
           .post("/api/auth/register")
           .send({ email, password: "Long-enough-pass-9", role: "HOMEOWNER", acceptTerms: true });
         statuses.push(res.status);
       }
-      expect(statuses.slice(0, 5)).toEqual([202, 202, 202, 202, 202]);
-      expect(statuses[5]).toBe(429);
+      // Same answer every time (no 429 that would reveal or block anything), but only 5 mails go out.
+      expect(statuses).toEqual([202, 202, 202, 202, 202, 202, 202]);
+      expect(consoleMailer.outbox.filter((m) => m.to === email)).toHaveLength(5);
     } finally {
       overrideConfig({ rateLimitEnabled: false });
       await flushTestCache();

@@ -2,16 +2,27 @@ name: CI
 
 on:
   push:
-    branches: [main, audit-fixes]
+    branches: [main]
   pull_request:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only token: CI never needs to write to the repository.
+permissions:
+  contents: read
+
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # Redis is optional in production (single instance): run the whole suite without it too.
+        redis: ["true", "false"]
+    name: backend (redis ${{ matrix.redis }})
     defaults:
       run:
         working-directory: backend
@@ -43,19 +54,32 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm run lint
+        if: matrix.redis == 'true'
       - run: npm run typecheck
+        if: matrix.redis == 'true'
       - run: npm run build
+        if: matrix.redis == 'true'
       - run: npm run test:coverage
+        if: matrix.redis == 'true'
         env:
           # Shared runners plus coverage instrumentation are ~3x slower than a laptop.
           PERF_BUDGET_SCALE: "3"
           S3_TEST_ENDPOINT: http://localhost:5000
+      - run: npm test
+        if: matrix.redis == 'false'
+        env:
+          TEST_REDIS_ENABLED: "false"
+          PERF_BUDGET_SCALE: "3"
+          S3_TEST_ENDPOINT: http://localhost:5000
       # Date logic must not depend on the server's own time zone (M-8).
       - run: npm run test:tz
+        if: matrix.redis == 'true'
       - run: npm audit --omit=dev --audit-level=high
+        if: matrix.redis == 'true'
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
@@ -73,9 +97,16 @@ jobs:
       - run: npm run build
       - run: npm run size
       - run: npm audit --omit=dev --audit-level=high
+      # The production nginx config against a stub API: pro-page meta fallback, gzip, headers, 404s.
+      - name: nginx config behaviour
+        working-directory: .
+        run: |
+          command -v nginx || (sudo apt-get update -q && sudo apt-get install -y -q nginx)
+          PATH="$PATH:/usr/sbin" scripts/check-nginx.sh
 
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [backend, frontend]
     services:
       postgres:
@@ -118,8 +149,39 @@ jobs:
             frontend/test-results
           retention-days: 7
 
+  # Builds the real images and starts the documented `docker compose up` stack, then checks it answers.
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v7
+      - name: .env from the example, with throwaway secrets
+        run: |
+          cp .env.example .env
+          sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -hex 32)|; s|^FILE_URL_SECRET=.*|FILE_URL_SECRET=$(openssl rand -hex 32)|" .env
+      - run: docker compose up -d --build --wait --wait-timeout 300
+      - name: The stack answers
+        run: |
+          set -e
+          curl -fsS http://127.0.0.1:8080/health | grep -q '"db":"up"'
+          curl -fsS http://127.0.0.1:8080/ | grep -q 'id="root"'
+          curl -fsS -o /dev/null -H 'Accept-Encoding: gzip' -w '%{http_code}\n' http://127.0.0.1:8080/
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/auth/register \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"smoke@example.com","password":"Smoke-test-pass-123","name":"Smoke","role":"HOMEOWNER","acceptTerms":true}')
+          echo "register: $code"; [ "$code" = 202 ] || [ "$code" = 201 ]
+          curl -fsS http://127.0.0.1:8080/pros/00000000-0000-4000-8000-000000000000 | grep -q '<title>'
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/missing.js)" = 404 ]
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+      - if: always()
+        run: docker compose down -v
+
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [backend, frontend]
     steps:
       - uses: actions/checkout@v7

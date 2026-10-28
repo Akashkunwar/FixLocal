@@ -8,17 +8,18 @@ A runbook for a single-server deployment with `docker-compose.yml`. Managed Post
    - `JWT_SECRET` and `FILE_URL_SECRET`: 48 random bytes each (`openssl rand -base64 48`).
    - `DB_PASSWORD`.
    - `APP_URL=https://your-domain` and `COOKIE_SECURE=true`.
-   - `MAIL_PROVIDER=smtp`, `SMTP_URL=smtps://user:pass@smtp.provider:465` and `MAIL_FROM`.
-   - `VITE_SITE_URL`, `VITE_LEGAL_ENTITY`, `VITE_SUPPORT_EMAIL`, `VITE_GRIEVANCE_OFFICER` and `VITE_GRIEVANCE_EMAIL`.
+   - `MAIL_PROVIDER=smtp`, `SMTP_URL=smtps://user:pass@smtp.provider:465`, `MAIL_FROM` and `ALLOW_CONSOLE_MAIL=false` (the example file prints mail to the log so a local run works).
+   - `TRUST_PROXY=2` when an HTTPS proxy or load balancer sits in front of the `web` container (that proxy plus the bundled nginx). Leave it at `1` without one. A wrong number either makes every visitor share one rate limit or lets visitors fake their IP.
+   - `VITE_SITE_URL` (defaults to `APP_URL`), `VITE_LEGAL_ENTITY`, `VITE_SUPPORT_EMAIL`, `VITE_GRIEVANCE_OFFICER` and `VITE_GRIEVANCE_EMAIL`.
    - `VITE_MAP_TILE_URL` and `VITE_MAP_ATTRIBUTION` for your tile provider.
    - Optionally, `ERROR_WEBHOOK_URL` (a Slack or Discord incoming webhook, or a Sentry relay).
    - Optionally, `STORAGE_DRIVER=s3` with `S3_BUCKET` (plus `S3_ENDPOINT` and keys for R2/B2/MinIO) to keep uploads in a bucket instead of the `uploads` volume. Required before running more than one API instance. Keep the bucket private: files are always served through the API, which checks access.
-2. Put HTTPS in front of the `web` container (Caddy, nginx or a cloud load balancer) and forward to port 8080.
+2. Put HTTPS in front of the `web` container (Caddy, nginx or a cloud load balancer) and forward to port 8080. The port listens on 127.0.0.1 only (`WEB_BIND`), so run the proxy on the same machine or set `WEB_BIND=0.0.0.0`. Pass `X-Forwarded-Proto` and `X-Forwarded-For` from the proxy.
 3. Start the stack:
 
    ```bash
    docker compose up -d --build
-   docker compose --profile backup up -d backup   # nightly database dumps
+   docker compose --profile backup up -d backup   # nightly database + uploads backups
    ```
 
 4. The API applies pending migrations on start (`MIGRATIONS_RUN=true`). It refuses to start, and logs exactly why, if a secret is weak, email isn't configured, or https is used without secure cookies.
@@ -42,14 +43,16 @@ Migrations run automatically. To roll back code, check out the previous tag and 
 
 ## Backups
 
-The `backup` service writes `fixlocal-<UTC time>.dump` (pg_dump custom format) to the `db_backups` volume every 24 hours and keeps 14 days (`BACKUP_KEEP_DAYS`). Copy the files somewhere else as well, for example:
+Every 24 hours the `backup` service writes `fixlocal-<UTC time>.dump` (pg_dump custom format) and `uploads-<UTC time>.tar.gz` (the uploads volume) to `BACKUP_PATH`. That is the `db_backups` volume by default, or an absolute host path such as a mounted network disk. It keeps `BACKUP_KEEP_DAYS` days (14), cleans up half-written `.tmp` files, and posts to `ERROR_WEBHOOK_URL` when a dump or archive fails.
+
+A backup on the same disk as the database is lost with it. Point `BACKUP_PATH` at another disk, or copy the files off the host, for example:
 
 ```bash
-docker run --rm -v fixlocal_db_backups:/b -v "$PWD":/out alpine sh -c 'cp /b/*.dump /out/'
+docker run --rm -v fixlocal_db_backups:/b -v "$PWD":/out alpine sh -c 'cp /b/*.dump /b/*.tar.gz /out/'
 # then sync ./ to S3 / another server
 ```
 
-Uploaded files live in the `uploads` volume; back that up too.
+With `STORAGE_DRIVER=s3` the uploads archive is empty; use the bucket's own versioning or replication instead.
 
 ### Restore
 

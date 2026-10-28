@@ -12,7 +12,8 @@ import { Notification, NotificationType } from "../entities/Notification";
 import { UploadKind } from "../entities/Upload";
 import { invalidateOpenJobsCache } from "../utils/cache";
 import { createNotification, createNotifications } from "../utils/notifications";
-import { revokeThreadStreams } from "../utils/sse";
+import { revokeOneThread, revokeThreadStreams } from "../utils/sse";
+import { assertNoContactInfo } from "../domain/contactInfo";
 import { haversineKm } from "../utils/geo";
 import { boostedScore, scoreProForJob, type ScoreablePro } from "../utils/matchScore";
 import { computeHeatBoost, getBestValueBlend, getHeatWeight, getMatchWeights } from "../utils/matchWeights";
@@ -24,6 +25,7 @@ import { transitionJob } from "../domain/jobStateMachine";
 import { mean, median, rate } from "../domain/analytics";
 import { roundCoord, toBid, toJob } from "../serializers";
 import {
+  assertJobAccess,
   assertOwner,
   isAdmin,
   isOwner,
@@ -36,6 +38,7 @@ import { filesOf } from "../middleware/upload";
 import { discardFiles, fileRef, publicUrl, publicUrls, storeUploads } from "../services/files";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { logger } from "../logger";
+import { roundRupees } from "../domain/money";
 
 const bidRepo = () => AppDataSource.getRepository(Bid);
 
@@ -91,6 +94,7 @@ export async function placeBid(req: Request, res: Response) {
     throw forbidden("You can't bid on this job", "BLOCKED");
   }
   const b = req.valid.body;
+  assertNoContactInfo(b.message, b.quoteNotes);
   if (b.proposedVisitStart && b.proposedVisitEnd && b.proposedVisitEnd <= b.proposedVisitStart) {
     throw badRequest("Visit end must be after the start", "VALIDATION");
   }
@@ -259,12 +263,15 @@ export async function listBids(req: Request, res: Response) {
 
   if (v.role === UserRole.TRADESPERSON) {
     const mine = await bidRepo().find({ where: { jobId: job.id, tradespersonId: v.id } });
-    if (!mine.length && ctx.acceptedProId !== v.id) throw forbidden("You don't have access to these bids");
+    // No bid yet: an empty list for a pro who may see the job (so the page can offer "place a bid"),
+    // the usual 403 for one who may not.
+    if (!mine.length && ctx.acceptedProId !== v.id) await assertJobAccess(ctx, v);
+    const me = mine.length ? await AppDataSource.getRepository(User).findOne({ where: { id: v.id }, select: { id: true, quoteViewNudgeHours: true } }) : null;
     const otherActiveBidCount = await bidRepo().count({
       where: { jobId: job.id, status: BidStatus.ACTIVE, tradespersonId: Not(v.id) },
     });
     return res.json({
-      bids: mine.map((b) => ({ ...toBid(b), viewedNoReply: viewedNoReplyState(b) })),
+      bids: mine.map((b) => ({ ...toBid(b), viewedNoReply: viewedNoReplyState(b, me?.quoteViewNudgeHours) })),
       otherActiveBidCount,
     });
   }
@@ -353,7 +360,8 @@ export async function withdrawBid(req: Request, res: Response) {
     const res2 = await m.update(Bid, { id: bid.id, status: BidStatus.ACTIVE }, { status: BidStatus.WITHDRAWN });
     if (!res2.affected) throw conflict("Only active bids can be withdrawn", "BID_NOT_ACTIVE");
   });
-  await revokeThreadStreams(bid.jobId, null).catch(() => undefined);
+  // Only this pro's thread closes; the client's and other bidders' chats stay open.
+  await revokeOneThread(bid.jobId, bid.tradespersonId).catch(() => undefined);
   const fresh = await loadBid(bid.id);
   return res.json({ bid: toBid(fresh) });
 }
@@ -383,6 +391,9 @@ export async function acceptBid(req: Request, res: Response) {
         source: escrow.source,
       });
     }
+    if (await isBlockedBetween(ctx.job.homeownerId, current.tradespersonId)) {
+      throw forbidden("You can't hire this professional", "BLOCKED");
+    }
     const pro = await m.findOne(User, { where: { id: current.tradespersonId } });
     const profile = await m.findOne(TradespersonProfile, { where: { userId: current.tradespersonId } });
     if (!pro || pro.isSuspended || pro.deletedAt || profile?.verificationStatus !== VerificationStatus.VERIFIED) {
@@ -406,8 +417,8 @@ export async function acceptBid(req: Request, res: Response) {
       patch.scheduleProposedByUserId = current.tradespersonId;
     }
     await transitionJob(m, ctx.job.id, "award", patch);
-    await createEscrow(m, ctx.job, current.tradespersonId, escrow.amount, req.user!.id);
     const creditUsed = await applyClientCredit(m, ctx.job.homeownerId, ctx.job.id, escrow.amount);
+    await createEscrow(m, ctx.job, current.tradespersonId, escrow.amount, req.user!.id, creditUsed);
     return { accepted: current, escrow, creditUsed, rejected: others.map((o) => o.tradespersonId) };
   });
 
@@ -458,7 +469,7 @@ export async function acceptBid(req: Request, res: Response) {
           ? {
               holdAmount: outcome.escrow.amount,
               counterSuggested,
-              delta: Math.round((outcome.escrow.amount - (counterSuggested || 0)) * 100) / 100,
+              delta: roundRupees(outcome.escrow.amount - (counterSuggested || 0)),
               note: "The counter was addressed with a different final amount — escrow holds the accepted amount.",
             }
           : null,
@@ -479,6 +490,7 @@ export async function updateBidQuote(req: Request, res: Response) {
   const { bid, ctx } = await openBidForPro(req);
   const b = req.valid.body;
   const file = filesOf(req, "quoteAttachment")[0];
+  if (ctx.acceptedProId !== bid.tradespersonId) assertNoContactInfo(b.quoteNotes);
   if (b.quoteAmount === undefined && b.quoteNotes === undefined && !file && !b.clearQuoteAttachment) {
     throw badRequest("Provide quoteAmount, quoteNotes and/or quoteAttachment", "VALIDATION");
   }
@@ -533,7 +545,7 @@ export async function updateBidQuote(req: Request, res: Response) {
   if (!saved.changed) return res.json({ bid: toBid(saved.bid), message: "No quote changes" });
 
   const amountDelta =
-    nextAmount != null && prevAmount != null ? Math.round((nextAmount - prevAmount) * 100) / 100 : nextAmount;
+    nextAmount != null && prevAmount != null ? roundRupees(nextAmount - prevAmount) : nextAmount;
   const parts: string[] = [];
   if (amountDelta != null && prevAmount != null && amountDelta !== 0) {
     parts.push(`amount ${amountDelta > 0 ? "+" : "−"}₹${Math.abs(amountDelta).toFixed(0)}`);
@@ -581,14 +593,23 @@ export async function requestQuoteRevise(req: Request, res: Response) {
   if (bid.status !== BidStatus.ACTIVE) throw conflict("Only active bids can receive a counter-offer", "BID_NOT_ACTIVE");
   if (ctx.job.status !== JobStatus.OPEN) throw conflict("Counter-offers are only possible while the job is open", "JOB_NOT_OPEN");
   const { suggestedAmount, notes } = req.valid.body;
-  archiveCounterOffer(bid);
-  bid.counterOffer = {
-    suggestedAmount,
-    notes: notes || null,
-    requestedAt: new Date().toISOString(),
-    status: "pending",
-  };
-  await bidRepo().save(bid);
+  assertNoContactInfo(notes);
+  // Re-check both statuses under the row locks: the bid may have been withdrawn or the job awarded meanwhile.
+  await AppDataSource.transaction(async (m) => {
+    const [job] = await m.query(`SELECT "status" FROM "jobs" WHERE "id" = $1 FOR UPDATE`, [bid.jobId]);
+    if (job?.status !== JobStatus.OPEN) throw conflict("Counter-offers are only possible while the job is open", "JOB_NOT_OPEN");
+    const locked = await m.findOne(Bid, { where: { id: bid.id }, lock: { mode: "pessimistic_write" } });
+    if (!locked || locked.status !== BidStatus.ACTIVE) throw conflict("Only active bids can receive a counter-offer", "BID_NOT_ACTIVE");
+    Object.assign(bid, locked);
+    archiveCounterOffer(bid);
+    bid.counterOffer = {
+      suggestedAmount,
+      notes: notes || null,
+      requestedAt: new Date().toISOString(),
+      status: "pending",
+    };
+    await m.save(bid);
+  });
   const current = bid.quoteAmount != null ? `current quote ₹${Number(bid.quoteAmount).toFixed(0)}` : `current bid ₹${Number(bid.amount).toFixed(0)}`;
   await createNotification({
     userId: bid.tradespersonId,
@@ -689,7 +710,7 @@ export async function escrowWhatIf(req: Request, res: Response) {
       ? {
           suggestedAmount: Number(counter.suggestedAmount),
           status: counter.status,
-          deltaVsAmount: Math.round((preview.amount - Number(counter.suggestedAmount)) * 100) / 100,
+          deltaVsAmount: roundRupees(preview.amount - Number(counter.suggestedAmount)),
         }
       : null,
   });

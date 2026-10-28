@@ -20,6 +20,7 @@ import { flushOutbound } from "../utils/outbound";
 import { JobAlertDigest } from "../entities/JobAlertDigest";
 import { HttpError } from "../http/errors";
 import { expireOpenJobs, warnExpiringJobs } from "./jobExpiry";
+import { quoteViewNudgeHours } from "../utils/availabilityHeat";
 
 const LOCK_KEY = 7_140_291;
 
@@ -34,6 +35,20 @@ export async function autoConfirmJobs(now = new Date()) {
   for (const job of due) {
     try {
       const result = await AppDataSource.transaction(async (m) => {
+        // Re-check under the row lock: a dispute ruled "no action" may have restarted the window
+        // (or the client confirmed) after the list above was read.
+        const [locked]: { status: JobStatus; pendingConfirmationAt: Date | null }[] = await m.query(
+          `SELECT "status", "pendingConfirmationAt" FROM "jobs" WHERE "id" = $1 FOR UPDATE`,
+          [job.id]
+        );
+        if (
+          !locked ||
+          locked.status !== JobStatus.PENDING_CONFIRMATION ||
+          !locked.pendingConfirmationAt ||
+          new Date(locked.pendingConfirmationAt) >= cutoff
+        ) {
+          return null;
+        }
         await transitionJob(m, job.id, "auto_confirm", { completedAt: now });
         const fresh = await m.findOneOrFail(Job, { where: { id: job.id } });
         const released = await releaseRemaining(m, fresh, null);
@@ -52,6 +67,7 @@ export async function autoConfirmJobs(now = new Date()) {
         );
         return { ...released, rewards };
       });
+      if (!result) continue;
       if (result.rewards.length) await createNotifications(result.rewards);
       confirmed += 1;
       const accepted = job.acceptedBidId ? await AppDataSource.getRepository(Bid).findOne({ where: { id: job.acceptedBidId } }) : null;
@@ -90,6 +106,8 @@ export async function autoConfirmJobs(now = new Date()) {
 
 /** One-time "client viewed your revised quote but you haven't followed up" nudge. */
 export async function sendQuoteViewNudges(now = new Date()) {
+  // Only rows already due, oldest view first: rows that aren't due yet (or were revised since the
+  // view) can't fill the batch and starve the rest. The pro's own threshold (1-168 h) applies.
   const bids = await AppDataSource.getRepository(Bid)
     .createQueryBuilder("b")
     .innerJoinAndSelect("b.job", "job")
@@ -97,6 +115,13 @@ export async function sendQuoteViewNudges(now = new Date()) {
     .where("b.status = :active", { active: BidStatus.ACTIVE })
     .andWhere("job.status = :open", { open: JobStatus.OPEN })
     .andWhere("b.quoteViewedAt IS NOT NULL AND b.quoteViewedNudgeSentAt IS NULL")
+    .andWhere(`jsonb_array_length(COALESCE(b."quoteHistory", '[]'::jsonb)) >= 1`)
+    .andWhere(`jsonb_array_length(COALESCE(b."quoteHistory", '[]'::jsonb)) <= COALESCE(b."quoteViewedRevisionCount", 0)`)
+    .andWhere(
+      `b."quoteViewedAt" <= :now::timestamptz - make_interval(hours => CASE WHEN pro."quoteViewNudgeHours" BETWEEN 1 AND 168 THEN pro."quoteViewNudgeHours" ELSE :fallback END)`,
+      { now, fallback: Math.round(quoteViewNudgeHours()) }
+    )
+    .orderBy("b.quoteViewedAt", "ASC")
     .take(200)
     .getMany();
   let sent = 0;
@@ -144,14 +169,25 @@ export async function runWorkersOnce(now = new Date()) {
     const [{ locked }] = await runner.query(`SELECT pg_try_advisory_lock($1) AS locked`, [LOCK_KEY]);
     if (!locked) return { skipped: true };
     try {
-      const autoConfirmed = await autoConfirmJobs(now);
-      const nudges = await sendQuoteViewNudges(now);
-      const digests = await sendJobAlertDigests(now);
-      const expiryWarnings = await warnExpiringJobs(now);
-      const expired = await expireOpenJobs(now);
-      const texts = await flushOutbound(now);
-      await cleanupExpired(now);
-      return { skipped: false, autoConfirmed, nudges, digests, expiryWarnings, expired, texts };
+      // Each step on its own: one failing (a bad row, a provider outage) must not skip the others.
+      const failed: string[] = [];
+      const step = async <T>(name: string, run: () => Promise<T>, fallback: T): Promise<T> => {
+        try {
+          return await run();
+        } catch (err) {
+          failed.push(name);
+          logger.error({ err, step: name }, "background worker step failed");
+          return fallback;
+        }
+      };
+      const autoConfirmed = await step("autoConfirm", () => autoConfirmJobs(now), 0);
+      const nudges = await step("quoteViewNudges", () => sendQuoteViewNudges(now), 0);
+      const digests = await step("jobAlertDigests", () => sendJobAlertDigests(now), 0);
+      const expiryWarnings = await step("expiryWarnings", () => warnExpiringJobs(now), 0);
+      const expired = await step("expireJobs", () => expireOpenJobs(now), 0);
+      const texts = await step("texts", () => flushOutbound(now), 0);
+      await step("cleanup", () => cleanupExpired(now), undefined);
+      return { skipped: false, autoConfirmed, nudges, digests, expiryWarnings, expired, texts, failed };
     } finally {
       await runner.query(`SELECT pg_advisory_unlock($1)`, [LOCK_KEY]);
     }
@@ -161,17 +197,26 @@ export async function runWorkersOnce(now = new Date()) {
 }
 
 let timer: NodeJS.Timeout | null = null;
+let running: Promise<unknown> | null = null;
 
 export function startWorkers() {
   if (!config().workersEnabled || timer) return;
-  const tick = () =>
-    runWorkersOnce().catch((err) => logger.error({ err }, "background worker failed"));
+  const tick = () => {
+    if (running) return; // the previous run is still going
+    running = runWorkersOnce()
+      .catch((err) => logger.error({ err }, "background worker failed"))
+      .finally(() => {
+        running = null;
+      });
+  };
   timer = setInterval(tick, config().workerIntervalSec * 1000);
   timer.unref();
-  void tick();
+  tick();
 }
 
-export function stopWorkers() {
+/** Stop scheduling and wait for a run in progress, so shutdown doesn't close the database under it. */
+export async function stopWorkers() {
   if (timer) clearInterval(timer);
   timer = null;
+  if (running) await running;
 }

@@ -116,7 +116,8 @@ describe("listing and viewing jobs", () => {
     await createJob(owner, { title: "Cache check residential", siteType: "residential" });
     const all = await api().get("/api/jobs?q=Cache%20check").set(p.auth);
     const again = await api().get("/api/jobs?q=Cache%20check").set(p.auth);
-    expect(again.body.cached).toBe(true);
+    // The browse cache lives in Redis; without it every read goes to the database.
+    expect(again.body.cached).toBe(process.env.REDIS_ENABLED !== "false");
     expect(all.body.jobs).toHaveLength(2);
     const office = await api().get("/api/jobs?q=Cache%20check&siteType=office").set(p.auth);
     expect(office.body.jobs).toHaveLength(1);

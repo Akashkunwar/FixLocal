@@ -4,27 +4,96 @@ import { z } from "zod";
 
 const WEAK_SECRETS = new Set(["change-me-in-production", "secret", "changeme", "jwt-secret"]);
 
+const TRUE_WORDS = new Set(["true", "1", "yes", "on"]);
+const FALSE_WORDS = new Set(["false", "0", "no", "off"]);
+
+/** true/1/yes/on or false/0/no/off, any case. Anything else is an error rather than a silent false. */
 const bool = (fallback: boolean) =>
   z
     .string()
     .optional()
-    .transform((v) => (v === undefined || v === "" ? fallback : v === "true" || v === "1"));
+    .transform((v, ctx) => {
+      const s = (v ?? "").trim().toLowerCase();
+      if (s === "") return fallback;
+      if (TRUE_WORDS.has(s)) return true;
+      if (FALSE_WORDS.has(s)) return false;
+      ctx.addIssue({ code: "custom", message: `expected true or false, got "${v}"` });
+      return z.NEVER;
+    });
 
-const int = (fallback: number) =>
+const int = (fallback: number, min = 0, max = Number.MAX_SAFE_INTEGER) =>
   z
     .string()
     .optional()
-    .transform((v) => (v === undefined || v === "" ? fallback : Number(v)))
-    .pipe(z.number().int().nonnegative());
+    .transform((v) => (v === undefined || v.trim() === "" ? fallback : Number(v)))
+    .pipe(z.number().int().min(min).max(max));
+
+/**
+ * How many proxies sit in front of the API: 0 (none), or the hop count (nginx alone = 1; an outer
+ * TLS proxy / load balancer in front of nginx = 2). "true" means 1 and "false" 0, as before.
+ */
+const hops = () =>
+  z
+    .string()
+    .optional()
+    .transform((v, ctx) => {
+      const s = (v ?? "").trim().toLowerCase();
+      if (s === "" || FALSE_WORDS.has(s)) return 0;
+      if (s === "true" || s === "yes" || s === "on") return 1;
+      const n = Number(s);
+      if (Number.isInteger(n) && n >= 0 && n <= 10) return n;
+      ctx.addIssue({ code: "custom", message: `expected a proxy hop count (0-10) or true/false, got "${v}"` });
+      return z.NEVER;
+    });
+
+const DB_DEFAULTS = { DB_HOST: "localhost", DB_PORT: "5432", DB_USERNAME: "fixlocal", DB_PASSWORD: "fixlocal", DB_NAME: "fixlocal" };
+
+const dbSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  DB_HOST: z.string().optional(),
+  DB_PORT: int(5432, 1, 65535),
+  DB_USERNAME: z.string().optional(),
+  DB_PASSWORD: z.string().optional(),
+  DB_NAME: z.string().optional(),
+  DB_LOGGING: bool(false),
+  MIGRATIONS_RUN: bool(false),
+});
+
+export type DbConfig = { host: string; port: number; username: string; password: string; database: string; logging: boolean; migrationsRun: boolean };
+
+/**
+ * Database settings, validated like the rest of the config (kept separate because the TypeORM CLI
+ * loads the data source without the API's other settings). In production every DB_* must be set.
+ */
+export function loadDbConfig(source: NodeJS.ProcessEnv = process.env): DbConfig {
+  const parsed = dbSchema.safeParse(source);
+  const issues = parsed.success ? [] : parsed.error.issues.map((i) => `  - ${i.path.join(".")}: ${i.message}`);
+  if (parsed.success && parsed.data.NODE_ENV === "production") {
+    for (const key of ["DB_HOST", "DB_USERNAME", "DB_PASSWORD", "DB_NAME"] as const) {
+      if (!parsed.data[key]) issues.push(`  - ${key}: required in production`);
+    }
+  }
+  if (!parsed.success || issues.length) throw new Error(`Invalid database configuration:\n${issues.join("\n")}`);
+  const e = parsed.data;
+  return {
+    host: e.DB_HOST || DB_DEFAULTS.DB_HOST,
+    port: e.DB_PORT,
+    username: e.DB_USERNAME || DB_DEFAULTS.DB_USERNAME,
+    password: e.DB_PASSWORD || DB_DEFAULTS.DB_PASSWORD,
+    database: e.DB_NAME || DB_DEFAULTS.DB_NAME,
+    logging: e.DB_LOGGING,
+    migrationsRun: e.MIGRATIONS_RUN,
+  };
+}
 
 const schema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-    PORT: int(3001),
+    PORT: int(3001, 1, 65535),
     JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
     FILE_URL_SECRET: z.string().optional(),
-    ACCESS_TOKEN_TTL_SEC: int(15 * 60),
-    REFRESH_TOKEN_TTL_DAYS: int(30),
+    ACCESS_TOKEN_TTL_SEC: int(15 * 60, 10),
+    REFRESH_TOKEN_TTL_DAYS: int(30, 1),
     REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
     REDIS_ENABLED: bool(true),
     UPLOADS_DIR: z.string().default("uploads"),
@@ -40,12 +109,13 @@ const schema = z
     CORS_ORIGINS: z.string().default("http://localhost:5173,http://127.0.0.1:5173"),
     COOKIE_SECURE: bool(false),
     COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
-    APP_URL: z.string().default("http://localhost:5173"),
+    APP_URL: z.string().url("APP_URL must be a full URL such as https://fixlocal.in").default("http://localhost:5173"),
     AUTO_CONFIRM_DAYS: int(3),
     JOB_EXPIRY_DAYS: int(30),
     WORKERS_ENABLED: bool(true),
-    WORKER_INTERVAL_SEC: int(60),
-    TRUST_PROXY: bool(false),
+    // At least 5 seconds: 0 would spin the workers in a hot loop.
+    WORKER_INTERVAL_SEC: int(60, 5),
+    TRUST_PROXY: hops(),
     RATE_LIMIT_ENABLED: bool(true),
     SEED_RESET: bool(false),
     MAIL_PROVIDER: z.enum(["console", "smtp"]).default("console"),
@@ -89,6 +159,9 @@ const schema = z
         message: "WHATSAPP_DRIVER=cloud needs WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID",
       });
     }
+    if (env.COOKIE_SAMESITE === "none" && !env.COOKIE_SECURE) {
+      ctx.addIssue({ code: "custom", path: ["COOKIE_SAMESITE"], message: "COOKIE_SAMESITE=none needs COOKIE_SECURE=true (browsers drop it otherwise)" });
+    }
     if (env.MAIL_PROVIDER === "smtp" && !env.SMTP_URL) {
       ctx.addIssue({ code: "custom", path: ["SMTP_URL"], message: "SMTP_URL is required when MAIL_PROVIDER=smtp" });
     }
@@ -121,6 +194,8 @@ const schema = z
           path: ["FILE_URL_SECRET"],
           message: "FILE_URL_SECRET must be at least 32 characters in production",
         });
+      } else if (env.FILE_URL_SECRET === env.JWT_SECRET) {
+        ctx.addIssue({ code: "custom", path: ["FILE_URL_SECRET"], message: "FILE_URL_SECRET must differ from JWT_SECRET" });
       }
     }
   });
@@ -156,7 +231,8 @@ export type AppConfig = {
   jobExpiryDays: number;
   workersEnabled: boolean;
   workerIntervalSec: number;
-  trustProxy: boolean;
+  /** Proxy hops in front of the API (0 = none). Sets Express "trust proxy", so req.ip is the real client. */
+  trustProxy: number;
   rateLimitEnabled: boolean;
   seedReset: boolean;
   mailProvider: "console" | "smtp";

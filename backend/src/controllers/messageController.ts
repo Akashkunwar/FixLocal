@@ -1,3 +1,4 @@
+import { assertNoContactInfo } from "../domain/contactInfo";
 import { In } from "typeorm";
 import type { NextFunction, Request, Response } from "express";
 import { AppDataSource } from "../data-source";
@@ -52,12 +53,14 @@ export async function listThreads(req: Request, res: Response) {
   const ctx = await loadJobContext(req.valid.params.jobId);
   const v = viewer(req);
   let proIds: string[];
+  let knownBids: Map<string, Pick<Bid, "status">> | undefined;
   if (v.role === UserRole.TRADESPERSON) {
     if ((await threadAccess(ctx, v, v.id)) === "none") throw forbidden("You don't have access to this conversation");
     proIds = [v.id];
   } else if (isOwner(ctx, v) || isAdmin(v)) {
-    const bids = await AppDataSource.getRepository(Bid).find({ where: { jobId: ctx.job.id }, select: { tradespersonId: true } });
+    const bids = await AppDataSource.getRepository(Bid).find({ where: { jobId: ctx.job.id }, select: { tradespersonId: true, status: true } });
     proIds = [...new Set(bids.map((b) => b.tradespersonId))];
+    knownBids = new Map(bids.map((b) => [b.tradespersonId, b]));
   } else {
     throw forbidden("You don't have access to this job's messages");
   }
@@ -82,7 +85,7 @@ export async function listThreads(req: Request, res: Response) {
       tradespersonId: s.pro,
       name: names.get(s.pro) ?? null,
       hired: ctx.acceptedProId === s.pro,
-      access: await threadAccess(ctx, v, s.pro),
+      access: await threadAccess(ctx, v, s.pro, knownBids),
       lastMessageAt: s.last_at,
       lastMessagePreview: s.last_body ? s.last_body.slice(0, 120) : null,
       unread: isAdmin(v) ? 0 : Number(s.unread),
@@ -103,7 +106,12 @@ export async function listMessages(req: Request, res: Response) {
     .orderBy("m.createdAt", "DESC")
     .addOrderBy("m.id", "DESC")
     .take(limit + 1);
-  if (req.valid.query.before) qb.andWhere("m.createdAt < :before", { before: req.valid.query.before });
+  const before = req.valid.query.before as string | Date | undefined;
+  if (typeof before === "string") {
+    qb.andWhere(`(m."createdAt", m."id") < (SELECT c."createdAt", c."id" FROM "messages" c WHERE c."id" = :before)`, { before });
+  } else if (before) {
+    qb.andWhere("m.createdAt < :before", { before });
+  }
   const rows = await qb.getMany();
   const hasMore = rows.length > limit;
   const page = rows.slice(0, limit).reverse();
@@ -112,7 +120,8 @@ export async function listMessages(req: Request, res: Response) {
     threadTradespersonId: proId,
     canSend: access === "write",
     hasMore,
-    nextBefore: hasMore ? page[0]?.createdAt : null,
+    // The oldest message's id: pass it back as ?before= for the previous page.
+    nextBefore: hasMore ? (page[0]?.id ?? null) : null,
   });
 }
 
@@ -132,6 +141,8 @@ export async function sendMessage(req: Request, res: Response) {
   if (!b.body && !attachments.length && !hasQuote) {
     throw badRequest("Write a message, attach a file or add a quote", "EMPTY_MESSAGE");
   }
+  // Before this pro is hired, the chat is part of bidding: no phone numbers or emails yet.
+  if (ctx.acceptedProId !== proId) assertNoContactInfo(b.body, b.quoteNotes);
   let stored: string[] = [];
   const msg = await AppDataSource.transaction(async (m) => {
     const ctxFiles = { kind: UploadKind.CHAT, ownerUserId: req.user!.id, jobId: ctx.job.id, threadTradespersonId: proId, allowPdf: true };

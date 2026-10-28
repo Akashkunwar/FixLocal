@@ -150,8 +150,9 @@ test("session: expired access tokens refresh silently; logout ends the session (
   await logout(page);
   await page.goto("/client");
   await expect(page).toHaveURL(/\/login/);
+  // Logged out: no refresh cookie left, so there is nothing to refresh (204, not an error).
   const res = await page.request.post("/api/auth/refresh");
-  expect(res.status()).toBe(401);
+  expect(res.status()).toBe(204);
 });
 
 test.describe("mobile (journey 15)", () => {

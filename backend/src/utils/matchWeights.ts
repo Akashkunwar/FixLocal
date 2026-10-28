@@ -20,13 +20,24 @@ async function readConfig(key: string): Promise<Record<string, unknown> | null> 
 }
 
 async function writeConfig(key: string, value: Record<string, unknown>): Promise<void> {
-  const repo = AppDataSource.getRepository(AppConfig);
-  let row = await repo.findOne({ where: { key } });
-  if (!row) row = repo.create({ key, value });
-  else row.value = value;
-  await repo.save(row);
-  configCache.set(key, { value, at: Date.now() });
-  await redisPublish(CONFIG_CHANNEL, key);
+  await saveConfigs([{ key, value }]);
+}
+
+/** Write several config rows all-or-nothing, then refresh caches once the transaction commits. */
+export async function saveConfigs(entries: { key: string; value: Record<string, unknown> }[]): Promise<void> {
+  await AppDataSource.transaction(async (m) => {
+    const repo = m.getRepository(AppConfig);
+    for (const { key, value } of entries) {
+      let row = await repo.findOne({ where: { key }, lock: { mode: "pessimistic_write" } });
+      if (!row) row = repo.create({ key, value });
+      else row.value = value;
+      await repo.save(row);
+    }
+  });
+  for (const { key, value } of entries) {
+    configCache.set(key, { value, at: Date.now() });
+    await redisPublish(CONFIG_CHANNEL, key);
+  }
 }
 
 /** Another instance changed a config value. */

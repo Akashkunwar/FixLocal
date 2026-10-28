@@ -25,7 +25,7 @@ export function robotsTxt(base: string): string {
 }
 
 /** Where nginx asks the API for a pro's <head> tags (see nginx.conf, location ^/pros/). */
-export const PRO_HEAD_INCLUDE = '<!--# include virtual="/api/seo/pros/$pro_id/head" -->';
+export const PRO_HEAD_INCLUDE = '<!--# include virtual="/_seo/pros/$pro_id/head" -->';
 
 /**
  * The app shell served for /pros/:id. The generic title, description, canonical and social tags are

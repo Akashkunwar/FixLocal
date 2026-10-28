@@ -60,11 +60,11 @@ export enum ScheduleStatus {
   CONFIRMED = "confirmed",
 }
 
-/** A job counts as urgent for this long after it is posted. */
+/** A job counts as urgent for this long after it is posted (or marked urgent later). */
 export const URGENT_WINDOW_HOURS = 48;
 
-export const isUrgentNow = (job: Pick<Job, "urgent" | "createdAt">, now = new Date()) =>
-  !!job.urgent && now.getTime() - new Date(job.createdAt).getTime() < URGENT_WINDOW_HOURS * 3600_000;
+export const isUrgentNow = (job: Pick<Job, "urgent" | "createdAt"> & { urgentSince?: Date | null }, now = new Date()) =>
+  !!job.urgent && now.getTime() - new Date(job.urgentSince ?? job.createdAt).getTime() < URGENT_WINDOW_HOURS * 3600_000;
 
 @Entity("jobs")
 @Index(["category"])
@@ -74,6 +74,7 @@ export const isUrgentNow = (job: Pick<Job, "urgent" | "createdAt">, now = new Da
 @Index(["city"])
 @Index(["homeownerId", "createdAt"])
 @Index(["status", "createdAt"])
+@Index("IDX_jobs_open_expires", ["expiresAt"], { where: `"status" = 'open'` })
 @Check("CHK_job_max_bids", `"maxBids" >= 1 AND "maxBids" <= 50`)
 @Check("CHK_job_budget_min", `"budgetMin" IS NULL OR "budgetMin" >= 0`)
 @Check("CHK_job_budget_max", `"budgetMax" IS NULL OR "budgetMax" >= 0`)
@@ -245,6 +246,10 @@ export class Job {
   /** "Needed within 24 hours": badged and pushed to matching pros at once (see URGENT_WINDOW_HOURS). */
   @Column({ type: "boolean", default: false })
   urgent!: boolean;
+
+  /** When the client last switched "urgent" on (the urgency window runs from here; null = from createdAt). */
+  @Column({ type: "timestamptz", nullable: true })
+  urgentSince?: Date | null;
 
   @Column({ type: "boolean", default: false })
   photoConsent!: boolean;

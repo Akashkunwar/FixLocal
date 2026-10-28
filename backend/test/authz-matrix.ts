@@ -66,7 +66,8 @@ export const ACTIONS: Action[] = [
         otherClient: 403,
         awardedPro: 200,
         bidder: 200,
-        strangerPro: 403,
+        // A verified pro looking at an open job gets an empty list (ux LOW 11), not a 403.
+        strangerPro: s === "open" ? 200 : 403,
         pendingPro: 403,
       })(a)
     ),

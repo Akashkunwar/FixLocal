@@ -58,34 +58,54 @@ export async function queueTexts(notifications: Notification[], manager: EntityM
 
 const MAX_ATTEMPTS = 3;
 
+/** Claim one due row (SKIP LOCKED): rows not yet being sent stay queued for any other flusher. */
+async function claimOne(at: Date): Promise<OutboundMessage | null> {
+  // Postgres UPDATE ... RETURNING comes back from TypeORM as [rows, affectedCount].
+  const [rows]: [OutboundMessage[], number] = await AppDataSource.query(
+    `UPDATE "outbound_messages" SET "status" = 'sending', "attempts" = "attempts" + 1, "updatedAt" = now()
+      WHERE "id" = (SELECT "id" FROM "outbound_messages"
+                     WHERE "status" = 'queued' AND "sendAfter" <= $1
+                     ORDER BY "createdAt" LIMIT 1 FOR UPDATE SKIP LOCKED)
+      RETURNING *`,
+    [at]
+  );
+  return rows[0] ?? null;
+}
+
 /**
- * Send queued texts that are due. Rows are claimed with FOR UPDATE SKIP LOCKED, so concurrent
- * flushes (another request, the worker, another instance) never send the same message twice.
- * The user's opt-in is checked again at send time.
+ * Send queued texts that are due, one row at a time (each claimed with FOR UPDATE SKIP LOCKED, so
+ * concurrent flushes never send the same message twice, and a slow provider holds at most one row).
+ * Quiet hours are enforced here as well as at queue time: nothing goes out between 10 PM and 8 AM
+ * IST, whatever was queued earlier. The user's opt-in is checked again at send time.
  */
 export async function flushOutbound(now = new Date(), limit = 50): Promise<number> {
-  // A sender that died mid-send leaves rows in "sending"; give them back after 10 minutes.
+  // A sender that died mid-send leaves rows in "sending"; give them back after 10 minutes (provider
+  // calls time out after 10 seconds, so a live sender is long done by then).
   // Measured on the database clock, the same one that stamped "updatedAt" at claim time: a caller's
   // `now` (later in tests, or a skewed app server) must not hand back rows another flush is sending.
   await AppDataSource.query(
     `UPDATE "outbound_messages" SET "status" = 'queued' WHERE "status" = 'sending' AND "updatedAt" < now() - interval '10 minutes'`
   );
-  // Postgres UPDATE ... RETURNING comes back from TypeORM as [rows, affectedCount].
-  const [claimed]: [OutboundMessage[], number] = await AppDataSource.query(
-    `UPDATE "outbound_messages" SET "status" = 'sending', "attempts" = "attempts" + 1, "updatedAt" = now()
-      WHERE "id" IN (SELECT "id" FROM "outbound_messages"
-                      WHERE "status" = 'queued' AND "sendAfter" <= $1
-                      ORDER BY "createdAt" LIMIT $2 FOR UPDATE SKIP LOCKED)
-      RETURNING *`,
-    [now, limit]
-  );
+  const startedAt = Date.now();
+  const clock = () => new Date(now.getTime() + (Date.now() - startedAt));
   let sent = 0;
   const repo = AppDataSource.getRepository(OutboundMessage);
-  for (const msg of claimed) {
-    const u = await AppDataSource.getRepository(User).findOne({
-      where: { id: msg.userId },
-      select: { id: true, phone: true, phoneVerifiedAt: true, smsOptIn: true, whatsappOptIn: true, language: true, deletedAt: true },
-    });
+  const users = new Map<string, TextUser | null>();
+  for (let i = 0; i < limit; i++) {
+    const at = clock();
+    if (nextSendTime(at) > at) break; // quiet hours (also if they begin mid-run)
+    const msg = await claimOne(at);
+    if (!msg) break;
+    if (!users.has(msg.userId)) {
+      users.set(
+        msg.userId,
+        await AppDataSource.getRepository(User).findOne({
+          where: { id: msg.userId },
+          select: { id: true, phone: true, phoneVerifiedAt: true, smsOptIn: true, whatsappOptIn: true, language: true, deletedAt: true },
+        })
+      );
+    }
+    const u = users.get(msg.userId) ?? null;
     const to = u ? toE164(u.phone) : null;
     if (!u || !to || !channelsFor(u).includes(msg.channel)) {
       await repo.update({ id: msg.id }, { status: "skipped", lastError: "opted out or phone changed" });
@@ -101,7 +121,7 @@ export async function flushOutbound(now = new Date(), limit = 50): Promise<numbe
         { id: msg.id },
         {
           status: last ? "failed" : "queued",
-          sendAfter: nextSendTime(new Date(now.getTime() + 5 * 60_000 * msg.attempts)),
+          sendAfter: nextSendTime(new Date(at.getTime() + 5 * 60_000 * msg.attempts)),
           lastError: String((err as Error).message || err).slice(0, 300),
         }
       );

@@ -309,7 +309,7 @@ async function seed() {
 
   // Keep ratings in sync even when sample jobs were skipped (idempotent re-seed)
 
-  // Wave 25 — ensure lead marketplace categories have at least one open demo job
+  // Ensure lead marketplace categories have at least one open demo job
   const wave25Jobs = [
     {
       title: "Deep clean 3BHK + kitchen (weekend)",
@@ -420,6 +420,13 @@ async function seed() {
     p.reviewCount = agg.count;
     await profileRepo.save(p);
   }
+
+  // Open demo jobs expire like real ones (the expiry worker skips jobs with no expiresAt).
+  const expiryDays = Number(process.env.JOB_EXPIRY_DAYS) > 0 ? Number(process.env.JOB_EXPIRY_DAYS) : 30;
+  await AppDataSource.query(
+    `UPDATE "jobs" SET "expiresAt" = "createdAt" + make_interval(days => $1) WHERE "status" = 'open' AND "expiresAt" IS NULL`,
+    [expiryDays]
+  );
 
   console.log("\nDemo accounts (password: " + (process.env.SEED_PASSWORD ? "from SEED_PASSWORD" : SEED_PASSWORD) + ")");
   console.log("  admin@fixlocal.local  — Admin");

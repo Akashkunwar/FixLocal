@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
   const port = Number(env.VITE_PORT || 5173);
   // Public origin used for the sitemap, robots.txt and Open Graph URLs. Set VITE_SITE_URL for production builds.
   const siteUrl = (env.VITE_SITE_URL || "https://fixlocal.example").replace(/\/+$/, "");
+  if (mode === "production" && !env.VITE_SITE_URL && env.VITE_DEMO_MODE !== "true") {
+    console.warn("\n[fixlocal] VITE_SITE_URL is not set: canonical, Open Graph and sitemap URLs will use https://fixlocal.example\n");
+  }
   return {
     plugins: [
       react(),

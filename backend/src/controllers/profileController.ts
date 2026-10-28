@@ -13,14 +13,15 @@ import { buildResponseSla, buildSlaTrends, hoursBetween, maxHoursForTier } from 
 import { slaMapForPros } from "../utils/proSlaBatch";
 import { buildAvailabilityHeat, DAY_KEYS } from "../utils/availabilityHeat";
 import { createNotifications } from "../utils/notifications";
-import { toProfile, toReview } from "../serializers";
-import { releasedTotalsByJob } from "../domain/escrow";
+import { toProfile, toPublicReview, toReview } from "../serializers";
+import { payoutRows, releasedTotalsByJob } from "../domain/escrow";
 import { median, mean, rate } from "../domain/analytics";
 import { localDatesAhead, monthKeyInZone } from "../domain/time";
 import { filesOf } from "../middleware/upload";
 import { assertOwnedRefs, deleteUploadByRef, fileRef, nameFromRef, storeUploads } from "../services/files";
 import { badRequest, forbidden, notFound } from "../http/errors";
 import { viewer } from "./jobController";
+import { roundRupees } from "../domain/money";
 
 const profiles = () => AppDataSource.getRepository(TradespersonProfile);
 const MAX_GALLERY = 12;
@@ -104,10 +105,15 @@ export async function updateMyProfile(req: Request, res: Response) {
   if (b.blockedDates !== undefined) p.blockedDates = [...new Set<string>(b.blockedDates)].sort().slice(0, 60);
   if (b.notInterestedCategories !== undefined) p.notInterestedCategories = [...new Set<string>(b.notInterestedCategories)];
   if (b.customRatePackages !== undefined) p.customRatePackages = b.customRatePackages;
-  if (b.caseStudies !== undefined) {
-    const refs = (b.caseStudies as { beforeUrl?: string | null; afterUrl?: string | null }[])
+  const caseStudyRefs = (list: unknown) =>
+    ((list || []) as { beforeUrl?: string | null; afterUrl?: string | null }[])
       .flatMap((c) => [c.beforeUrl, c.afterUrl])
       .filter((r): r is string => !!r);
+  let droppedCaseStudyRefs: string[] = [];
+  if (b.caseStudies !== undefined) {
+    const refs = caseStudyRefs(b.caseStudies);
+    const kept = new Set([...refs, ...(p.galleryUrls || [])]);
+    droppedCaseStudyRefs = caseStudyRefs(p.caseStudies).filter((r) => !kept.has(r));
     await assertOwnedRefs(refs, { ownerUserId: p.userId, kinds: [UploadKind.CASE_STUDY, UploadKind.GALLERY] });
     const previousIds = new Map((p.caseStudies || []).map((c) => [c.id, c as { sourceJobId?: string }]));
     p.caseStudies = (b.caseStudies as typeof p.caseStudies).map((c) => ({
@@ -116,6 +122,12 @@ export async function updateMyProfile(req: Request, res: Response) {
     }));
   }
   await profiles().save(p);
+  // Photos only a removed case study used (case-study uploads, not gallery photos) are deleted with it.
+  for (const ref of droppedCaseStudyRefs) {
+    const name = nameFromRef(ref);
+    const upload = name ? await AppDataSource.getRepository(Upload).findOne({ where: { name, ownerUserId: p.userId } }) : null;
+    if (upload?.kind === UploadKind.CASE_STUDY) await deleteUploadByRef(ref);
+  }
 
   const availabilityTouched = b.weeklyAvailability !== undefined || b.blockedDates !== undefined;
   const heatAfter = buildAvailabilityHeat(p.weeklyAvailability, p.blockedDates, p.user.timezone).score;
@@ -215,7 +227,7 @@ export async function getPublicProfile(req: Request, res: Response) {
     },
     responseSla,
     contactRevealed: revealContact || view !== "public",
-    reviews: reviews.map((r) => ({ ...toReview(r), reviewerName: r.reviewer?.name || "Client" })),
+    reviews: reviews.map((r) => ({ ...(view === "public" ? toPublicReview(r) : toReview(r)), reviewerName: r.reviewer?.name || "Client" })),
   });
 }
 
@@ -380,7 +392,7 @@ export async function getMyEarnings(req: Request, res: Response) {
   const released = await releasedTotalsByJob(AppDataSource.manager, proId);
   const won = await wonBids(proId);
   const count = (s: JobStatus) => won.filter((b) => b.job?.status === s).length;
-  const totalEarned = Math.round([...released.values()].reduce((s, r) => s + r.total, 0) * 100) / 100;
+  const totalEarned = roundRupees([...released.values()].reduce((s, r) => s + r.total, 0));
   const activeBids = await AppDataSource.getRepository(Bid).count({ where: { tradespersonId: proId, status: BidStatus.ACTIVE } });
   return res.json({
     earnings: {
@@ -418,19 +430,21 @@ export async function getMyAnalytics(req: Request, res: Response) {
     const row = mix.get(cat) || { category: cat, count: 0, earned: 0 };
     row.count += 1;
     const r = released.get(b.jobId);
-    if (r) {
-      row.earned += r.total;
-      const key = monthKeyInZone(r.lastAt, tz);
-      byMonth.set(key, (byMonth.get(key) || 0) + r.total);
-    }
+    if (r) row.earned += r.total;
     mix.set(cat, row);
+  }
+  // Each payment counts in the month it was released (as on the client's spending page), not all in
+  // the month of the job's last release.
+  for (const p of await payoutRows(AppDataSource.manager, proId)) {
+    const key = monthKeyInZone(p.createdAt, tz);
+    byMonth.set(key, (byMonth.get(key) || 0) + p.amount);
   }
   const months: { month: string; amount: number }[] = [];
   const now = new Date();
   for (let i = 5; i >= 0; i--) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 15));
     const key = monthKeyInZone(d, tz);
-    months.push({ month: key, amount: Math.round((byMonth.get(key) || 0) * 100) / 100 });
+    months.push({ month: key, amount: roundRupees(byMonth.get(key) || 0) });
   }
 
   const samples = allBids
@@ -448,7 +462,7 @@ export async function getMyAnalytics(req: Request, res: Response) {
     });
     return { label: w === 0 ? "now" : `-${w}w`, hours: mean(slice.map((s) => s.hours)), n: slice.length };
   });
-  const totalEarned = Math.round([...released.values()].reduce((s, r) => s + r.total, 0) * 100) / 100;
+  const totalEarned = roundRupees([...released.values()].reduce((s, r) => s + r.total, 0));
   return res.json({
     analytics: {
       jobsWon: won.length,

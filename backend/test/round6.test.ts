@@ -5,6 +5,7 @@ import { canonicalEmail, selfReferralReason } from "../src/domain/credits";
 import { Notification, NotificationType } from "../src/entities/Notification";
 import { Msg91SmsProvider, WhatsAppCloudProvider, logSms, logWhatsApp, setMessagingProvider, toE164 } from "../src/services/messaging";
 import { flushOutbound, nextSendTime, queueTexts } from "../src/utils/outbound";
+import { istTimeOn } from "../src/domain/time";
 import { PASSWORD, acceptBid, admin, api, awardedJob, client, createJob, placeBid, pro, rows, type TestUser } from "./helpers";
 
 const balance = async (u: TestUser) => (await api().get("/api/credits/me").set(u.auth)).body.credits.balance as number;
@@ -264,7 +265,7 @@ describe("SMS / WhatsApp alerts", () => {
     const queued = await rows<{ channel: string; body: string }>(`SELECT "channel", "body" FROM "outbound_messages" WHERE "userId" = $1 ORDER BY "channel"`, [c.user.id]);
     expect(queued.map((q) => q.channel)).toEqual(["sms", "whatsapp"]);
     expect(queued[0].body).toMatch(/^FixLocal: आपके काम पर नई बोली http/);
-    const later = new Date(Date.now() + 48 * 3600_000);
+    const later = istTimeOn(new Date(Date.now() + 48 * 3600_000), 12);
     await Promise.all([flushOutbound(later), flushOutbound(later)]);
     await settle();
     const done = await rows<{ status: string }>(`SELECT "status" FROM "outbound_messages" WHERE "userId" = $1`, [c.user.id]);
@@ -288,7 +289,7 @@ describe("SMS / WhatsApp alerts", () => {
       );
     const [fresh] = await insert("now()");
     const [stale] = await insert("now() - interval '11 minutes'");
-    await flushOutbound(new Date(Date.now() + 48 * 3600_000));
+    await flushOutbound(istTimeOn(new Date(Date.now() + 48 * 3600_000), 12));
     const status = async (id: string) => (await rows<{ status: string }>(`SELECT "status" FROM "outbound_messages" WHERE "id" = $1`, [id]))[0].status;
     expect(await status(fresh.id)).toBe("sending");
     expect(await status(stale.id)).not.toBe("sending");
