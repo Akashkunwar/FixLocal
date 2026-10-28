@@ -25,8 +25,10 @@ export const ERROR_CODE_TEXT: Record<string, string> = {
   UNAUTHORIZED: "Please log in again.",
 };
 
-/** Codes whose server message is too vague to show: always use our sentence. */
-const PREFER_CODE = new Set(["NETWORK_ERROR", "INTERNAL", "VALIDATION", "INVALID_INPUT", "INVALID_JSON", "ROUTE_NOT_FOUND"]);
+/** Codes whose server message is never worth showing (technical or vague): always use our sentence. */
+const PREFER_CODE = new Set(["NETWORK_ERROR", "INTERNAL", "INVALID_JSON", "ROUTE_NOT_FOUND"]);
+/** Catch-all server messages; a specific message with the same code (e.g. a VALIDATION reason) is kept. */
+const GENERIC_MESSAGES = new Set(["Invalid request", "Invalid input"]);
 
 /**
  * The sentence to show for a failed request, in the current language.
@@ -36,7 +38,7 @@ export function errorText(err: unknown, fallback = "Something went wrong. Please
   if (err instanceof ApiError) {
     const code = err.code || "";
     const message = err.message || "";
-    if (PREFER_CODE.has(code)) return t(ERROR_CODE_TEXT[code]);
+    if (PREFER_CODE.has(code) || (GENERIC_MESSAGES.has(message) && ERROR_CODE_TEXT[code])) return t(ERROR_CODE_TEXT[code]);
     if (message && hasTranslation(message)) return t(message);
     if (ERROR_CODE_TEXT[code] && (currentLang() === "hi" || !message)) return t(ERROR_CODE_TEXT[code]);
     return message || t(fallback);
