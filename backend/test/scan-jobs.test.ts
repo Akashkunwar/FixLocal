@@ -23,7 +23,9 @@ describe("jobs scan regressions", () => {
     const unverified = await pro({ proStatus: "pending" as never });
     const detail = await api().get(`/api/jobs/${job.id}`).set(unverified.auth);
     expect(detail.status).toBe(403);
-    const list = await api().get(`/api/jobs?q=${encodeURIComponent("Secret-ish listing for R1")}`).set(unverified.auth);
+    const list = await api()
+      .get(`/api/jobs?q=${encodeURIComponent("Secret-ish listing for R1")}`)
+      .set(unverified.auth);
     expect(list.status).toBe(200);
     expect(list.body.jobs).toEqual([]);
   });
@@ -32,7 +34,10 @@ describe("jobs scan regressions", () => {
     overrideConfig({ messaging: { ...original, enabled: true } });
     const u = await client();
     const phone = `97${String(Date.now()).slice(-8)}`;
-    await AppDataSource.query(`UPDATE "users" SET "phone" = $1, "phoneVerifiedAt" = now(), "smsOptIn" = true WHERE "id" = $2`, [phone, u.user.id]);
+    await AppDataSource.query(
+      `UPDATE "users" SET "phone" = $1, "phoneVerifiedAt" = now(), "smsOptIn" = true WHERE "id" = $2`,
+      [phone, u.user.id]
+    );
     await AppDataSource.query(
       `INSERT INTO "outbound_messages" ("userId","channel","body","status","sendAfter","dedupeKey") VALUES ($1,'sms','FixLocal: R2 quiet','queued',$2,$3)`,
       [u.user.id, ist("2026-10-20", "21:59:00"), `r2-${Date.now()}`]
@@ -46,7 +51,10 @@ describe("jobs scan regressions", () => {
     overrideConfig({ messaging: { ...original, enabled: true } });
     const u = await client();
     const phone = `96${String(Date.now()).slice(-8)}`;
-    await AppDataSource.query(`UPDATE "users" SET "phone" = $1, "phoneVerifiedAt" = now(), "smsOptIn" = true WHERE "id" = $2`, [phone, u.user.id]);
+    await AppDataSource.query(
+      `UPDATE "users" SET "phone" = $1, "phoneVerifiedAt" = now(), "smsOptIn" = true WHERE "id" = $2`,
+      [phone, u.user.id]
+    );
     const key = `r3-${Date.now()}`;
     for (let i = 0; i < 3; i++) {
       await AppDataSource.query(
@@ -61,7 +69,10 @@ describe("jobs scan regressions", () => {
       live: false,
       async send() {
         if (seenQueued < 0) {
-          const [{ n }] = await AppDataSource.query(`SELECT COUNT(*)::int n FROM "outbound_messages" WHERE "dedupeKey" LIKE $1 AND "status" = 'queued'`, [`${key}%`]);
+          const [{ n }] = await AppDataSource.query(
+            `SELECT COUNT(*)::int n FROM "outbound_messages" WHERE "dedupeKey" LIKE $1 AND "status" = 'queued'`,
+            [`${key}%`]
+          );
           seenQueued = n;
         }
         return { reference: "spy" };
@@ -85,15 +96,27 @@ describe("jobs scan regressions", () => {
     const j1 = await createJob(owner, { title: "R4 first" });
     const j2 = await createJob(owner, { title: "R4 second" });
     // Day D digest runs at 08:00:05 IST and carries j1.
-    await AppDataSource.query(`INSERT INTO "job_alert_matches" ("userId","jobId","alertName","createdAt") VALUES ($1,$2,'a',$3)`, [p.user.id, j1.id, ist("2026-10-20", "12:00:00")]);
+    await AppDataSource.query(
+      `INSERT INTO "job_alert_matches" ("userId","jobId","alertName","createdAt") VALUES ($1,$2,'a',$3)`,
+      [p.user.id, j1.id, ist("2026-10-20", "12:00:00")]
+    );
     await sendJobAlertDigests(ist("2026-10-21", "08:00:05"));
     // j2 matches at 08:00:30 IST, after today's digest went out.
-    await AppDataSource.query(`INSERT INTO "job_alert_matches" ("userId","jobId","alertName","createdAt") VALUES ($1,$2,'a',$3)`, [p.user.id, j2.id, ist("2026-10-21", "08:00:30")]);
+    await AppDataSource.query(
+      `INSERT INTO "job_alert_matches" ("userId","jobId","alertName","createdAt") VALUES ($1,$2,'a',$3)`,
+      [p.user.id, j2.id, ist("2026-10-21", "08:00:30")]
+    );
     // Next day's first worker tick lands at 08:01 IST.
     await sendJobAlertDigests(ist("2026-10-22", "08:01:00"));
-    const notes = await rows<{ meta: { jobIds?: string[] } }>(`SELECT "meta" FROM "notifications" WHERE "userId" = $1 AND "type" = 'job_alert'`, [p.user.id]);
+    const notes = await rows<{ meta: { jobIds?: string[] } }>(
+      `SELECT "meta" FROM "notifications" WHERE "userId" = $1 AND "type" = 'job_alert'`,
+      [p.user.id]
+    );
     const delivered = notes.flatMap((n) => n.meta?.jobIds ?? []);
-    const left = await rows(`SELECT 1 FROM "job_alert_matches" WHERE "userId" = $1 AND "jobId" = $2`, [p.user.id, j2.id]);
+    const left = await rows(`SELECT 1 FROM "job_alert_matches" WHERE "userId" = $1 AND "jobId" = $2`, [
+      p.user.id,
+      j2.id,
+    ]);
     expect(delivered).toContain(j1.id);
     expect(delivered).toContain(j2.id);
     expect(left).toHaveLength(1);
@@ -109,7 +132,10 @@ describe("jobs scan regressions", () => {
       );
     }
     const p1 = await api().get(`/api/messages/${job.id}?limit=2`).set(owner.auth).expect(200);
-    const p2 = await api().get(`/api/messages/${job.id}?limit=2&before=${encodeURIComponent(p1.body.nextBefore)}`).set(owner.auth).expect(200);
+    const p2 = await api()
+      .get(`/api/messages/${job.id}?limit=2&before=${encodeURIComponent(p1.body.nextBefore)}`)
+      .set(owner.auth)
+      .expect(200);
     const seen = [...p1.body.messages, ...p2.body.messages].map((m: { body: string }) => m.body);
     expect(new Set(seen).size).toBe(3);
   });
@@ -118,10 +144,16 @@ describe("jobs scan regressions", () => {
     const u = await client();
     const ts = new Date("2026-10-20T10:00:00.123Z");
     for (let i = 0; i < 3; i++) {
-      await AppDataSource.query(`INSERT INTO "notifications" ("userId","type","title","body","createdAt") VALUES ($1,'system',$2,'b',$3)`, [u.user.id, `n${i}`, ts]);
+      await AppDataSource.query(
+        `INSERT INTO "notifications" ("userId","type","title","body","createdAt") VALUES ($1,'system',$2,'b',$3)`,
+        [u.user.id, `n${i}`, ts]
+      );
     }
     const p1 = await api().get(`/api/notifications?limit=2`).set(u.auth).expect(200);
-    const p2 = await api().get(`/api/notifications?limit=2&before=${encodeURIComponent(p1.body.nextBefore)}`).set(u.auth).expect(200);
+    const p2 = await api()
+      .get(`/api/notifications?limit=2&before=${encodeURIComponent(p1.body.nextBefore)}`)
+      .set(u.auth)
+      .expect(200);
     const seen = [...p1.body.notifications, ...p2.body.notifications].map((n: { title: string }) => n.title);
     expect(new Set(seen).size).toBe(3);
   });
@@ -135,7 +167,17 @@ describe("jobs scan regressions", () => {
     await placeBid(b, job.id);
     const fakeRes = () => {
       const handlers: Record<string, () => void> = {};
-      return { setHeader() {}, flushHeaders() {}, write() { return true; }, end() {}, on(ev: string, fn: () => void) { handlers[ev] = fn; } } as never;
+      return {
+        setHeader() {},
+        flushHeaders() {},
+        write() {
+          return true;
+        },
+        end() {},
+        on(ev: string, fn: () => void) {
+          handlers[ev] = fn;
+        },
+      } as never;
     };
     openStream(fakeRes(), owner.user.id, { jobId: job.id, tradespersonId: b.user.id });
     openStream(fakeRes(), b.user.id, { jobId: job.id, tradespersonId: b.user.id });
@@ -159,7 +201,10 @@ describe("jobs scan regressions", () => {
     const quiet = await pro();
     const jq = await createJob(owner);
     await AppDataSource.query(`UPDATE "jobs" SET "createdAt" = now() - interval '3 hours' WHERE "id" = $1`, [jq.id]);
-    await AppDataSource.query(`INSERT INTO "bids" ("jobId","tradespersonId","amount","createdAt") VALUES ($1,$2,1000, now() - interval '2 hours')`, [jq.id, quiet.user.id]);
+    await AppDataSource.query(
+      `INSERT INTO "bids" ("jobId","tradespersonId","amount","createdAt") VALUES ($1,$2,1000, now() - interval '2 hours')`,
+      [jq.id, quiet.user.id]
+    );
     await AppDataSource.query(
       `WITH j AS (INSERT INTO "jobs" ("title","description","category","homeownerId","photoUrls")
                   SELECT 'bulk '||g, 'd', 'plumbing', $1, '[]' FROM generate_series(1,170) g RETURNING "id")
@@ -181,7 +226,10 @@ describe("jobs scan regressions", () => {
     // Even a bid that is still active (block added straight in the database) can't be accepted.
     const job2 = await createJob(owner);
     const bid2 = await placeBid(await pro(), job2.id);
-    await AppDataSource.query(`INSERT INTO "user_blocks" ("blockerId","blockedId") VALUES ($1,$2)`, [owner.user.id, bid2.tradespersonId]);
+    await AppDataSource.query(`INSERT INTO "user_blocks" ("blockerId","blockedId") VALUES ($1,$2)`, [
+      owner.user.id,
+      bid2.tradespersonId,
+    ]);
     const acc = await acceptBid(owner, bid2.id);
     expect(acc.status).toBe(403);
     expect(acc.body.code).toBe("BLOCKED");
@@ -190,7 +238,9 @@ describe("jobs scan regressions", () => {
   it("LOW 11 a pro with no bid on a job they can see gets an empty bid list", async () => {
     const owner = await client();
     const job = await createJob(owner);
-    const res = await api().get(`/api/jobs/${job.id}/bids`).set((await pro()).auth);
+    const res = await api()
+      .get(`/api/jobs/${job.id}/bids`)
+      .set((await pro()).auth);
     expect(res.status).toBe(200);
     expect(res.body.bids).toEqual([]);
     const pending = await pro({ proStatus: "pending" as never });
@@ -200,7 +250,11 @@ describe("jobs scan regressions", () => {
   it("LOW 13 accepting a visit confirms only the proposal that was seen", async () => {
     const { owner, worker, job } = await awardedJob();
     const start = new Date(Date.now() + 3 * 86400_000);
-    await api().post(`/api/jobs/${job.id}/schedule/propose`).set(worker.auth).send({ start: start.toISOString() }).expect(200);
+    await api()
+      .post(`/api/jobs/${job.id}/schedule/propose`)
+      .set(worker.auth)
+      .send({ start: start.toISOString() })
+      .expect(200);
     const res = await api().post(`/api/jobs/${job.id}/schedule/accept`).set(owner.auth).send({});
     expect(res.status).toBe(200);
     expect(res.body.job.scheduleStatus).toBe("confirmed");
@@ -210,7 +264,10 @@ describe("jobs scan regressions", () => {
     const owner = await client();
     const job = await createJob(owner);
     const p = await pro();
-    const bad = await api().post(`/api/jobs/${job.id}/bids`).set(p.auth).send({ amount: 1500, message: "Call me on 98765 43210" });
+    const bad = await api()
+      .post(`/api/jobs/${job.id}/bids`)
+      .set(p.auth)
+      .send({ amount: 1500, message: "Call me on 98765 43210" });
     expect(bad.status).toBe(400);
     expect(bad.body.code).toBe("CONTACT_INFO");
     await placeBid(p, job.id);
@@ -219,7 +276,9 @@ describe("jobs scan regressions", () => {
     expect((await api().post(`/api/messages/${job.id}`).set(p.auth).send({ body: "Happy to help" })).status).toBe(201);
     // After the hire, contact details are fine in chat.
     const { owner: o2, worker, job: hired } = await awardedJob();
-    expect((await api().post(`/api/messages/${hired.id}`).set(worker.auth).send({ body: "My number is 98765 43210" })).status).toBe(201);
+    expect(
+      (await api().post(`/api/messages/${hired.id}`).set(worker.auth).send({ body: "My number is 98765 43210" })).status
+    ).toBe(201);
     expect(o2).toBeTruthy();
   });
 
@@ -236,7 +295,11 @@ describe("jobs scan regressions", () => {
     const digests = await import("../src/utils/jobAlertDigest");
     vi.spyOn(digests, "sendJobAlertDigests").mockRejectedValueOnce(new Error("boom"));
     const { runWorkersOnce } = await import("../src/workers");
-    const out = (await runWorkersOnce(ist("2026-10-21", "12:00:00"))) as { skipped: boolean; failed?: string[]; texts?: number };
+    const out = (await runWorkersOnce(ist("2026-10-21", "12:00:00"))) as {
+      skipped: boolean;
+      failed?: string[];
+      texts?: number;
+    };
     if (out.skipped) return; // another test run holds the worker lock
     expect(out.failed).toEqual(["jobAlertDigests"]);
     expect(typeof out.texts).toBe("number");
@@ -250,7 +313,10 @@ describe("jobs scan regressions", () => {
       { userId: u.user.id, type: "system" as never, title: "first", body: "a", email: false },
       { userId: u.user.id, type: "system" as never, title: "second", body: "b", email: false },
     ]);
-    const list = await rows<{ title: string }>(`SELECT "title" FROM "notifications" WHERE "userId" = $1 ORDER BY "title"`, [u.user.id]);
+    const list = await rows<{ title: string }>(
+      `SELECT "title" FROM "notifications" WHERE "userId" = $1 ORDER BY "title"`,
+      [u.user.id]
+    );
     expect(list.map((n) => n.title)).toEqual(["first", "second"]);
   });
 });

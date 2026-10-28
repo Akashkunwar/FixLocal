@@ -16,6 +16,9 @@ export function containsContactInfo(text: string): boolean {
 /** Throws CONTACT_INFO if any of the texts holds a phone number or email address. */
 export function assertNoContactInfo(...texts: (string | null | undefined)[]) {
   if (texts.some((t) => !!t && containsContactInfo(t))) {
-    throw badRequest("Please don't share phone numbers or emails here. Contact details unlock in chat once someone is hired.", "CONTACT_INFO");
+    throw badRequest(
+      "Please don't share phone numbers or emails here. Contact details unlock in chat once someone is hired.",
+      "CONTACT_INFO"
+    );
   }
 }

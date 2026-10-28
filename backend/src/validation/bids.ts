@@ -1,5 +1,15 @@
 import { z } from "zod";
-import { boolish, escrowMoney, id, money, optionalDate, optionalEscrowMoney, optionalInt, optionalMoney, optionalText } from "./common";
+import {
+  boolish,
+  escrowMoney,
+  id,
+  money,
+  optionalDate,
+  optionalEscrowMoney,
+  optionalInt,
+  optionalMoney,
+  optionalText,
+} from "./common";
 
 export const bidIdParams = z.object({ id });
 

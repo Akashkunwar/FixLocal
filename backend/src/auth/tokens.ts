@@ -115,8 +115,7 @@ async function recallRotation(oldRaw: string): Promise<{ userId: string; raw: st
   return plain ? (JSON.parse(plain) as { userId: string; raw: string }) : null;
 }
 
-const refreshRace = () =>
-  conflict("Your session was refreshed in another tab. Try again.", "REFRESH_IN_PROGRESS");
+const refreshRace = () => conflict("Your session was refreshed in another tab. Try again.", "REFRESH_IN_PROGRESS");
 
 /**
  * Exchange a refresh token for a new one. Re-sending the token that was just rotated, within

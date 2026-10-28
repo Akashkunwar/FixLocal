@@ -17,10 +17,16 @@ describe("auth scan regressions", () => {
     const email = uniqueEmail("victim");
     const attackerPw = "Attacker-Pass-123";
     const victimPw = "Victim-Pass-456!";
-    await api().post("/api/auth/register").send({ email, password: attackerPw, role: "HOMEOWNER", acceptTerms: true }).expect(202);
+    await api()
+      .post("/api/auth/register")
+      .send({ email, password: attackerPw, role: "HOMEOWNER", acceptTerms: true })
+      .expect(202);
     consoleMailer.outbox.length = 0;
     // Victim signs up later with their own password and confirms from their inbox.
-    await api().post("/api/auth/register").send({ email, password: victimPw, role: "HOMEOWNER", acceptTerms: true }).expect(202);
+    await api()
+      .post("/api/auth/register")
+      .send({ email, password: victimPw, role: "HOMEOWNER", acceptTerms: true })
+      .expect(202);
     const token = tokenFromOutbox(email, "verify-email");
     expect(token).toBeTruthy();
     await api().post("/api/auth/verify-email").send({ token }).expect(200);
@@ -73,7 +79,10 @@ describe("auth scan regressions", () => {
     expect(list.status).toBe(200);
     expect(list.body.jobs).toEqual([]);
     expect(list.body.verificationRequired).toBe(true);
-    const preview = await api().post("/api/job-alerts/preview").set(pending.auth).send({ categories: ["plumbing"] });
+    const preview = await api()
+      .post("/api/job-alerts/preview")
+      .set(pending.auth)
+      .send({ categories: ["plumbing"] });
     expect(preview.status).toBe(403);
     expect(preview.body.code).toBe("NOT_VERIFIED");
   });
@@ -93,7 +102,10 @@ describe("auth scan regressions", () => {
       }
       // ... and the victim, on their own connection, still gets the reset mail.
       consoleMailer.outbox.length = 0;
-      const ok = await request(app).post("/api/auth/forgot-password").set("X-Forwarded-For", "203.0.113.77").send({ email: victim.user.email });
+      const ok = await request(app)
+        .post("/api/auth/forgot-password")
+        .set("X-Forwarded-For", "203.0.113.77")
+        .send({ email: victim.user.email });
       expect(ok.status).toBe(200);
       expect(tokenFromOutbox(victim.user.email, "reset-password")).toBeTruthy();
     } finally {
@@ -106,14 +118,18 @@ describe("auth scan regressions", () => {
     try {
       // Five bad email-verification attempts by one user from this IP ...
       for (let i = 0; i < 5; i++) {
-        const r = await api().post("/api/auth/verify-email").send({ token: `bogus-token-${i}-xxxxxxxx` });
+        const r = await api()
+          .post("/api/auth/verify-email")
+          .send({ token: `bogus-token-${i}-xxxxxxxx` });
         expect(r.status).toBe(400);
       }
       // ... lock a different signed-in user on the same IP out of resend-verification and password reset.
       const other = await client({ verified: false });
       const r1 = await api().post("/api/auth/resend-verification").set(other.auth).send({});
       expect(r1.status).toBe(200);
-      const r2 = await api().post("/api/auth/reset-password").send({ token: "another-bogus-token", password: "Fresh-Pass-1234" });
+      const r2 = await api()
+        .post("/api/auth/reset-password")
+        .send({ token: "another-bogus-token", password: "Fresh-Pass-1234" });
       expect(r2.status).toBe(400);
     } finally {
       overrideConfig({ rateLimitEnabled: false });
@@ -123,7 +139,11 @@ describe("auth scan regressions", () => {
   it("L3 parties see admin notes as from FixLocal support, not an admin's email", async () => {
     const { owner, job } = await awardedJob();
     const a = await admin();
-    await api().post("/api/admin/audit-notes").set(a.auth).send({ note: "Checked the photos", targetType: "job", targetId: job.id }).expect(201);
+    await api()
+      .post("/api/admin/audit-notes")
+      .set(a.auth)
+      .send({ note: "Checked the photos", targetType: "job", targetId: job.id })
+      .expect(201);
     const res = await api().get(`/api/jobs/${job.id}/payments`).set(owner.auth).expect(200);
     const note = res.body.auditNotes.find((n: { snippet: string }) => n.snippet.includes("Checked the photos"));
     expect(note.actorEmail).toBe("FixLocal support");
@@ -132,7 +152,11 @@ describe("auth scan regressions", () => {
 
   it("L4 reviews on a public profile don't name the reviewer's id or the job", async () => {
     const { owner, worker, job } = await awardedJob({ stage: "completed" });
-    await api().post("/api/reviews").set(owner.auth).send({ jobId: job.id, rating: 5, comment: "Great work" }).expect(201);
+    await api()
+      .post("/api/reviews")
+      .set(owner.auth)
+      .send({ jobId: job.id, rating: 5, comment: "Great work" })
+      .expect(201);
     const stranger = await client();
     for (const res of [
       await api().get(`/api/profile/user/${worker.user.id}`),
@@ -170,11 +194,19 @@ describe("auth scan regressions", () => {
 
   it("removing a case study deletes its own photos but keeps gallery photos", async () => {
     const { owner, worker, job } = await awardedJob({ stage: "in_progress" });
-    await api().post(`/api/jobs/${job.id}/completion-photos`).set(worker.auth).attach("after", await png(), { filename: "a.png", contentType: "image/png" }).expect(200);
+    await api()
+      .post(`/api/jobs/${job.id}/completion-photos`)
+      .set(worker.auth)
+      .attach("after", await png(), { filename: "a.png", contentType: "image/png" })
+      .expect(200);
     await api().post(`/api/jobs/${job.id}/mark-done`).set(worker.auth).expect(200);
     await api().post(`/api/jobs/${job.id}/confirm`).set(owner.auth).expect(200);
     await api().post(`/api/jobs/${job.id}/photo-consent`).set(owner.auth).send({ consent: true }).expect(200);
-    const pub = await api().post(`/api/jobs/${job.id}/publish-case-study`).set(worker.auth).send({ title: "Sink fixed" }).expect(200);
+    const pub = await api()
+      .post(`/api/jobs/${job.id}/publish-case-study`)
+      .set(worker.auth)
+      .send({ title: "Sink fixed" })
+      .expect(200);
     const url = pub.body.caseStudy.afterUrl as string;
     expect((await api().get(url)).status).toBe(200);
     await api().patch("/api/profile").set(worker.auth).send({ caseStudies: [] }).expect(200);
@@ -183,11 +215,19 @@ describe("auth scan regressions", () => {
 
   it("admin matching settings reject bad numbers and unknown presets", async () => {
     const a = await admin();
-    for (const body of [{ skills: "lots" }, { weights: { rating: 500 } }, { preset: "bogus" }, { heatWeight: 99 }, { bestValueBlend: { matchPct: -1 } }]) {
+    for (const body of [
+      { skills: "lots" },
+      { weights: { rating: 500 } },
+      { preset: "bogus" },
+      { heatWeight: 99 },
+      { bestValueBlend: { matchPct: -1 } },
+    ]) {
       const res = await api().put("/api/admin/match-weights").set(a.auth).send(body);
       expect(res.status, JSON.stringify(body)).toBe(400);
     }
     expect((await api().get("/api/admin/best-value-blend/preview?matchPct=abc").set(a.auth)).status).toBe(400);
-    expect((await api().get("/api/admin/best-value-blend/preview?matchPct=60&pricePct=40").set(a.auth)).status).toBe(200);
+    expect((await api().get("/api/admin/best-value-blend/preview?matchPct=60&pricePct=40").set(a.auth)).status).toBe(
+      200
+    );
   });
 });

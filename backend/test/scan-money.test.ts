@@ -8,12 +8,21 @@ import { acceptBid, admin, api, awardedJob, createJob, placeBid, pro, rows, type
 
 const balance = async (u: TestUser) => (await api().get("/api/credits/me").set(u.auth)).body.credits.balance as number;
 const refer = (referred: TestUser, referrer: TestUser) =>
-  AppDataSource.query(`UPDATE "users" SET "referredById" = $1, "phone" = NULL WHERE "id" = $2`, [referrer.user.id, referred.user.id]);
+  AppDataSource.query(`UPDATE "users" SET "referredById" = $1, "phone" = NULL WHERE "id" = $2`, [
+    referrer.user.id,
+    referred.user.id,
+  ]);
 const ledgerSum = async (jobId: string, type: string, extra = "", params: unknown[] = []) =>
   Number(
-    (await rows<{ s: string | null }>(`SELECT SUM("amount") s FROM "ledger_entries" WHERE "jobId"=$1 AND "type"=$2 ${extra}`, [jobId, type, ...params]))[0].s ?? 0
+    (
+      await rows<{ s: string | null }>(
+        `SELECT SUM("amount") s FROM "ledger_entries" WHERE "jobId"=$1 AND "type"=$2 ${extra}`,
+        [jobId, type, ...params]
+      )
+    )[0].s ?? 0
   );
-const milestones = async (owner: TestUser, jobId: string) => (await api().get(`/api/jobs/${jobId}/payments`).set(owner.auth)).body.milestones;
+const milestones = async (owner: TestUser, jobId: string) =>
+  (await api().get(`/api/jobs/${jobId}/payments`).set(owner.auth)).body.milestones;
 
 describe("money scan regressions", () => {
   const original = { ...config().referral };
@@ -60,10 +69,16 @@ describe("money scan regressions", () => {
     expect(await ledgerSum(jobId, "release")).toBe(350);
     expect(await ledgerSum(jobId, "credit_release")).toBe(100);
     const d = await api().post(`/api/jobs/${jobId}/disputes`).set(owner.auth).field("reason", "Work abandoned halfway");
-    await api().patch(`/api/disputes/${d.body.dispute.id}/resolve`).set((await admin()).auth).send({ resolution: "favor_homeowner" }).expect(200);
+    await api()
+      .patch(`/api/disputes/${d.body.dispute.id}/resolve`)
+      .set((await admin()).auth)
+      .send({ resolution: "favor_homeowner" })
+      .expect(200);
     expect(await ledgerSum(jobId, "refund")).toBe(1050);
     expect(await balance(owner)).toBe(0); // the credit was spent on the released deposit
-    const earned = (await api().get("/api/profile/analytics").set(worker.auth)).body.analytics.earningsOverTime as { amount: number }[];
+    const earned = (await api().get("/api/profile/analytics").set(worker.auth)).body.analytics.earningsOverTime as {
+      amount: number;
+    }[];
     expect(earned.reduce((s, m) => s + m.amount, 0)).toBeGreaterThanOrEqual(450);
   });
 
@@ -90,7 +105,9 @@ describe("money scan regressions", () => {
     for (const j of jobs) await refer(j.owner, capper);
     const res = await Promise.all(jobs.map((j) => api().post(`/api/jobs/${j.job.id}/confirm`).set(j.owner.auth)));
     expect(res.map((r) => r.status)).toEqual([200, 200, 200, 200]);
-    const granted = await rows(`SELECT 1 FROM "referral_rewards" WHERE "referrerId"=$1 AND "referrerAmount">0`, [capper.user.id]);
+    const granted = await rows(`SELECT 1 FROM "referral_rewards" WHERE "referrerId"=$1 AND "referrerAmount">0`, [
+      capper.user.id,
+    ]);
     expect(granted.length).toBe(1);
   });
 
@@ -98,10 +115,15 @@ describe("money scan regressions", () => {
     const { owner, worker, job } = await awardedJob({ stage: "in_progress", amount: 1000 });
     const ms = await milestones(owner, job.id);
     await api().post(`/api/jobs/${job.id}/payments/${ms[0].id}/release`).set(owner.auth).expect(200);
-    await AppDataSource.query(`UPDATE "ledger_entries" SET "createdAt" = now() - interval '62 days' WHERE "milestoneId"=$1 AND "type"='release'`, [ms[0].id]);
+    await AppDataSource.query(
+      `UPDATE "ledger_entries" SET "createdAt" = now() - interval '62 days' WHERE "milestoneId"=$1 AND "type"='release'`,
+      [ms[0].id]
+    );
     await api().post(`/api/jobs/${job.id}/mark-done`).set(worker.auth).expect(200);
     await api().post(`/api/jobs/${job.id}/confirm`).set(owner.auth).expect(200);
-    const months = (await api().get("/api/profile/analytics").set(worker.auth)).body.analytics.earningsOverTime as { amount: number }[];
+    const months = (await api().get("/api/profile/analytics").set(worker.auth)).body.analytics.earningsOverTime as {
+      amount: number;
+    }[];
     const nonZero = months.filter((m) => m.amount > 0).map((m) => m.amount);
     expect(nonZero).toEqual([300, 700]);
   });
@@ -120,12 +142,21 @@ describe("money scan regressions", () => {
 
   it("R5 a ruling can't move the money against the side it favours", async () => {
     const { owner, job } = await awardedJob({ stage: "in_progress", amount: 1000 });
-    const d = await api().post(`/api/jobs/${job.id}/disputes`).set(owner.auth).field("reason", "Work abandoned halfway");
+    const d = await api()
+      .post(`/api/jobs/${job.id}/disputes`)
+      .set(owner.auth)
+      .field("reason", "Work abandoned halfway");
     const a = (await admin()).auth;
-    const r1 = await api().patch(`/api/disputes/${d.body.dispute.id}/resolve`).set(a).send({ resolution: "favor_homeowner", jobStatus: "completed" });
+    const r1 = await api()
+      .patch(`/api/disputes/${d.body.dispute.id}/resolve`)
+      .set(a)
+      .send({ resolution: "favor_homeowner", jobStatus: "completed" });
     expect(r1.status).toBe(400);
     expect(r1.body.code).toBe("RESOLUTION_MISMATCH");
-    const r2 = await api().patch(`/api/disputes/${d.body.dispute.id}/resolve`).set(a).send({ resolution: "favor_tradesperson", jobStatus: "cancelled" });
+    const r2 = await api()
+      .patch(`/api/disputes/${d.body.dispute.id}/resolve`)
+      .set(a)
+      .send({ resolution: "favor_tradesperson", jobStatus: "cancelled" });
     expect(r2.body.code).toBe("RESOLUTION_MISMATCH");
     expect(await ledgerSum(job.id, "release")).toBe(0);
   });
@@ -133,7 +164,10 @@ describe("money scan regressions", () => {
   it("R6 a fully refunded job can't be put back to work with a 'no action' ruling", async () => {
     const { owner, job } = await awardedJob({ stage: "in_progress", amount: 1000 });
     const ms = await milestones(owner, job.id);
-    const d = await api().post(`/api/jobs/${job.id}/disputes`).set(owner.auth).field("reason", "Work abandoned halfway");
+    const d = await api()
+      .post(`/api/jobs/${job.id}/disputes`)
+      .set(owner.auth)
+      .field("reason", "Work abandoned halfway");
     const res = await api()
       .patch(`/api/disputes/${d.body.dispute.id}/resolve`)
       .set((await admin()).auth)
@@ -155,7 +189,9 @@ describe("money scan regressions", () => {
     const totals = (await api().get("/api/jobs/spending").set(owner.auth)).body.spending.totals;
     expect(totals.paid).toBe(0);
     expect(totals.refunded).toBe(1000);
-    const earned = (await api().get("/api/profile/analytics").set(worker.auth)).body.analytics.earningsOverTime as { amount: number }[];
+    const earned = (await api().get("/api/profile/analytics").set(worker.auth)).body.analytics.earningsOverTime as {
+      amount: number;
+    }[];
     expect(earned.reduce((s, m) => s + m.amount, 0)).toBe(0);
   });
 
@@ -171,7 +207,10 @@ describe("money scan regressions", () => {
   it("escrow amounts below ₹10 are refused, so no milestone rounds to ₹0", async () => {
     const owner = (await awardedJob()).owner;
     const job = await createJob(owner);
-    const res = await api().post(`/api/jobs/${job.id}/bids`).set((await pro()).auth).send({ amount: 0.02 });
+    const res = await api()
+      .post(`/api/jobs/${job.id}/bids`)
+      .set((await pro()).auth)
+      .send({ amount: 0.02 });
     expect(res.status).toBe(400);
   });
 

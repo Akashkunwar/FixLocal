@@ -38,7 +38,14 @@ describe("environment validation (infra MED 6)", () => {
     expect(() => loadConfig({ ...prod, FILE_URL_SECRET: prod.JWT_SECRET })).toThrow(/FILE_URL_SECRET must differ/);
     expect(() => loadDbConfig({ NODE_ENV: "production" })).toThrow(/DB_HOST: required in production/);
     expect(
-      loadDbConfig({ NODE_ENV: "production", DB_HOST: "db", DB_USERNAME: "u", DB_PASSWORD: "p", DB_NAME: "n", MIGRATIONS_RUN: "TRUE" })
+      loadDbConfig({
+        NODE_ENV: "production",
+        DB_HOST: "db",
+        DB_USERNAME: "u",
+        DB_PASSWORD: "p",
+        DB_NAME: "n",
+        MIGRATIONS_RUN: "TRUE",
+      })
     ).toMatchObject({ host: "db", database: "n", migrationsRun: true });
     expect(() => loadDbConfig({ DB_PORT: "abc" })).toThrow(/DB_PORT/);
   });
@@ -63,8 +70,14 @@ describe("two proxies in front of the API (infra CRIT 1)", () => {
       for (let i = 0; i < 5; i++) {
         await request(app).post("/api/auth/login").set(via("198.51.100.1")).send({ email, password: "Wrong-pass-123" });
       }
-      const sameClient = await request(app).post("/api/auth/login").set(via("198.51.100.1")).send({ email, password: "Wrong-pass-123" });
-      const otherClient = await request(app).post("/api/auth/login").set(via("198.51.100.2")).send({ email, password: "Wrong-pass-123" });
+      const sameClient = await request(app)
+        .post("/api/auth/login")
+        .set(via("198.51.100.1"))
+        .send({ email, password: "Wrong-pass-123" });
+      const otherClient = await request(app)
+        .post("/api/auth/login")
+        .set(via("198.51.100.2"))
+        .send({ email, password: "Wrong-pass-123" });
       return { same: sameClient.status, other: otherClient.status };
     } finally {
       overrideConfig({ trustProxy: original.trustProxy, rateLimitEnabled: original.rateLimitEnabled });
@@ -97,7 +110,8 @@ describe("migrations list (infra MED 10)", () => {
 
 describe("admin config rollback (infra MED 15)", () => {
   it("writes several settings all-or-nothing", async () => {
-    const { getMatchWeights, saveConfigs, MATCH_WEIGHTS_KEY, clearConfigCache } = await import("../src/utils/matchWeights");
+    const { getMatchWeights, saveConfigs, MATCH_WEIGHTS_KEY, clearConfigCache } =
+      await import("../src/utils/matchWeights");
     const before = await getMatchWeights();
     const changed = { ...before, skills: before.skills === 40 ? 41 : 40 };
     await expect(

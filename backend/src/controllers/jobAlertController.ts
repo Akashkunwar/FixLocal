@@ -68,6 +68,7 @@ export async function deleteJobAlert(req: Request, res: Response) {
 
 export async function previewJobAlert(req: Request, res: Response) {
   const body = req.valid.body;
-  if (!req.user!.proVerified) throw forbidden("Your professional account must be verified to preview matching jobs", "NOT_VERIFIED");
+  if (!req.user!.proVerified)
+    throw forbidden("Your professional account must be verified to preview matching jobs", "NOT_VERIFIED");
   return res.json(await previewMatches({ ...body, categories: body.categories ?? [] }, req.user!.id));
 }

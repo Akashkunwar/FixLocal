@@ -18,7 +18,10 @@ export async function listNotifications(req: Request, res: Response) {
     .take(limit ?? 30);
   if (unread) qb.andWhere("n.read = false");
   if (typeof before === "string") {
-    qb.andWhere(`(n."createdAt", n."id") < (SELECT c."createdAt", c."id" FROM "notifications" c WHERE c."id" = :before)`, { before });
+    qb.andWhere(
+      `(n."createdAt", n."id") < (SELECT c."createdAt", c."id" FROM "notifications" c WHERE c."id" = :before)`,
+      { before }
+    );
   } else if (before) {
     qb.andWhere("n.createdAt < :before", { before });
   }
