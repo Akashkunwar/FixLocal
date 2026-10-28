@@ -62,3 +62,22 @@ describe("GST details on the payment summary", () => {
     expect(html.match(/GSTIN:/g)).toHaveLength(1);
   });
 });
+
+describe("refund and credit lines (money LOW 7)", () => {
+  it("shows refunded and credit lines only when there are any", async () => {
+    const { buildMilestoneInvoiceHtml } = await import("./invoice");
+    const base = { milestones: [], escrowAmount: 1000, releasedTotal: 600, remainingHeld: 0, paymentStatus: "released" } as unknown as JobPayments;
+    const plain = buildMilestoneInvoiceHtml(job, base);
+    expect(plain).not.toContain("Refunded to client");
+    expect(plain).not.toContain("FixLocal credit");
+    const html = buildMilestoneInvoiceHtml(job, {
+      ...base,
+      refundedTotal: 400,
+      credit: { appliedToPayment: 150.5, addedToPayout: 75 },
+    });
+    expect(html).toMatch(/Refunded to client<\/span><strong>₹400/);
+    expect(html).toMatch(/credit applied to payment<\/span><strong>− ₹150\.50/);
+    expect(html).toMatch(/Paid by client<\/span><strong>₹849\.50/);
+    expect(html).toMatch(/credit added to payout<\/span><strong>\+ ₹75/);
+  });
+});

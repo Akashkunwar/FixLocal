@@ -167,6 +167,22 @@ export function buildMilestoneInvoiceHtml(job: Job, payments: JobPayments): stri
     <div class="totals">
       <div class="row"><span>Escrow total</span><strong>${money(payments.escrowAmount)}</strong></div>
       <div class="row"><span>Released</span><strong>${money(payments.releasedTotal)}</strong></div>
+      ${
+        payments.refundedTotal
+          ? `<div class="row"><span>Refunded to client</span><strong>${money(payments.refundedTotal)}</strong></div>`
+          : ""
+      }
+      ${
+        payments.credit?.appliedToPayment
+          ? `<div class="row"><span>FixLocal credit applied to payment</span><strong>− ${money(payments.credit.appliedToPayment)}</strong></div>
+      <div class="row"><span>Paid by client</span><strong>${money(Math.max(0, (payments.escrowAmount ?? 0) - payments.credit.appliedToPayment))}</strong></div>`
+          : ""
+      }
+      ${
+        payments.credit?.addedToPayout
+          ? `<div class="row"><span>FixLocal credit added to payout</span><strong>+ ${money(payments.credit.addedToPayout)}</strong></div>`
+          : ""
+      }
       <div class="row grand"><span>Still held</span><strong>${money(payments.remainingHeld)}</strong></div>
       ${
         sourceLabel

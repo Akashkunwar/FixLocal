@@ -195,6 +195,8 @@ export type JobPayments = {
   escrowAmount: number | null;
   escrowSource?: "quote" | "bid" | null;
   releasedTotal: number;
+  /** Sum of milestones refunded to the client (dispute or cancellation). */
+  refundedTotal?: number;
   remainingHeld: number;
   /** FixLocal credit the viewer used on this job (simulated). */
   credit?: { appliedToPayment: number; addedToPayout: number } | null;
