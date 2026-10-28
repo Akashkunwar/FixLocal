@@ -2,7 +2,7 @@
 
 The per-wave development log from the original project README, kept for reference. It describes features as they were built during the course; the current setup, security model and tests are documented in the main [README](../README.md).
 
-> Some notes below describe behaviour that has since changed (for example tokens in `localStorage`, TypeORM `synchronize`, and templates stored in the browser). See the README for how things work now.
+> Some notes below describe behaviour that has since changed (for example tokens in `localStorage`, TypeORM `synchronize`, and templates stored in the browser). See the README for how things work now. The `npm run waveN:smoke` commands mentioned below were folded into `npm run legacy:smoke` (in `frontend/`), which runs every `scripts/waveN-smoke.mjs` through the compatibility shim.
 
 ## Suggested walkthrough (wave 10)
 

@@ -36,7 +36,7 @@ Also built in:
 
 | Layer | Technology |
 | --- | --- |
-| Frontend | React 18, Vite, TypeScript, Tailwind CSS, React Router 7, Leaflet |
+| Frontend | React 19, Vite, TypeScript, Tailwind CSS, React Router 7, Leaflet |
 | Backend | Node.js 22, Express 5, TypeORM 0.3, PostgreSQL, zod validation, pino logging |
 | Cache / live updates | Redis (optional in development): auth-state cache, rate limits, open-job cache, cross-instance chat fan-out |
 | Files | Local disk (`UPLOADS_DIR`) or any S3-compatible bucket (`STORAGE_DRIVER=s3`), always served through `/api/files/:name` with signed, expiring URLs |
@@ -51,7 +51,7 @@ browser ──► nginx (web) ──► /api/*  ──► Express API ──► 
 Main ideas:
 
 - **Auth**: a short-lived access token (15 min) kept only in memory, plus a rotating refresh token in an `httpOnly` cookie (`fl_refresh`, path `/api/auth`). Reusing an old refresh token revokes the whole session family. Changing the password, "sign out everywhere", suspension and account deletion revoke everything at once.
-- **Authorization** lives in `backend/src/policies`: one place decides who can see a job (full details, listing only, or nothing), who can post in which chat thread, and who can act at each job stage. A table-driven test checks 840 action × state × actor combinations.
+- **Authorization** lives in `backend/src/policies`: one place decides who can see a job (full details, listing only, or nothing), who can post in which chat thread, and who can act at each job stage. A table-driven test checks 896 action × state × actor combinations.
 - **Job lifecycle** is a state machine: `open → awarded → in_progress → pending_confirmation → completed`, plus `cancelled` and `disputed`. The pro marks work done; the client confirms (or it auto-confirms after `AUTO_CONFIRM_DAYS`), which releases any remaining escrow.
 - **Money follows the work**: the client can release the Deposit once a pro is hired, Progress once work has started, and Completion once the pro has marked the work done. Confirming completion (or an admin dispute ruling) releases whatever is left. Nothing can be released while a dispute is open; these checks run under the job's row lock. When a dispute is closed with "no action" and the job goes back to awaiting confirmation, the auto-confirm clock restarts.
 - **Money** is recorded in a ledger (`ledger_entries`); earnings and admin totals come from the ledger, not from bid amounts. Accepting a bid, releasing milestones and confirming completion use row locks and optional `Idempotency-Key` headers, so double clicks and races can't double-pay.
@@ -205,7 +205,7 @@ The E2E journeys cover:
 
 Plus: each role is redirected away from other roles' pages, pending pros see why they can't bid, portfolio and case-study editing, bid withdrawal, server errors when posting a job, the admin availability gate, and the "schedule not published" label.
 
-`.github/workflows/ci.yml` runs lint, type checks, both unit suites with coverage, the E2E suite, `npm audit --audit-level=high`, and the Docker builds on every push and pull request. Dependabot keeps dependencies current.
+`.github/workflows/ci.yml` runs lint, type checks, both unit suites with coverage floors, the backend suite again without Redis, the E2E suite, the nginx config against a stub API (`scripts/check-nginx.sh`), `npm audit --omit=dev --audit-level=high`, the Docker builds and a `docker compose up` smoke test on every push to `main` and every pull request. Dependabot keeps dependencies current.
 
 The `frontend/scripts/wave*-smoke.mjs` scripts are **legacy** API checks from the course. Some requests they make were changed on purpose by the audit fixes (chat threads, the amount the client saw when accepting, stream tickets, account templates, 10-character passwords), so they run through a small compatibility shim (`scripts/legacy-compat.mjs`) that translates those calls without relaxing the API. Run all 27 against a throwaway stack with a database reset before each one:
 
