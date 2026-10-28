@@ -215,7 +215,7 @@ export function JobDetailPage() {
             </div>
             {job.photoUrls?.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {job.photoUrls.map((u) => (
+                {job.photoUrls.map((u, i) => (
                   <a
                     key={u}
                     href={mediaUrl(u)}
@@ -224,7 +224,7 @@ export function JobDetailPage() {
                   >
                     <img
                       src={mediaUrl(u)}
-                      alt=""
+                      alt={tf("Job photo {n} of {total}", { n: i + 1, total: job.photoUrls.length })}
                       className="h-24 w-24 rounded-xl object-cover ring-1 ring-slate-200"
                     />
                   </a>

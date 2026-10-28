@@ -24,7 +24,7 @@ export function DisputeForm({
     setBusy(true);
     try {
       await createDispute(jobId, { reason, files });
-      success(t("Dispute opened with evidence"));
+      success(files.length ? t("Dispute opened with evidence — an admin will review it") : t("Dispute opened — an admin will review it"));
       onOpened();
     } catch (err) {
       error(errorText(err));
