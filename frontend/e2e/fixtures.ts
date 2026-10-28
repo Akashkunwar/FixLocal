@@ -2,7 +2,6 @@ import zlib from "node:zlib";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 export const PASSWORD = "E2e-Password-123";
-export const NEW_PASSWORD = "Another-Pass-456";
 export const SEEDED = {
   admin: "admin@fixlocal.local",
   client: "home@fixlocal.local",

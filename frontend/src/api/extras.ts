@@ -135,10 +135,6 @@ export function getJobReview(jobId: string, signal?: AbortSignal) {
   return api<{ review: JobReview | null; proReview: JobReview | null }>(`/api/reviews/job/${jobId}`, { signal });
 }
 
-export function getClientReviews(userId: string) {
-  return api<{ averageRating: number; reviewCount: number; reviews: JobReview[] }>(`/api/reviews/client/${userId}`);
-}
-
 export type FavoriteItem = {
   id: string;
   targetType: string;

@@ -339,12 +339,6 @@ export function verifyPhoneCode(code: string) {
   return api<{ user: User }>("/api/auth/me/phone/verify", { method: "POST", body: JSON.stringify({ code }) });
 }
 
-export function uploadAvatar(file: File) {
-  const fd = new FormData();
-  fd.append("file", file);
-  return api<{ user: User }>("/api/auth/me/avatar", { method: "POST", body: fd });
-}
-
 export async function changePassword(currentPassword: string, newPassword: string) {
   const r = await api<SessionResponse>("/api/auth/change-password", {
     method: "POST",
