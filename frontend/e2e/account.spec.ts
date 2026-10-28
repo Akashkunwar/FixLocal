@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiCall, apiLogin, awardedJob, login, logout, postJob, registerViaApi, SEEDED } from "./fixtures";
+import { answerDialog, apiCall, apiLogin, awardedJob, login, logout, postJob, registerViaApi, SEEDED } from "./fixtures";
 
 test("AMC: pro proposes and the client counters; client requests and the pro accepts (journey 12)", async ({ page, browser, request }) => {
   const client = await apiLogin(request, SEEDED.client);
@@ -119,8 +119,8 @@ test("named job templates: save from a completed job, apply, remove (journey 13)
   await login(page, SEEDED.client2);
   await page.goto(`/client/jobs/${job.id}`);
   const name = `Tap service ${Date.now().toString(36)}`;
-  page.once("dialog", (d) => d.accept(name));
   await page.getByRole("button", { name: "Save as template" }).click();
+  await answerDialog(page, { text: name });
   await expect(page.getByText(`Saved “${name}” to your job templates`)).toBeVisible();
 
   await page.goto("/client/jobs/new");

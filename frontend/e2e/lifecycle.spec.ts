@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiCall, apiLogin, awardedJob, login, pngBytes, postJob, SEEDED } from "./fixtures";
+import { answerDialog, apiCall, apiLogin, awardedJob, login, pngBytes, postJob, SEEDED } from "./fixtures";
 
 test("schedule: pro proposes, client accepts, calendar links and visit prep appear (journey 5)", async ({ page, browser, request }) => {
   const client = await apiLogin(request, SEEDED.client);
@@ -104,8 +104,8 @@ test("completion: start, photos, mark done, confirm, escrow release, two-way rev
   await login(page, SEEDED.client);
   await page.goto(`/client/jobs/${job.id}`);
   await expect(page.getByText("2. Progress")).toBeVisible();
-  page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Release" }).click();
+  await answerDialog(page);
   await expect(page.getByText("Deposit released")).toBeVisible();
   await expect(page.getByTestId("release-locked")).toHaveText(/once the professional starts work/);
   await expect(page.getByRole("button", { name: "Release" })).toHaveCount(0);
@@ -125,9 +125,9 @@ test("completion: start, photos, mark done, confirm, escrow release, two-way rev
   await page.goto(`/client/jobs/${job.id}`);
   await expect(page.getByText("The professional marked this job as done")).toBeVisible();
   await expect(page.getByText(/confirmed automatically on/)).toBeVisible();
-  page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Confirm work is complete" }).click();
-  await expect(page.getByText(/remaining payment milestone\(s\) released|Job marked completed/)).toBeVisible();
+  await answerDialog(page);
+  await expect(page.getByText(/remaining payment milestones? released|Job marked completed/)).toBeVisible();
 
   const pay = await apiCall<{ milestones: { status: string }[] }>(request, client, "get", `/api/jobs/${job.id}/payments`);
   expect(pay.milestones.map((m) => m.status)).toEqual(["released", "released", "released"]);

@@ -6,9 +6,10 @@ import { defineConfig, devices } from "@playwright/test";
  * End-to-end tests run a real backend (port 3101) on a throwaway database (fixlocal_e2e,
  * recreated on every run) and the Vite dev server (port 5174) proxying /api to it.
  * The developer's own servers (3001 / 5173) and database are never touched.
+ * E2E_API_PORT / E2E_WEB_PORT / E2E_DB_NAME / E2E_REDIS_URL let two checkouts run side by side.
  */
-const API_PORT = 3101;
-const WEB_PORT = 5174;
+const API_PORT = Number(process.env.E2E_API_PORT) || 3101;
+const WEB_PORT = Number(process.env.E2E_WEB_PORT) || 5174;
 export const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
 export const E2E_PASSWORD = "E2e-Password-123";
 

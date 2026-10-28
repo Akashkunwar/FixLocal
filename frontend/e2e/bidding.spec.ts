@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { apiCall, apiLogin, login, postJob, SEEDED, type ApiUser } from "./fixtures";
+import { expect, test } from "@playwright/test";
+import { answerDialog, apiCall, apiLogin, login, postJob, SEEDED, type ApiUser } from "./fixtures";
 
 type Bid = { id: string; amount: number; quoteAmount?: number; quoteRevision: number };
 
@@ -13,15 +13,6 @@ async function bid(request: Parameters<typeof apiCall>[0], pro: ApiUser, jobId: 
   return body.bid;
 }
 
-/** Accept the next confirm() and capture its text. */
-function nextDialog(page: Page) {
-  return new Promise<string>((resolve) => {
-    page.once("dialog", async (d) => {
-      resolve(d.message());
-      await d.accept();
-    });
-  });
-}
 
 test("client compares bids, counters, pro revises, client accepts and escrow is split (journey 3)", async ({ page, browser, request }) => {
   const client = await apiLogin(request, SEEDED.client);
@@ -78,9 +69,8 @@ test("client compares bids, counters, pro revises, client accepts and escrow is 
   await expect(page.locator(`#bid-${first.id}`)).toBeVisible();
 
   // Accept: the confirm dialog names the final amount.
-  const dialog = nextDialog(page);
   await page.locator(`#bid-${first.id}`).getByRole("button", { name: /Accept/ }).click();
-  expect(await dialog).toMatch(/2600/);
+  expect(await answerDialog(page)).toMatch(/2,?600/);
   await expect(page.getByText(/Accepted · ₹2600/)).toBeVisible();
 
   for (const label of ["Deposit", "Progress", "Completion"]) {
@@ -107,16 +97,14 @@ test("a quote changed after the page loaded is caught before accepting (journey 
   // The pro raises the quote while the client is looking at the old one.
   await apiCall(request, pro, "patch", `/api/bids/${b.id}/quote`, { quoteAmount: 2900 });
 
-  const firstDialog = nextDialog(page);
   await page.locator(`#bid-${b.id}`).getByRole("button", { name: /Accept/ }).click();
-  expect(await firstDialog).toMatch(/2000/);
-  await expect(page.getByText(/changed their quote to ₹2900/)).toBeVisible();
+  expect(await answerDialog(page)).toMatch(/2,?000/);
+  await expect(page.getByText(/changed their quote to ₹2,?900/)).toBeVisible();
   const status = await apiCall<{ job: { status: string } }>(request, client, "get", `/api/jobs/${job.id}`);
   expect(status.job.status).toBe("open");
 
   // A fresh confirm shows the new amount.
-  const secondDialog = nextDialog(page);
   await page.locator(`#bid-${b.id}`).getByRole("button", { name: /Accept/ }).click();
-  expect(await secondDialog).toMatch(/2900/);
+  expect(await answerDialog(page)).toMatch(/2,?900/);
   await expect(page.getByText(/Accepted · ₹2900/)).toBeVisible();
 });

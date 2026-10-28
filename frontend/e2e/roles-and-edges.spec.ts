@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiCall, apiLogin, login, logout, pngBytes, postJob, registerViaApi, SEEDED } from "./fixtures";
+import { answerDialog, apiCall, apiLogin, login, logout, pngBytes, postJob, registerViaApi, SEEDED } from "./fixtures";
 
 /** Checks ported from the legacy e2e-auth / e2e-admin / e2e-tradesperson / e2e-homeowner scripts. */
 
@@ -85,8 +85,8 @@ test("a professional withdraws a bid", async ({ page, request }) => {
 
   await login(page, SEEDED.pro2);
   await page.goto(`/professional/jobs/${job.id}`);
-  page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Withdraw" }).click();
+  await answerDialog(page);
   await expect(page.getByText("Bid withdrawn")).toBeVisible();
   const { bids } = await apiCall<{ bids: { id: string; status: string }[] }>(request, client, "get", `/api/jobs/${job.id}/bids`);
   expect(bids.find((b) => b.id === bid.id)?.status).toBe("withdrawn");
