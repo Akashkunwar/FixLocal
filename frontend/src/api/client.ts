@@ -169,9 +169,12 @@ async function refreshOnce(): Promise<RefreshOutcome> {
     }
     try {
       const res = await fetch(`${API_URL}/api/auth/refresh`, { method: "POST", credentials: "include" });
+      // 204: no refresh cookie, i.e. simply not signed in (a quiet answer, not an error).
+      if (res.status === 204) return { kind: "lost" };
       if (res.ok) return { kind: "ok", session: (await res.json()) as SessionResponse };
-      // Only a real "no / bad session" answer ends the session. Rate limits and server errors retry.
-      if (res.status === 429 || res.status >= 500) {
+      // Only a real "no / bad session" answer ends the session. Rate limits, server errors and a
+      // 409 REFRESH_IN_PROGRESS (another tab is rotating the same cookie right now) retry.
+      if (res.status === 409 || res.status === 429 || res.status >= 500) {
         last = res.status;
         continue;
       }

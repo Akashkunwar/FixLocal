@@ -117,6 +117,23 @@ describe("refresh failures (fe-logic MED 9)", () => {
     expect(calls.filter((c) => c.url.endsWith("/api/auth/refresh"))).toHaveLength(1);
   });
 
+  it("retries a 409 REFRESH_IN_PROGRESS instead of logging out", async () => {
+    const lost = vi.fn();
+    tab.client.onUnauthenticated(lost);
+    let n = 0;
+    mockFetch(() => (n++ === 0 ? json(409, { code: "REFRESH_IN_PROGRESS" }) : json(200, session("after-409"))));
+    await expect(tab.client.refreshSession()).resolves.toMatchObject({ token: "after-409" });
+    expect(n).toBe(2);
+    expect(lost).not.toHaveBeenCalled();
+  });
+
+  it("treats a 204 (no refresh cookie) as quietly signed out, with one request", async () => {
+    const { calls } = mockFetch(() => new Response(null, { status: 204 }));
+    await expect(tab.client.refreshSession()).resolves.toBeNull();
+    expect(calls).toHaveLength(1);
+    expect(tab.client.hasAccessToken()).toBe(false);
+  });
+
   it("turns a network failure on a normal request into a translatable error", async () => {
     mockFetch(() => {
       throw new TypeError("Failed to fetch");

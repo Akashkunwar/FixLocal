@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCheck } from "lucide-react";
 import clsx from "clsx";
@@ -31,7 +31,7 @@ export function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
 
-  const types = NOTIFICATION_GROUPS.find((g) => g.key === group)?.types ?? [];
+  const types = useMemo(() => NOTIFICATION_GROUPS.find((g) => g.key === group)?.types ?? [], [group]);
 
   // Every load belongs to one filter. Changing the filter aborts the old request, and a slow
   // answer (or a "load more") for the previous filter is dropped instead of mixed in (fe-logic MED 15).
@@ -46,9 +46,7 @@ export function NotificationsPage() {
       setItems((xs) => (before ? [...xs, ...r.notifications] : r.notifications));
       return true;
     },
-    // `types` is derived from `group`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [unreadOnly, group, begin]
+    [unreadOnly, types, begin]
   );
 
   useEffect(() => {
@@ -72,7 +70,7 @@ export function NotificationsPage() {
   async function loadMore() {
     setMore(true);
     try {
-      await load(items[items.length - 1]?.createdAt);
+      await load(items[items.length - 1]?.id); // the cursor is the last notification's id
     } catch (e) {
       if (!isAbort(e)) error(errorText(e, "Couldn't load more notifications"));
     } finally {

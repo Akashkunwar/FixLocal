@@ -20,13 +20,14 @@ export const ERROR_CODE_TEXT: Record<string, string> = {
   ACCOUNT_SUSPENDED: "This account is suspended. Contact support if you think this is a mistake.",
   TOKEN_EXPIRED: "This link has expired. Ask for a new one.",
   TOKEN_INVALID: "This link isn't valid. Ask for a new one.",
+  INVALID_ID: "We couldn't find that. The link may be wrong or out of date.",
   TOKEN_REVOKED: "This link has already been used. Ask for a new one.",
   NOT_VERIFIED: "Confirm your email address first — check your inbox for the link.",
   UNAUTHORIZED: "Please log in again.",
 };
 
 /** Codes whose server message is never worth showing (technical or vague): always use our sentence. */
-const PREFER_CODE = new Set(["NETWORK_ERROR", "INTERNAL", "INVALID_JSON", "ROUTE_NOT_FOUND"]);
+const PREFER_CODE = new Set(["NETWORK_ERROR", "INTERNAL", "INVALID_JSON", "ROUTE_NOT_FOUND", "TOKEN_INVALID", "INVALID_ID"]);
 /** Catch-all server messages; a specific message with the same code (e.g. a VALIDATION reason) is kept. */
 const GENERIC_MESSAGES = new Set(["Invalid request", "Invalid input"]);
 

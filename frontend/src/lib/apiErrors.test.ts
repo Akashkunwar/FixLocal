@@ -24,6 +24,8 @@ describe("errorText", () => {
     setCurrentLang("hi");
     expect(errorText(apiError(401, "Invalid email or password"))).toBe("ईमेल या पासवर्ड ग़लत है");
     expect(errorText(apiError(429, "Slow down there", "RATE_LIMITED"))).toMatch(/[\u0900-\u097F]/);
+    expect(errorText(apiError(400, "This link is invalid or has expired. Ask for a new one.", "TOKEN_INVALID"))).toBe("यह लिंक सही नहीं है। नया लिंक मँगाएँ।");
+    expect(errorText(apiError(400, "We couldn't find that. The link may be wrong or out of date.", "INVALID_ID"))).toMatch(/[\u0900-\u097F]/);
     expect(errorText(new Error("boom"), "Upload failed")).toBe("boom");
     expect(errorText("weird", "Upload failed")).toBe("अपलोड नहीं हो सका");
   });

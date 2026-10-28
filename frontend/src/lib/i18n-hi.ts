@@ -2307,4 +2307,6 @@ export const HI: Record<string, string> = {
   "I bid on work": "मैं काम पर बोली लगाता/लगाती हूँ",
   "Describe the job, compare bids from verified professionals, and hire.": "काम बताएँ, वेरिफ़ाइड प्रोफ़ेशनल की बोलियों की तुलना करें और काम पर रखें।",
   "Build a portfolio, get admin-verified, then bid on open jobs near you.": "पोर्टफ़ोलियो बनाएँ, एडमिन से वेरिफ़ाई कराएँ, फिर अपने आसपास के खुले कामों पर बोली लगाएँ।",
+  "We couldn't find that. The link may be wrong or out of date.": "यह नहीं मिला। लिंक ग़लत या पुराना हो सकता है।",
+  "This link is invalid or has expired. Ask for a new one.": "यह लिंक ग़लत है या इसकी समय-सीमा ख़त्म हो गई। नया लिंक मँगाएँ।",
 };

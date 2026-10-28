@@ -17,7 +17,7 @@ export function listNotifications(unread?: boolean, signal?: AbortSignal) {
   return api<{ notifications: Notification[]; unreadCount: number }>(`/api/notifications${q}`, { signal });
 }
 
-/** Notification centre: filtered, paged by `before` (createdAt of the last item shown). */
+/** Notification centre: filtered, paged by `before` (the id of the last item shown). */
 export function listNotificationsPage(
   opts: { unread?: boolean; types?: string[]; before?: string; limit?: number },
   signal?: AbortSignal
@@ -27,7 +27,7 @@ export function listNotificationsPage(
   if (opts.types?.length) q.set("types", opts.types.join(","));
   if (opts.before) q.set("before", opts.before);
   q.set("limit", String(opts.limit ?? 20));
-  return api<{ notifications: Notification[]; unreadCount: number; total: number }>(`/api/notifications?${q}`, { signal });
+  return api<{ notifications: Notification[]; unreadCount: number; total: number; nextBefore: string | null }>(`/api/notifications?${q}`, { signal });
 }
 
 export function markNotificationRead(id: string) {
