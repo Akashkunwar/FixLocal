@@ -1,5 +1,5 @@
 import type { BillingParty, Job, JobPayments } from "../api/jobs";
-import { money, fmtDate, fmtDateTime } from "./format";
+import { moneyExact as money, fmtDate, fmtDateTime } from "./format";
 
 /** Business name and GSTIN lines for a party, when they've added them in Settings. */
 function businessLines(p?: BillingParty | null): string {

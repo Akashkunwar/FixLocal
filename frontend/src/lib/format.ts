@@ -1,36 +1,96 @@
-import { t } from "./t";
+import { currentLang, t } from "./t";
+/** Locale for numbers and dates: Hindi digits stay Latin (hi-IN uses Latin digits by default). */
+export function displayLocale() {
+  return currentLang() === "hi" ? "hi-IN" : "en-IN";
+}
+
+let displayTimeZone = "Asia/Kolkata";
+/** Dates show in the user's own time zone (Settings), defaulting to IST. AuthContext sets this. */
+export function setDisplayTimeZone(tz?: string | null) {
+  try {
+    if (tz) new Intl.DateTimeFormat("en-IN", { timeZone: tz }); // throws on an unknown zone
+    displayTimeZone = tz || "Asia/Kolkata";
+  } catch {
+    displayTimeZone = "Asia/Kolkata";
+  }
+}
+export const getDisplayTimeZone = () => displayTimeZone;
+
 export function money(v: string | number | null | undefined) {
   if (v === null || v === undefined || v === "") return "—";
   const n = Number(v);
   if (!Number.isFinite(n)) return String(v);
-  return new Intl.NumberFormat("en-IN", {
+  return new Intl.NumberFormat(displayLocale(), {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(n);
 }
 
-export function fmtDate(v?: string | Date | null) {
-  if (!v) return "—";
-  const d = typeof v === "string" ? new Date(v) : v;
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-IN", {
+/**
+ * Exact amount for payments and invoices: paise are shown when there are any, so milestones add
+ * up to the total (₹999 → ₹299.70 + ₹399.60 + ₹299.70, not ₹300 + ₹400 + ₹300).
+ */
+export function moneyExact(v: string | number | null | undefined) {
+  if (v === null || v === undefined || v === "") return "—";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  const whole = Math.abs(n * 100 - Math.round(n) * 100) < 0.5;
+  return new Intl.NumberFormat(displayLocale(), {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 2,
+  }).format(n);
+}
+
+function toDate(v?: string | Date | number | null): Date | null {
+  if (v === null || v === undefined || v === "") return null;
+  const d = v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function fmtDate(v?: string | Date | number | null) {
+  const d = toDate(v);
+  if (!d) return "—";
+  return d.toLocaleDateString(displayLocale(), {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: displayTimeZone,
   });
 }
 
-export function fmtDateTime(v?: string | Date | null) {
-  if (!v) return "—";
-  const d = typeof v === "string" ? new Date(v) : v;
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-IN", {
+export function fmtDateTime(v?: string | Date | number | null) {
+  const d = toDate(v);
+  if (!d) return "—";
+  return d.toLocaleString(displayLocale(), {
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: displayTimeZone,
   });
+}
+
+/** Date and time with the year (history entries, audit rows). */
+export function fmtDateTimeFull(v?: string | Date | number | null) {
+  const d = toDate(v);
+  if (!d) return "—";
+  return d.toLocaleString(displayLocale(), {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: displayTimeZone,
+  });
+}
+
+export function fmtTime(v?: string | Date | number | null) {
+  const d = toDate(v);
+  if (!d) return "—";
+  return d.toLocaleTimeString(displayLocale(), { hour: "2-digit", minute: "2-digit", timeZone: displayTimeZone });
 }
 
 export function initials(name?: string | null, email?: string) {

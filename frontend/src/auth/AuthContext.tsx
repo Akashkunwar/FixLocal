@@ -19,6 +19,7 @@ import {
   type User,
 } from "../api/client";
 
+import { setDisplayTimeZone } from "../lib/format";
 type ProfileUpdate = {
   name?: string | null;
   phone?: string | null;
@@ -98,6 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const templatesRef = useRef<TemplateBundle | null>(null);
+  // Dates render in the user's own zone. Set during render (idempotent) so children already see it.
+  setDisplayTimeZone(user?.timezone);
 
   const adopt = useCallback(async (u: User) => {
     templatesRef.current = await loadTemplates();

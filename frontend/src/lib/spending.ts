@@ -1,5 +1,5 @@
 import type { SpendingJob } from "../api/features";
-import { categoryLabel } from "./format";
+import { categoryLabel, displayLocale } from "./format";
 import { statusLabel } from "./status";
 
 const cell = (v: unknown) => {
@@ -30,5 +30,5 @@ export function spendingCsv(jobs: SpendingJob[]): string {
 /** "2026-10" → "Oct 2026" */
 export function monthLabel(key: string): string {
   const [y, m] = key.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
+  return new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString(displayLocale(), { month: "short", year: "numeric", timeZone: "UTC" });
 }
