@@ -4,7 +4,7 @@ Grok Bot drafted these Hindi strings on 27–28 Oct 2026 for the frontend i18n s
 
 Conventions used: *bid* → बोली, *quote* → कोटेशन, *escrow* → एस्क्रो, *invite* → न्योता, *pro* → प्रो, *job* → काम, *milestone* → किस्त. `{name}` placeholders must stay as they are (a test checks this).
 
-959 strings.
+1000 strings.
 
 | English | Hindi |
 | --- | --- |
@@ -967,3 +967,44 @@ Conventions used: *bid* → बोली, *quote* → कोटेशन, *escro
 | note | नोट |
 | reply | जवाब |
 | intro | परिचय |
+| FixLocal home | FixLocal होम |
+| Skip to content | सीधे मुख्य हिस्से पर जाएँ |
+| Your bid of {amount} is far below the client's budget (from {min}). Check for a missing zero before you send it. | आपकी {amount} की बोली क्लाइंट के बजट ({min} से शुरू) से बहुत कम है। भेजने से पहले देख लें कि कोई शून्य तो नहीं छूटा। |
+| Verifying your email… | आपका ईमेल वेरिफ़ाई हो रहा है… |
+| This link is missing its token. | इस लिंक में टोकन नहीं है। |
+| {group} near you | आपके पास {group} |
+| We've sent a link to {email}. Open it to confirm your email, then log in. If you already have an account with this address, the email explains how to get back in. | हमने {email} पर एक लिंक भेजा है। ईमेल कन्फ़र्म करने के लिए इसे खोलें, फिर लॉग इन करें। अगर इस पते से आपका अकाउंट पहले से है, तो ईमेल में वापस आने का तरीका बताया गया है। |
+| Job photo {n} of {total} | काम की फ़ोटो {n} / {total} |
+| Dispute opened with evidence — an admin will review it | सबूत के साथ विवाद खोला गया — एक एडमिन इसकी जाँच करेगा |
+| Bid this low? | इतनी कम बोली लगाएँ? |
+| Place bid | बोली लगाएँ |
+| Back to jobs | कामों पर वापस जाएँ |
+| Bidding has closed — the client hired another professional. | बोली बंद हो गई — क्लाइंट ने किसी दूसरे प्रोफ़ेशनल को रखा। |
+| this client | इस क्लाइंट |
+| Up to {n} bid is accepted on this job. | इस काम पर ज़्यादा से ज़्यादा {n} बोली ली जाती है। |
+| Up to {n} bids are accepted on this job. | इस काम पर ज़्यादा से ज़्यादा {n} बोलियाँ ली जाती हैं। |
+| New message | नया मैसेज |
+| New quote in chat | चैट में नया कोटेशन |
+| New message with attachment | फ़ाइल के साथ नया मैसेज |
+| Dashboard | डैशबोर्ड |
+| Page not found | पेज नहीं मिला |
+| admin | एडमिन |
+| no action | कोई कार्रवाई नहीं |
+| user suspend | यूज़र निलंबित |
+| user unsuspend | यूज़र का निलंबन हटा |
+| dispute resolve | विवाद सुलझा |
+| force cancel | ज़बरदस्ती रद्द |
+| report resolve | रिपोर्ट सुलझी |
+| user delete | यूज़र मिटाया |
+| open report | खुली रिपोर्ट |
+| Lightning reply | बहुत तेज़ जवाब |
+| Lightning | बहुत तेज़ |
+| Fast reply | तेज़ जवाब |
+| Same-day reply | उसी दिन जवाब |
+| Steady reply | सामान्य जवाब |
+| Slow reply | धीमा जवाब |
+| Slow | धीमा |
+| I post work | मैं काम पोस्ट करता/करती हूँ |
+| I bid on work | मैं काम पर बोली लगाता/लगाती हूँ |
+| Describe the job, compare bids from verified professionals, and hire. | काम बताएँ, वेरिफ़ाइड प्रोफ़ेशनल की बोलियों की तुलना करें और काम पर रखें। |
+| Build a portfolio, get admin-verified, then bid on open jobs near you. | पोर्टफ़ोलियो बनाएँ, एडमिन से वेरिफ़ाई कराएँ, फिर अपने आसपास के खुले कामों पर बोली लगाएँ। |

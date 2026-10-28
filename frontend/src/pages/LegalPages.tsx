@@ -1,3 +1,4 @@
+import { AuthTopBar } from "../components/AuthTopBar";
 import { useEffect, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Wrench } from "lucide-react";
@@ -198,6 +199,9 @@ export function NotFoundPage() {
   useEffect(() => setPageMeta(t("Page not found")), []);
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
+      <header className="mx-auto w-full max-w-5xl px-6 py-4">
+        <AuthTopBar />
+      </header>
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-6 text-center">
         <p className="font-display text-6xl font-semibold text-brand-700">404</p>
         <h1 className="mt-3 text-xl font-semibold text-slate-900">{t("We couldn’t find that page")}</h1>

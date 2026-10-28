@@ -176,7 +176,7 @@ export function RegisterPage() {
             >
               <p className="text-sm font-semibold text-slate-900">{t(c.title)}</p>
               <p className="mt-0.5 text-xs font-medium text-brand-800">{t(c.tagline)}</p>
-              <p className="mt-1.5 text-[11px] leading-snug text-slate-500">{c.detail}</p>
+              <p className="mt-1.5 text-[11px] leading-snug text-slate-500">{t(c.detail)}</p>
             </button>
           ))}
         </div>
