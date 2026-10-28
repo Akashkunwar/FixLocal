@@ -257,6 +257,17 @@ export function CreateJobPage() {
   const [postArmed, setPostArmed] = useState(true);
   const lastStep = STEPS.length - 1;
   const prevStep = useRef(step);
+  // Back takes the place of Continue's neighbour on the next step: ignore it for a beat after a
+  // step change so a double-click on Continue doesn't go forward and straight back.
+  const stepChangedAt = useRef(0);
+  function moveTo(next: (s: number) => number) {
+    stepChangedAt.current = Date.now(); // set before render so a click landing mid-render is caught
+    setStep(next);
+  }
+  function goBack() {
+    if (Date.now() - stepChangedAt.current < 500) return;
+    moveTo((s) => Math.max(0, s - 1));
+  }
   useEffect(() => {
     if (step === lastStep && prevStep.current !== lastStep) {
       setPostArmed(false);
@@ -273,7 +284,7 @@ export function CreateJobPage() {
       error(problems[0]);
       return;
     }
-    setStep((s) => Math.min(s + 1, lastStep));
+    moveTo((s) => Math.min(s + 1, lastStep));
   }
 
   async function onSubmit(e: FormEvent) {
@@ -282,7 +293,7 @@ export function CreateJobPage() {
       goNext(); // Enter in a field on an earlier step moves on; it never posts
       return;
     }
-    if (!postArmed || busy) return;
+    if (!postArmed || busy || Date.now() - stepChangedAt.current < 700) return;
 
     const fd = new FormData();
     Object.entries(draft).forEach(([k, v]) => {
@@ -803,7 +814,7 @@ export function CreateJobPage() {
 
         <div className="flex flex-wrap gap-2 pt-2">
           {step > 0 && (
-            <button type="button" className="btn-secondary" onClick={() => setStep((s) => s - 1)}>
+            <button type="button" className="btn-secondary" onClick={goBack}>
               {t("Back")}
             </button>
           )}
