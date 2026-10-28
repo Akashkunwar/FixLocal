@@ -14,7 +14,7 @@ test("a pro saves a job alert and is notified when a matching job is posted", as
   await expect(page.getByRole("button", { name: /Electrical/ })).toHaveAttribute("aria-pressed", "true");
   await page.getByLabel("City").fill("Bengaluru");
   await page.getByLabel("Name (optional)").fill("E2E electrical alert");
-  await expect(page.getByText(/open jobs? from the last 30 days match right now/)).toBeVisible();
+  await expect(page.getByText(/open jobs? from the last 30 days match(es)? right now/)).toBeVisible();
   await expect(page.getByRole("radio", { name: /Daily digest/ })).toBeChecked();
   await page.getByRole("radio", { name: /Instant/ }).check();
   await page.getByRole("button", { name: "Save alert" }).click();
