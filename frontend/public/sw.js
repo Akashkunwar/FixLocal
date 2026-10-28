@@ -39,7 +39,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          if (res.ok) {
+          // Only the app's HTML becomes the offline shell (not robots.txt, sitemap.xml or a file
+          // opened in a tab, which are navigations too).
+          const type = res.headers.get("content-type") || "";
+          if (res.ok && type.includes("text/html")) {
             const copy = res.clone();
             caches.open(CACHE).then((c) => c.put("/", copy)).catch(() => undefined);
           }

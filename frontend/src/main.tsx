@@ -13,6 +13,7 @@ import { ToastProvider } from "./components/Toast";
 import App from "./App";
 import "./styles.css";
 import { listenForInstallPrompt } from "./lib/install";
+import { installChunkReload } from "./lib/chunkReload";
 import { I18nProvider, prepareLanguage } from "./lib/i18n";
 
 void prepareLanguage().then(() =>
@@ -32,6 +33,7 @@ void prepareLanguage().then(() =>
 );
 
 listenForInstallPrompt();
+installChunkReload();
 
 // Only production builds get the offline cache; in dev it would serve stale modules.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
