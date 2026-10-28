@@ -2,6 +2,7 @@ import { Link2, MessageCircle, Share2 } from "lucide-react";
 import { whatsappShareUrl } from "../lib/referrals";
 import { useToast } from "./Toast";
 
+import { t } from "../lib/i18n";
 /** "Share" via the phone's share sheet (or copy the link on desktop), plus a direct WhatsApp link. */
 export function ShareButtons({ url, title, text }: { url: string; title: string; text: string }) {
   const { success, error } = useToast();
@@ -18,9 +19,9 @@ export function ShareButtons({ url, title, text }: { url: string; title: string;
     }
     try {
       await navigator.clipboard.writeText(url);
-      success("Link copied");
+      success(t("Link copied"));
     } catch {
-      error("Couldn't copy the link");
+      error(t("Couldn't copy the link"));
     }
   }
 
@@ -28,16 +29,16 @@ export function ShareButtons({ url, title, text }: { url: string; title: string;
     <>
       <button type="button" className="btn-secondary btn-sm" onClick={share}>
         {canShare ? <Share2 className="h-4 w-4" aria-hidden /> : <Link2 className="h-4 w-4" aria-hidden />}
-        {canShare ? "Share" : "Copy link"}
+        {canShare ? t("Share") : t("Copy link")}
       </button>
       <a
         className="btn-secondary btn-sm"
         href={whatsappShareUrl(`${text} ${url}`)}
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="Share on WhatsApp"
+        aria-label={t("Share on WhatsApp")}
       >
-        <MessageCircle className="h-4 w-4" aria-hidden /> WhatsApp
+        <MessageCircle className="h-4 w-4" aria-hidden /> {" "}{t("WhatsApp")}
       </a>
     </>
   );

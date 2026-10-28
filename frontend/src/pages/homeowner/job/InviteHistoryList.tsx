@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import type { JobInvite } from "../../../api/jobs";
 import { Countdown } from "../../../components/Countdown";
 import { fmtDateTime } from "../../../lib/format";
-import { t } from "../../../lib/i18n";
+import { t, tf } from "../../../lib/i18n";
 
 const REASON_LABEL: Record<string, string> = {
   busy: "Busy / fully booked",
@@ -28,7 +28,7 @@ export function InviteHistoryList({
       <h3 className="text-sm font-semibold text-slate-900">{t("Invite history")}</h3>
       <p className="text-xs text-slate-500 mb-2">
         {t("Who was invited, when, and pending vs declined")}
-        {quota ? ` · ${quota.used}/${quota.limit} used` : ""}
+        {quota ? tf(" · {used}/{limit} used", { used: quota.used, limit: quota.limit }) : ""}
       </p>
       <ul className="space-y-2">
         {invites.map((inv) => {
@@ -66,17 +66,17 @@ export function InviteHistoryList({
                   )}
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  {t("Invited by")}{" "}{inv.invitedByName || "you"} ·{" "}
+                  {t("Invited by")}{" "}{inv.invitedByName || t("you")} ·{" "}
                   {fmtDateTime(inv.invitedAt)}
                   {inv.declinedAt
-                    ? ` · declined ${fmtDateTime(inv.declinedAt)}`
+                    ? tf(" · declined {declinedAt}", { declinedAt: fmtDateTime(inv.declinedAt) })
                     : ""}
                 </p>
                 {(inv.declineReason || inv.declineNote) && (
                   <p className="text-[11px] text-slate-600 mt-0.5">
                     {[
                       inv.declineReason
-                        ? REASON_LABEL[inv.declineReason] || inv.declineReason
+                        ? t(REASON_LABEL[inv.declineReason] || inv.declineReason)
                         : null,
                       inv.declineNote,
                     ]

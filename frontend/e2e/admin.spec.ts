@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiCall, apiLogin, awardedJob, login, pdfBytes, pngBytes, registerViaApi, SEEDED } from "./fixtures";
+import { answerDialog, apiCall, apiLogin, awardedJob, login, pdfBytes, pngBytes, registerViaApi, SEEDED } from "./fixtures";
 
 type Notification = { type: string; title: string; createdAt: string };
 
@@ -67,8 +67,8 @@ test("admin: stats, search and suspend (kicks the user out), force-cancel, audit
   await expect(page).toHaveURL(/q=/);
   const row = page.locator("li", { hasText: victim.email });
   await expect(row).toHaveCount(1);
-  page.once("dialog", (d) => d.accept());
   await row.getByRole("button", { name: "Suspend" }).click();
+  await answerDialog(page);
   await expect(row.getByRole("button", { name: "Unsuspend" })).toBeVisible();
 
   // The suspended user's very next request signs them out.
@@ -80,8 +80,8 @@ test("admin: stats, search and suspend (kicks the user out), force-cancel, audit
   const pro = await apiLogin(request, SEEDED.pro2);
   const { job } = await awardedJob(request, client, pro, 2500);
   await page.goto("/admin/jobs");
-  page.once("dialog", (d) => d.accept("Duplicate booking"));
   await page.locator("li", { hasText: job.title }).getByRole("button", { name: "Force cancel" }).click();
+  await answerDialog(page, { text: "Duplicate booking" });
   await expect(page.getByText("Job cancelled (was awarded)")).toBeVisible();
   const pay = await apiCall<{ milestones: { status: string }[] }>(request, client, "get", `/api/jobs/${job.id}/payments`);
   expect(pay.milestones.every((m) => m.status === "refunded")).toBe(true);

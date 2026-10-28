@@ -2,8 +2,9 @@ import { FormEvent, useState } from "react";
 import { cancelBooking } from "../api/jobs";
 import { useToast } from "./Toast";
 import { money } from "../lib/format";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
 
+import { errorText } from "../lib/apiErrors";
 type Props = { jobId: string; side: "client" | "professional"; onDone: () => void };
 
 /** Calls off a hired job before work starts. Every milestone still held is refunded to the client. */
@@ -20,13 +21,13 @@ export function CancelBookingButton({ jobId, side, onDone }: Props) {
       const r = await cancelBooking(jobId, reason.trim() || undefined);
       success(
         r.refunded > 0
-          ? `Booking cancelled. ${money(r.refunded)} held in escrow was refunded to the client.`
-          : "Booking cancelled.",
+          ? tf("Booking cancelled. {amount} held in escrow was refunded to the client.", { amount: money(r.refunded) })
+          : t("Booking cancelled."),
       );
       setOpen(false);
       onDone();
     } catch (err) {
-      error((err as Error).message || "Couldn't cancel the booking");
+      error(errorText(err, "Couldn't cancel the booking"));
     } finally {
       setBusy(false);
     }

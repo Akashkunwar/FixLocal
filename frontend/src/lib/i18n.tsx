@@ -1,6 +1,5 @@
 import {
   createContext,
-  Fragment,
   useCallback,
   useContext,
   useEffect,
@@ -22,13 +21,14 @@ import {
 /**
  * English/Hindi switch. Keys are the English text itself, so anything untranslated stays in
  * English. The Hindi dictionary (lib/i18n-hi.ts) is a separate chunk, loaded only when Hindi is
- * chosen. `t()` is a plain function: switching language remounts the app below the provider so
- * every component re-renders in the new language.
+ * chosen. `t()` is a plain function that reads the current language. Switching language does not
+ * remount anything (that used to wipe half-typed forms, the job wizard and chat drafts): `App`
+ * subscribes to the language and re-renders the whole route tree, so every `t()` call runs again.
  *
  * Where the choice lives: on the account when logged in (synced across devices), and in
  * localStorage on this device (used when logged out and as the start-up language).
  */
-export { t, translate, loadHindi, currentLang, type Lang } from "./t";
+export { t, tf, plural, interpolate, translate, loadHindi, currentLang, type Lang } from "./t";
 export const LANG_KEY = "fixlocal:lang";
 export const HTML_LANG: Record<Lang, string> = { en: "en-IN", hi: "hi" };
 
@@ -136,7 +136,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({ lang, setLang, t: tr }), [lang, setLang, tr]);
   return (
     <I18nContext.Provider value={value}>
-      <Fragment key={lang}>{children}</Fragment>
+      {children}
     </I18nContext.Provider>
   );
 }

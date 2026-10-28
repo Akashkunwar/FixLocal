@@ -136,7 +136,7 @@ export type Bid = {
   distanceKm?: number | null;
   jobToBidHours?: number | null;
   inviteToBidHours?: number | null;
-  /** Wave 21: match score for best-value blend on bid compare */
+  /** Match score for best-value blend on bid compare */
   matchScore?: number | null;
   heatBoost?: number | null;
   rankedScore?: number | null;
@@ -195,6 +195,8 @@ export type JobPayments = {
   escrowAmount: number | null;
   escrowSource?: "quote" | "bid" | null;
   releasedTotal: number;
+  /** Sum of milestones refunded to the client (dispute or cancellation). */
+  refundedTotal?: number;
   remainingHeld: number;
   /** FixLocal credit the viewer used on this job (simulated). */
   credit?: { appliedToPayment: number; addedToPayout: number } | null;
@@ -389,7 +391,7 @@ export function mediaUrl(path: string | null | undefined) {
   return `${API_URL}${path}`;
 }
 
-export function listJobs(params: Record<string, string | undefined> = {}) {
+export function listJobs(params: Record<string, string | undefined> = {}, signal?: AbortSignal) {
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
     if (v) qs.set(k, v);
@@ -398,7 +400,7 @@ export function listJobs(params: Record<string, string | undefined> = {}) {
   return api<{
     jobs: Job[];
     pagination: { total: number; page: number; totalPages: number };
-  }>(`/api/jobs${q ? `?${q}` : ""}`);
+  }>(`/api/jobs${q ? `?${q}` : ""}`, { signal });
 }
 
 export function getJob(id: string, signal?: AbortSignal) {
@@ -434,11 +436,6 @@ export function markJobDone(id: string) {
 /** Client: confirm the work is complete and release the remaining payment. */
 export function confirmJobComplete(id: string) {
   return api<CompletionResult>(`/api/jobs/${id}/confirm`, { method: "POST", headers: { "Idempotency-Key": `confirm-${id}` } });
-}
-
-/** Legacy combined endpoint (marks done for pros, confirms for clients). */
-export function completeJob(id: string) {
-  return api<CompletionResult>(`/api/jobs/${id}/complete`, { method: "POST" });
 }
 
 export function setPhotoConsent(id: string, consent: boolean) {
@@ -990,14 +987,6 @@ export function declineCounterOffer(bidId: string, body: { notes?: string } = {}
     body: JSON.stringify(body),
   });
 }
-
-export function checkViewedNoReply(bidId: string) {
-  return api<{
-    bidId: string;
-    viewedNoReply: Bid["viewedNoReply"];
-  }>(`/api/bids/${bidId}/viewed-no-reply`);
-}
-
 
 export function startJob(jobId: string) {
   return api<{ job: Job }>(`/api/jobs/${jobId}/start`, { method: "POST" });

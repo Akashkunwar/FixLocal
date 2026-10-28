@@ -4,6 +4,8 @@
  * - The refresh token is an httpOnly cookie; a 401 triggers one shared refresh and a single retry.
  * - In development Vite proxies /api to the backend, so requests are same-origin by default.
  */
+import { runExclusiveRefresh } from "./refreshLock";
+
 const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 export type Role = "ADMIN" | "HOMEOWNER" | "TRADESPERSON";
@@ -70,6 +72,7 @@ let onSessionLost: (() => void) | null = null;
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
+  if (token) setSessionHint(true);
 }
 
 export function hasAccessToken() {
@@ -111,31 +114,110 @@ async function rawFetch(path: string, options: RequestInit) {
   }
   const sentToken = accessToken;
   if (sentToken) headers.set("Authorization", `Bearer ${sentToken}`);
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: "include" });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: "include" });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiError("Can't reach FixLocal right now. Check your connection and try again.", 0, "NETWORK_ERROR");
+  }
   return { res, sentToken };
 }
 
-/** Exchange the refresh cookie for a new access token. Concurrent callers share one request. */
+/** Thrown when the refresh endpoint can't be reached (network, 429, 5xx) after retries: not a logout. */
+export class SessionUnavailableError extends ApiError {
+  constructor(status = 0) {
+    super("Can't reach FixLocal right now. Check your connection and try again.", status, "NETWORK_ERROR");
+  }
+}
+
+/** Waits between refresh attempts on a transient failure (fe-logic MED 9). Tests shorten it. */
+let refreshBackoffMs = [400, 1200, 3000];
+export function setRefreshBackoffForTests(ms: number[]) {
+  refreshBackoffMs = ms;
+}
+
+const SESSION_HINT_KEY = "fixlocal:session";
+/** Remembers (not secret) whether this browser had a session, so a logged-out page load skips the
+ * refresh call instead of logging a 401 (ux LOW 12). Unknown (first visit after upgrade) still tries. */
+function setSessionHint(on: boolean) {
+  try {
+    localStorage.setItem(SESSION_HINT_KEY, on ? "1" : "0");
+  } catch {
+    /* storage unavailable */
+  }
+}
+function sessionHint(): "1" | "0" | null {
+  try {
+    const v = localStorage.getItem(SESSION_HINT_KEY);
+    return v === "1" || v === "0" ? v : null;
+  } catch {
+    return null;
+  }
+}
+export function forgetSessionHint() {
+  setSessionHint(false);
+}
+
+type RefreshOutcome = { kind: "ok"; session: SessionResponse } | { kind: "lost" } | { kind: "unavailable"; status: number };
+
+async function refreshOnce(): Promise<RefreshOutcome> {
+  let last = 0;
+  for (let attempt = 0; attempt <= refreshBackoffMs.length; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, refreshBackoffMs[attempt - 1]));
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/auth/refresh`, { method: "POST", credentials: "include" });
+      // 204: no refresh cookie, i.e. simply not signed in (a quiet answer, not an error).
+      if (res.status === 204) return { kind: "lost" };
+      if (res.ok) return { kind: "ok", session: (await res.json()) as SessionResponse };
+      // Only a real "no / bad session" answer ends the session. Rate limits, server errors and a
+      // 409 REFRESH_IN_PROGRESS (another tab is rotating the same cookie right now) retry.
+      if (res.status === 409 || res.status === 429 || res.status >= 500) {
+        last = res.status;
+        continue;
+      }
+      return { kind: "lost" };
+    } catch {
+      last = 0; // network error: retry
+    }
+  }
+  return { kind: "unavailable", status: last };
+}
+
+/**
+ * Exchange the refresh cookie for a new access token. Concurrent callers in this tab share one
+ * request, and other tabs wait for (and reuse) it through the cross-tab lock.
+ * Resolves null when the session is gone; throws SessionUnavailableError on a transient failure.
+ */
 export function refreshSession(): Promise<SessionResponse | null> {
   if (!refreshing) {
     refreshing = (async () => {
       try {
-        const res = await fetch(`${API_URL}/api/auth/refresh`, { method: "POST", credentials: "include" });
-        if (!res.ok) {
+        const outcome = await runExclusiveRefresh(refreshOnce);
+        if (outcome.kind === "ok") {
+          setAccessToken(outcome.session.token);
+          return outcome.session;
+        }
+        if (outcome.kind === "lost") {
           accessToken = null;
+          setSessionHint(false);
           return null;
         }
-        const data = (await res.json()) as SessionResponse;
-        accessToken = data.token;
-        return data;
-      } catch {
-        return null;
+        throw new SessionUnavailableError(outcome.status);
       } finally {
         refreshing = null;
       }
     })();
   }
   return refreshing;
+}
+
+/** Page-load restore: skips the network when this browser is known to be logged out. */
+export function restoreSession(): Promise<SessionResponse | null> {
+  if (sessionHint() === "0") return Promise.resolve(null);
+  return refreshSession();
 }
 
 const NO_RETRY = ["/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/logout"];
@@ -175,7 +257,7 @@ export async function login(email: string, password: string) {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
-  accessToken = r.token;
+  setAccessToken(r.token);
   return r;
 }
 
@@ -205,6 +287,7 @@ export async function logout() {
     await api("/api/auth/logout", { method: "POST" });
   } finally {
     accessToken = null;
+    setSessionHint(false);
   }
 }
 
@@ -256,18 +339,12 @@ export function verifyPhoneCode(code: string) {
   return api<{ user: User }>("/api/auth/me/phone/verify", { method: "POST", body: JSON.stringify({ code }) });
 }
 
-export function uploadAvatar(file: File) {
-  const fd = new FormData();
-  fd.append("file", file);
-  return api<{ user: User }>("/api/auth/me/avatar", { method: "POST", body: fd });
-}
-
 export async function changePassword(currentPassword: string, newPassword: string) {
   const r = await api<SessionResponse>("/api/auth/change-password", {
     method: "POST",
     body: JSON.stringify({ currentPassword, newPassword }),
   });
-  accessToken = r.token;
+  setAccessToken(r.token);
   return r;
 }
 

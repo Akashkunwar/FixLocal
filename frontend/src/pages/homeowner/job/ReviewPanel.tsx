@@ -2,8 +2,9 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { createReview, type JobReview } from "../../../api/extras";
 import { StarRating } from "../../../components/ui/StarRating";
 import { useToast } from "../../../components/Toast";
-import { t } from "../../../lib/i18n";
+import { t, tf } from "../../../lib/i18n";
 
+import { errorText } from "../../../lib/apiErrors";
 /** The client's review of the professional, plus the professional's rating of the client. */
 export function ReviewPanel({
   jobId,
@@ -37,10 +38,10 @@ export function ReviewPanel({
     setBusy(true);
     try {
       await createReview(jobId, rating, comment);
-      success("Thanks for your review!");
+      success(t("Thanks for your review!"));
       onSaved();
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -54,7 +55,7 @@ export function ReviewPanel({
       className={`card scroll-mt-24 p-6 ${review ? "" : "ring-2 ring-brand-200"}`}
     >
       <h2 id="review-heading" className="text-lg font-semibold">
-        {review ? t("Your review") : `How did it go${proName ? ` with ${proName}` : ""}?`}
+        {review ? t("Your review") : proName ? tf("How did it go with {name}?", { name: proName }) : t("How did it go?")}
       </h2>
       {!review && (
         <p className="mb-3 mt-1 text-sm text-slate-600">

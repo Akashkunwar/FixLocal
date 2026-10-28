@@ -14,7 +14,7 @@ test("a pro saves a job alert and is notified when a matching job is posted", as
   await expect(page.getByRole("button", { name: /Electrical/ })).toHaveAttribute("aria-pressed", "true");
   await page.getByLabel("City").fill("Bengaluru");
   await page.getByLabel("Name (optional)").fill("E2E electrical alert");
-  await expect(page.getByText(/open jobs? from the last 30 days match right now/)).toBeVisible();
+  await expect(page.getByText(/open jobs? from the last 30 days match(es)? right now/)).toBeVisible();
   await expect(page.getByRole("radio", { name: /Daily digest/ })).toBeChecked();
   await page.getByRole("radio", { name: /Instant/ }).check();
   await page.getByRole("button", { name: "Save alert" }).click();
@@ -221,10 +221,11 @@ test("Hindi toggle translates the core pages, persists, and stays accessible", a
   await page.getByLabel("ईमेल").fill(SEEDED.client);
   await page.getByLabel("पासवर्ड", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "साइन इन" }).click();
-  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "मेरे काम" })).toBeVisible();
+  // Navigation landmarks are named in the page language too ("मुख्य" = Primary).
+  await expect(page.getByRole("navigation", { name: /मुख्य/ }).getByRole("link", { name: "मेरे काम" }).filter({ visible: true }).first()).toBeVisible();
 
   await page.goto("/settings");
   await page.getByRole("radio", { name: "English" }).check();
   await expect(page.locator("html")).toHaveAttribute("lang", "en-IN");
-  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "My jobs" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: /primary/i }).getByRole("link", { name: "My jobs" }).filter({ visible: true }).first()).toBeVisible();
 });

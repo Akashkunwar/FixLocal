@@ -1,5 +1,5 @@
-import { X } from "lucide-react";
-import { t } from "../lib/i18n";
+import { Dialog } from "./ui/Dialog";
+import { t, tf } from "../lib/i18n";
 
 export type BestValueExplainRow = {
   bidId: string;
@@ -46,31 +46,26 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
       ? Math.round(slaW * row.slaHeatNorm * 1000) / 10
       : null;
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      <button
-        type="button"
-        className="absolute inset-0 bg-slate-900/40"
-        aria-label={t("Close best value explain")}
-        onClick={onClose}
-      />
-      <aside className="relative z-10 flex h-full w-full max-w-md flex-col bg-white shadow-xl">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">{t("Why best value")}</p>
-            <h2 className="text-lg font-semibold text-slate-900">
-              {row.name}
-              {row.isBest ? t(" · Best value") : ""}
-            </h2>
-            <p className="mt-1 text-xs text-slate-500">
-              {t("Blend: match")}{" "}{row.matchPct}{t("% · lower escrow hold")}{" "}{row.pricePct}%
-              {slaHeatPct > 0 ? ` · SLA/heat ${slaHeatPct}%` : ""}
-            </p>
-          </div>
-          <button type="button" className="btn-ghost btn-sm touch-target" onClick={onClose} aria-label={t("Close")}>
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      variant="drawer"
+      eyebrow={t("Why best value")}
+      title={
+        <>
+          {row.name}
+          {row.isBest ? t(" · Best value") : ""}
+        </>
+      }
+      description={
+        <span className="text-xs text-slate-500">
+          {t("Blend: match")}{" "}{row.matchPct}{t("% · lower escrow hold")}{" "}{row.pricePct}%
+          {slaHeatPct > 0 ? ` · ${t("SLA/heat")} ${slaHeatPct}%` : ""}
+        </span>
+      }
+      closeLabel={t("Close best value explain")}
+    >
+        <div className="space-y-4">
           <div className="rounded-xl bg-sky-50 p-3 ring-1 ring-sky-100">
             <p className="text-sm font-semibold text-slate-900">
               {t("Value score")}{" "}<span className="font-mono text-sky-900">{row.valueScore}</span>
@@ -79,7 +74,7 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
               {row.matchPct}{t("% × matchNorm (")}{row.matchNorm.toFixed(2)}) + {row.pricePct}{t("% × priceNorm (")}
               {row.priceNorm.toFixed(2)})
               {slaHeatPct > 0 && row.slaHeatNorm != null
-                ? ` + ${slaHeatPct}% × slaHeatNorm (${row.slaHeatNorm.toFixed(2)})`
+                ? tf(" + {slaHeatPct}% × slaHeatNorm ({slaHeatNorm})", { slaHeatPct, slaHeatNorm: row.slaHeatNorm.toFixed(2) })
                 : ""}{" "}
               → {row.valueScore}
             </p>
@@ -146,7 +141,6 @@ export function BestValueExplainPanel({ open, onClose, row }: Props) {
             {t("Weights are admin-tunable on Match quality (audited). Scores are relative to other clean competing bids on this job (simulated escrow only).")}
           </p>
         </div>
-      </aside>
-    </div>
+    </Dialog>
   );
 }

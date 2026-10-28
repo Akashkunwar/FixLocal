@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Star } from "lucide-react";
 import { listPendingReviews, type PendingReview } from "../api/extras";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
 
 /** "How did it go?" prompt for completed jobs that still need a review. Renders nothing when there are none. */
 export function PendingReviewsCard() {
@@ -33,7 +33,7 @@ export function PendingReviewsCard() {
         <Star className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" aria-hidden />
         <div className="min-w-0 flex-1">
           <h2 id="pending-reviews-heading" className="font-semibold text-slate-900">
-            {pending.length === 1 ? t("How did it go?") : `${pending.length} finished jobs are waiting for your review`}
+            {pending.length === 1 ? t("How did it go?") : tf("{pending} finished jobs are waiting for your review", { pending: pending.length })}
           </h2>
           <p className="mt-0.5 text-sm text-slate-600">
             {t("Rate")}{" "}{first.counterpartName} {t("for “")}{first.title}{t("” — it takes a few seconds.")}

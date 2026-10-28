@@ -8,6 +8,8 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { useToast } from "../../components/Toast";
 import { fmtDateTime } from "../../lib/format";
 
+import { t } from "../../lib/i18n";
+import { errorText } from "../../lib/apiErrors";
 const FILTERS = [
   { value: "open", label: "Open" },
   { value: "resolved", label: "Resolved" },
@@ -32,7 +34,7 @@ export function AdminReportsPage() {
     try {
       setReports((await listReports(status)).reports);
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     } finally {
       setLoading(false);
     }
@@ -48,13 +50,13 @@ export function AdminReportsPage() {
       success(next === "resolved" ? "Report resolved" : "Report dismissed");
       void load();
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
   return (
-    <Shell title="Reports" subtitle="Jobs, users and messages flagged by the community">
-      <div className="mb-4 flex gap-2" role="group" aria-label="Filter reports">
+    <Shell title={t("Reports")} subtitle={t("Jobs, users and messages flagged by the community")}>
+      <div className="mb-4 flex gap-2" role="group" aria-label={t("Filter reports")}>
         {FILTERS.map((f) => (
           <button
             key={f.value}
@@ -63,14 +65,14 @@ export function AdminReportsPage() {
             className={status === f.value ? "btn-primary btn-sm" : "btn-secondary btn-sm"}
             onClick={() => setStatus(f.value)}
           >
-            {f.label}
+            {t(f.label)}
           </button>
         ))}
       </div>
       {loading ? (
         <Spinner />
       ) : reports.length === 0 ? (
-        <EmptyState title="Nothing here" description="No reports in this filter." />
+        <EmptyState title={t("Nothing here")} description={t("No reports in this filter.")} />
       ) : (
         <ul className="grid gap-3">
           {reports.map((r) => {
@@ -91,12 +93,14 @@ export function AdminReportsPage() {
                 </div>
                 <p className="whitespace-pre-wrap text-slate-800">{r.reason}</p>
                 <p className="text-xs text-slate-500">
-                  Reported by {r.reporter?.name || r.reporter?.email || "a user"}
+                  
+                  {t("Reported by")}{" "}{r.reporter?.name || r.reporter?.email || t("a user")}
                 </p>
                 {r.status === "open" ? (
                   <div className="space-y-2">
                     <label className="label" htmlFor={`note-${r.id}`}>
-                      Note (saved to the audit log)
+                      
+                      {t("Note (saved to the audit log)")}
                     </label>
                     <textarea
                       id={`note-${r.id}`}
@@ -106,10 +110,12 @@ export function AdminReportsPage() {
                     />
                     <div className="flex gap-2">
                       <button type="button" className="btn-primary btn-sm" onClick={() => close(r, "resolved")}>
-                        Mark resolved
+                        
+                        {t("Mark resolved")}
                       </button>
                       <button type="button" className="btn-ghost btn-sm" onClick={() => close(r, "dismissed")}>
-                        Dismiss
+                        
+                        {t("Dismiss")}
                       </button>
                     </div>
                   </div>

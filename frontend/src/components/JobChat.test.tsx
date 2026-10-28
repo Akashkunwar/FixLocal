@@ -71,3 +71,30 @@ describe("JobChat polling (L-2)", () => {
     expect(listMessages.mock.calls.length).toBe(afterSuccess + 1);
   });
 });
+
+describe("JobChat switching threads (fe-logic MED 13)", () => {
+  it("never shows the previous thread's messages after switching", async () => {
+    let releaseOld: (v: unknown) => void = () => undefined;
+    const msg = (id: string, body: string) => ({ id, body, createdAt: "2026-10-27T10:00:00Z", sender: { id: "p", name: "Pro", role: "TRADESPERSON" }, attachments: [] });
+    listMessages.mockImplementation((_job: string, pro: string) =>
+      pro === "pro-old"
+        ? new Promise((r) => (releaseOld = r))
+        : Promise.resolve({ messages: [msg("m2", "new thread hello")], canSend: true, hasMore: false, nextBefore: null })
+    );
+    const { rerender } = render(
+      <ToastProvider>
+        <JobChat jobId="job-1" proId="pro-old" />
+      </ToastProvider>
+    );
+    rerender(
+      <ToastProvider>
+        <JobChat jobId="job-1" proId="pro-new" />
+      </ToastProvider>
+    );
+    await flush();
+    releaseOld({ messages: [msg("m1", "old thread secret")], canSend: true, hasMore: false, nextBefore: null });
+    await flush();
+    expect(screen.getByText("new thread hello")).toBeInTheDocument();
+    expect(screen.queryByText("old thread secret")).toBeNull();
+  });
+});

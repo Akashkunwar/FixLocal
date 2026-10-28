@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { Zap, Clock, Turtle } from "lucide-react";
 
+import { t, plural } from "../../lib/i18n";
 export type ResponseSla = {
   tier: "lightning" | "fast" | "same_day" | "steady" | "slow" | "unknown" | string;
   label: string;
@@ -26,6 +27,15 @@ function Icon({ tier }: { tier: string }) {
   return <Clock className="h-3 w-3" />;
 }
 
+/** Tier names are translated here; the server label is the fallback for a tier we don't know. */
+const TIER_LABEL: Record<string, { full: string; short: string }> = {
+  lightning: { full: "Lightning reply", short: "Lightning" },
+  fast: { full: "Fast reply", short: "Fast" },
+  same_day: { full: "Same-day reply", short: "Same-day" },
+  steady: { full: "Steady reply", short: "Steady" },
+  slow: { full: "Slow reply", short: "Slow" },
+};
+
 function formatHours(h: number | null | undefined) {
   if (h == null || !Number.isFinite(h)) return null;
   if (h < 1) return `${Math.round(h * 60)}m`;
@@ -44,17 +54,20 @@ export function ResponseSlaBadge({
 }) {
   if (!sla) return null;
   const hoursLabel = formatHours(sla.hours);
+  const known = TIER_LABEL[sla.tier];
+  const label = known ? t(known.full) : t(sla.label);
+  const shortLabel = known ? t(known.short) : t(sla.label.replace(/ reply$/i, ""));
   const sourceHint =
     sla.source === "invite_to_bid"
-      ? "invite → bid"
+      ? t("invite → bid")
       : sla.source === "job_to_bid"
-        ? "job → bid"
+        ? t("job → bid")
         : null;
   const titleParts = [
-    sla.label,
+    label,
     hoursLabel ? `~${hoursLabel}` : null,
     sourceHint,
-    sla.sampleSize ? `n=${sla.sampleSize}` : null,
+    sla.sampleSize ? plural(sla.sampleSize, "based on {n} reply", "based on {n} replies") : null,
   ].filter(Boolean);
 
   return (
@@ -67,7 +80,7 @@ export function ResponseSlaBadge({
       title={titleParts.join(" · ")}
     >
       <Icon tier={sla.tier} />
-      {compact ? sla.label.replace(/ reply$/i, "") : sla.label}
+      {compact ? shortLabel : label}
       {hoursLabel && !compact ? (
         <span className="font-mono normal-case tracking-normal opacity-80">~{hoursLabel}</span>
       ) : null}

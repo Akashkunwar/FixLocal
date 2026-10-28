@@ -7,6 +7,8 @@ import { ResponseSlaBadge } from "../../components/ui/ResponseSlaBadge";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { categoryLabel, money } from "../../lib/format";
 
+import { t, tf, plural } from "../../lib/i18n";
+import { errorText } from "../../lib/apiErrors";
 export function AnalyticsPage() {
   const [data, setData] = useState<ProAnalytics | null>(null);
   const [counterStats, setCounterStats] = useState<CounterAnalytics | null>(null);
@@ -16,7 +18,7 @@ export function AnalyticsPage() {
   useEffect(() => {
     getMyAnalytics()
       .then((r) => setData(r.analytics))
-      .catch((e) => setErr(e.message || "Failed to load"))
+      .catch((e) => setErr(errorText(e, "Failed to load")))
       .finally(() => setLoading(false));
     getProCounterAnalytics()
       .then(setCounterStats)
@@ -28,73 +30,74 @@ export function AnalyticsPage() {
 
   return (
     <Shell
-      title="Analytics"
-      subtitle="Wins, category mix, response pace, and earnings from your bids"
+      title={t("Analytics")}
+      subtitle={t("Wins, category mix, response pace, and earnings from your bids")}
     >
       {loading ? (
         <Spinner />
       ) : err ? (
-        <EmptyState title="Could not load analytics" description={err} />
+        <EmptyState title={t("Could not load analytics")} description={err} />
       ) : !data ? (
-        <EmptyState title="No data yet" description="Place bids to start building your stats." />
+        <EmptyState title={t("No data yet")} description={t("Place bids to start building your stats.")} />
       ) : (
         <div className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="Jobs won" value={String(data.jobsWon)} />
+            <Stat label={t("Jobs won")} value={String(data.jobsWon)} />
             <Stat
-              label="Win rate"
+              label={t("Win rate")}
               value={`${data.winRate}%`}
-              hint={`${data.jobsWon} of ${data.totalBids} bids`}
+              hint={tf("{jobsWon} of {totalBids} bids", { jobsWon: data.jobsWon, totalBids: data.totalBids })}
             />
             <Stat
-              label="Avg rating"
+              label={t("Avg rating")}
               value={data.reviewCount ? data.averageRating.toFixed(1) : "—"}
-              hint={`${data.reviewCount} review(s)`}
+              hint={plural(data.reviewCount, "{n} review", "{n} reviews")}
             />
-            <Stat label="Earned (completed)" value={money(data.totalEarned)} />
+            <Stat label={t("Earned (completed)")} value={money(data.totalEarned)} />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="Active bids" value={String(data.activeBids)} />
+            <Stat label={t("Active bids")} value={String(data.activeBids)} />
             <Stat
-              label="In progress / awarded"
+              label={t("In progress / awarded")}
               value={String(data.inProgressJobs + data.awardedJobs)}
             />
-            <Stat label="Completed jobs" value={String(data.completedJobs)} />
+            <Stat label={t("Completed jobs")} value={String(data.completedJobs)} />
             <Stat
-              label="Bids (30 days)"
+              label={t("Bids (30 days)")}
               value={String(data.bidsLast30Days ?? 0)}
-              hint="Recent activity"
+              hint={t("Recent activity")}
             />
           </div>
 
           {data.responseSla && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-slate-500">Response SLA</span>
+              <span className="text-xs font-medium text-slate-500">{t("Response SLA")}</span>
               <ResponseSlaBadge sla={data.responseSla} />
             </div>
           )}
 
           {counterStats && counterStats.sent > 0 && (
             <section className="card p-4 sm:p-5">
-              <h2 className="text-sm font-semibold text-slate-900">Counter-offer SLA</h2>
+              <h2 className="text-sm font-semibold text-slate-900">{t("Counter-offer SLA")}</h2>
               <p className="text-xs text-slate-500 mb-3">
-                Homeowner counters you addressed vs declined · time-to-address
+                
+                {t("Homeowner counters you addressed vs declined · time-to-address")}
               </p>
               <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
-                <Stat label="Received" value={String(counterStats.sent)} />
+                <Stat label={t("Received")} value={String(counterStats.sent)} />
                 <Stat
-                  label="Addressed"
+                  label={t("Addressed")}
                   value={String(counterStats.addressed)}
                   hint={`${counterStats.addressRate}%`}
                 />
                 <Stat
-                  label="Declined"
+                  label={t("Declined")}
                   value={String(counterStats.declined)}
                   hint={`${counterStats.declineRate}%`}
                 />
                 <Stat
-                  label="Avg time to address"
+                  label={t("Avg time to address")}
                   value={
                     counterStats.avgTimeToAddressHours != null
                       ? `${counterStats.avgTimeToAddressHours}h`
@@ -102,7 +105,7 @@ export function AnalyticsPage() {
                   }
                   hint={
                     counterStats.medianTimeToAddressHours != null
-                      ? `med ${counterStats.medianTimeToAddressHours}h`
+                      ? tf("med {medianTimeToAddressHours}h", { medianTimeToAddressHours: counterStats.medianTimeToAddressHours })
                       : undefined
                   }
                 />
@@ -112,36 +115,38 @@ export function AnalyticsPage() {
 
           {data.slaTrends && (
             <section className="card p-4 sm:p-5">
-              <h2 className="text-sm font-semibold text-slate-900">SLA trends</h2>
+              <h2 className="text-sm font-semibold text-slate-900">{t("SLA trends")}</h2>
               <p className="text-xs text-slate-500 mb-3">
-                Job post → your bid · last 7 / 30 days
-                {data.slaTrends.clean ? "" : " · building sample…"}
+                
+                {t("Job post → your bid · last 7 / 30 days")}
+                {data.slaTrends.clean ? "" : t(" · building sample…")}
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-                  <p className="text-[10px] uppercase tracking-wide text-slate-500">7 days</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">{t("7 days")}</p>
                   <div className="mt-1.5">
                     <ResponseSlaBadge sla={data.slaTrends.d7} />
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500">
                     n={data.slaTrends.d7.sampleSize ?? 0}
-                    {data.slaTrends.d7.hours != null ? ` · ~${data.slaTrends.d7.hours}h avg` : ""}
+                    {data.slaTrends.d7.hours != null ? tf(" · ~{hours}h avg", { hours: data.slaTrends.d7.hours }) : ""}
                   </p>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-                  <p className="text-[10px] uppercase tracking-wide text-slate-500">30 days</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">{t("30 days")}</p>
                   <div className="mt-1.5">
                     <ResponseSlaBadge sla={data.slaTrends.d30} />
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500">
                     n={data.slaTrends.d30.sampleSize ?? 0}
-                    {data.slaTrends.d30.hours != null ? ` · ~${data.slaTrends.d30.hours}h avg` : ""}
+                    {data.slaTrends.d30.hours != null ? tf(" · ~{hours}h avg", { hours: data.slaTrends.d30.hours }) : ""}
                   </p>
                 </div>
               </div>
               <div className="mt-4">
                 <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-2">
-                  Response hours trend (lower is better)
+                  
+                  {t("Response hours trend (lower is better)")}
                 </p>
                 <SlaSparkline
                   d7={data.slaTrends.d7.hours}
@@ -154,34 +159,35 @@ export function AnalyticsPage() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Stat
-              label="Avg response"
+              label={t("Avg response")}
               value={
                 data.avgResponseHours != null ? formatHours(data.avgResponseHours) : "—"
               }
               hint={
                 data.responseSampleSize
-                  ? `Job post → your bid · n=${data.responseSampleSize}`
-                  : "Place bids to measure response time"
+                  ? tf("Job post → your bid · n={responseSampleSize}", { responseSampleSize: data.responseSampleSize })
+                  : t("Place bids to measure response time")
               }
             />
             <Stat
-              label="Median response"
+              label={t("Median response")}
               value={
                 data.medianResponseHours != null
                   ? formatHours(data.medianResponseHours)
                   : "—"
               }
-              hint="Heuristic from bid timestamps"
+              hint={t("Heuristic from bid timestamps")}
             />
           </div>
 
           <section className="card p-5 sm:p-6">
-            <h2 className="font-semibold text-lg text-slate-900 mb-1">Category mix</h2>
+            <h2 className="font-semibold text-lg text-slate-900 mb-1">{t("Category mix")}</h2>
             <p className="text-sm text-slate-500 mb-4">
-              Won jobs by category · earned from completed only
+              
+              {t("Won jobs by category · earned from completed only")}
             </p>
             {!data.categoryMix?.length ? (
-              <p className="text-sm text-slate-500">Win a job to see category breakdown.</p>
+              <p className="text-sm text-slate-500">{t("Win a job to see category breakdown.")}</p>
             ) : (
               <ul className="space-y-3">
                 {data.categoryMix.map((row) => (
@@ -207,9 +213,10 @@ export function AnalyticsPage() {
           </section>
 
           <section className="card p-5 sm:p-6">
-            <h2 className="font-semibold text-lg text-slate-900 mb-1">Earnings over time</h2>
+            <h2 className="font-semibold text-lg text-slate-900 mb-1">{t("Earnings over time")}</h2>
             <p className="text-sm text-slate-500 mb-4">
-              Last 6 months · from completed awarded jobs (simulated)
+              
+              {t("Last 6 months · from completed awarded jobs (simulated)")}
             </p>
             <ul className="space-y-3">
               {data.earningsOverTime.map((row) => (
@@ -233,9 +240,11 @@ export function AnalyticsPage() {
             </ul>
             {data.totalEarned === 0 && (
               <p className="mt-4 text-sm text-slate-500">
-                No completed payouts yet.{" "}
+                
+                {t("No completed payouts yet.")}{" "}
                 <Link to="/professional" className="text-brand-700 font-medium">
-                  Browse open jobs
+                  
+                  {t("Browse open jobs")}
                 </Link>
               </p>
             )}
@@ -285,7 +294,7 @@ function SlaSparkline({
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-sm h-14" role="img" aria-label="SLA sparkline">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-sm h-14" role="img" aria-label={t("SLA sparkline")}>
         {bars.map((b, i) => {
           const barH = b.hours == null ? 2 : Math.max(4, (b.hours / maxH) * (h - pad * 2));
           const x = pad + i * bw + bw * 0.15;
@@ -315,7 +324,7 @@ function SlaSparkline({
       <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
         {bars.map((b) => (
           <span key={b.label} className="rounded-sm bg-slate-50 px-1.5 py-0.5 ring-1 ring-slate-200">
-            {b.label}: {b.hours != null ? `~${b.hours}h` : "—"}
+            {t(b.label)}: {b.hours != null ? `~${b.hours}h` : "—"}
             {b.n ? ` (n=${b.n})` : ""}
           </span>
         ))}

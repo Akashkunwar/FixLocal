@@ -1,6 +1,6 @@
 import { CategoryIcon, LeadGroupIcon } from "../components/CategoryIcon";
 import { useEffect } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { setPageMeta } from "../lib/site";
 import { ArrowLeft, ArrowRight, Briefcase, Search, Wrench } from "lucide-react";
 import {
@@ -13,16 +13,18 @@ import {
 import { clientPath, proPath } from "../lib/paths";
 import { useAuth } from "../auth/AuthContext";
 
+import { t, tf } from "../lib/i18n";
+import { NotFoundPage } from "./LegalPages";
 export function LeadGroupHubPage() {
   const { groupSlug } = useParams<{ groupSlug: string }>();
   const group = leadGroupFromSlug(groupSlug || "");
   const { user } = useAuth();
   useEffect(() => {
-    if (group) setPageMeta(`${group} near you`, `${group}: ${leadGroupBlurb(group)} Compare quotes from verified local professionals on FixLocal.`);
+    if (group) setPageMeta(tf("{group} near you", { group: t(group) }), `${group}: ${leadGroupBlurb(group)} Compare quotes from verified local professionals on FixLocal.`);
   }, [group]);
 
   if (!group) {
-    return <Navigate to="/" replace />;
+    return <NotFoundPage />;
   }
 
   const cats = categoriesForLeadGroup(group);
@@ -44,16 +46,16 @@ export function LeadGroupHubPage() {
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-700 text-white">
             <Wrench className="h-4 w-4" />
           </span>
-          <span className="font-display text-xl font-semibold">FixLocal</span>
+          <span className="font-display text-xl font-semibold">{t("FixLocal")}</span>
         </Link>
         <div className="flex items-center gap-2">
           <Link to="/" className="btn-ghost btn-sm no-underline inline-flex items-center gap-1">
-            <ArrowLeft className="h-3.5 w-3.5" /> Home
+            <ArrowLeft className="h-3.5 w-3.5" /> {" "}{t("Home")}
           </Link>
           {!user && (
             <>
-              <Link to="/login" className="btn-ghost btn-sm no-underline">Log in</Link>
-              <Link to="/register" className="btn-primary btn-sm no-underline">Get started</Link>
+              <Link to="/login" className="btn-ghost btn-sm no-underline">{t("Log in")}</Link>
+              <Link to="/register" className="btn-primary btn-sm no-underline">{t("Get started")}</Link>
             </>
           )}
         </div>
@@ -61,37 +63,40 @@ export function LeadGroupHubPage() {
 
       <main className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
-          Category group
+          
+          {t("Category group")}
         </p>
         <h1 className="mt-1 flex items-center gap-3 font-display text-3xl font-semibold text-slate-900 sm:text-4xl">
           <LeadGroupIcon group={group} size="lg" tile />
-          {group}
+          {t(group)}
         </h1>
-        <p className="mt-3 max-w-2xl text-slate-600">{leadGroupBlurb(group)}</p>
+        <p className="mt-3 max-w-2xl text-slate-600">{t(leadGroupBlurb(group))}</p>
 
         <div className="mt-8 flex flex-wrap gap-3">
           <Link to={postHref} className="btn-primary no-underline">
-            Post a job <ArrowRight className="h-4 w-4" />
+            
+            {t("Post a job")}{" "}<ArrowRight className="h-4 w-4" />
           </Link>
           <Link to={findHref} className="btn-secondary no-underline inline-flex items-center gap-1.5">
-            <Search className="h-4 w-4" /> Find professionals
+            <Search className="h-4 w-4" /> {" "}{t("Find professionals")}
           </Link>
           <Link to={browseHref} className="btn-ghost no-underline inline-flex items-center gap-1.5">
-            <Briefcase className="h-4 w-4" /> Browse open jobs
+            <Briefcase className="h-4 w-4" /> {" "}{t("Browse open jobs")}
           </Link>
         </div>
 
         <section className="mt-12">
-          <h2 className="font-semibold text-lg text-slate-900">Specialties in this group</h2>
+          <h2 className="font-semibold text-lg text-slate-900">{t("Specialties in this group")}</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Tap a specialty to find matching professionals{user ? "" : " (sign in as a client)"}.
+            
+            {t("Tap a specialty to find matching professionals")}{user ? "" : t(" (sign in as a client)")}.
           </p>
           <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {cats.map((c) => (
               <li key={c.value} className="card p-4 transition hover:shadow-lift">
                 <p className="flex items-center gap-2.5 font-semibold text-slate-900">
                   <CategoryIcon category={c.value} size="md" tile />
-                  {c.label}
+                  {t(c.label)}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Link
@@ -102,7 +107,8 @@ export function LeadGroupHubPage() {
                     }
                     className="btn-secondary btn-sm no-underline text-xs"
                   >
-                    Find pros
+                    
+                    {t("Find pros")}
                   </Link>
                   <Link
                     to={
@@ -112,7 +118,8 @@ export function LeadGroupHubPage() {
                     }
                     className="btn-ghost btn-sm no-underline text-xs"
                   >
-                    Post this work
+                    
+                    {t("Post this work")}
                   </Link>
                 </div>
               </li>
@@ -122,9 +129,10 @@ export function LeadGroupHubPage() {
 
         <section className="mt-12">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Other category groups
+            
+            {t("Other category groups")}
           </h2>
-          <div className="mt-3 flex flex-wrap gap-2" role="navigation" aria-label="Other lead groups">
+          <div className="mt-3 flex flex-wrap gap-2" role="navigation" aria-label={t("Other lead groups")}>
             {LEAD_GROUPS.filter((g) => g !== group).map((g) => {
               return (
                 <Link
@@ -141,7 +149,8 @@ export function LeadGroupHubPage() {
       </main>
 
       <footer className="border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-500">
-        FixLocal · App Dev Lab project · Simulated payments only
+        
+        {t("FixLocal · App Dev Lab project · Simulated payments only")}
       </footer>
     </div>
   );

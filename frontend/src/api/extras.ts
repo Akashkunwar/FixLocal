@@ -17,14 +17,17 @@ export function listNotifications(unread?: boolean, signal?: AbortSignal) {
   return api<{ notifications: Notification[]; unreadCount: number }>(`/api/notifications${q}`, { signal });
 }
 
-/** Notification centre: filtered, paged by `before` (createdAt of the last item shown). */
-export function listNotificationsPage(opts: { unread?: boolean; types?: string[]; before?: string; limit?: number }) {
+/** Notification centre: filtered, paged by `before` (the id of the last item shown). */
+export function listNotificationsPage(
+  opts: { unread?: boolean; types?: string[]; before?: string; limit?: number },
+  signal?: AbortSignal
+) {
   const q = new URLSearchParams();
   if (opts.unread) q.set("unread", "1");
   if (opts.types?.length) q.set("types", opts.types.join(","));
   if (opts.before) q.set("before", opts.before);
   q.set("limit", String(opts.limit ?? 20));
-  return api<{ notifications: Notification[]; unreadCount: number; total: number }>(`/api/notifications?${q}`);
+  return api<{ notifications: Notification[]; unreadCount: number; total: number; nextBefore: string | null }>(`/api/notifications?${q}`, { signal });
 }
 
 export function markNotificationRead(id: string) {
@@ -130,10 +133,6 @@ export type JobReview = {
 
 export function getJobReview(jobId: string, signal?: AbortSignal) {
   return api<{ review: JobReview | null; proReview: JobReview | null }>(`/api/reviews/job/${jobId}`, { signal });
-}
-
-export function getClientReviews(userId: string) {
-  return api<{ averageRating: number; reviewCount: number; reviews: JobReview[] }>(`/api/reviews/client/${userId}`);
 }
 
 export type FavoriteItem = {

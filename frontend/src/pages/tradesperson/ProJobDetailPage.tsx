@@ -2,7 +2,7 @@ import { CategoryIcon } from "../../components/CategoryIcon";
 import { UrgentBadge } from "../../components/UrgentBadge";
 import { JobQuestionsPanel } from "../../components/JobQuestionsPanel";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Shell } from "../../components/Shell";
 import {
   createDispute,
@@ -26,6 +26,7 @@ import { PaymentPanel } from "../../components/PaymentPanel";
 import { CompletionPhotosPanel } from "../../components/CompletionPhotosPanel";
 import { Suspense, lazy } from "react";
 
+import { errorText } from "../../lib/apiErrors";
 const AmcProposalCard = lazy(() =>
   import("../../components/AmcProposalCard").then((m) => ({
     default: m.AmcProposalCard,
@@ -39,9 +40,8 @@ import { Spinner } from "../../components/ui/Spinner";
 import { StatusTimeline } from "../../components/ui/StatusTimeline";
 import { useToast } from "../../components/Toast";
 import { useAuth } from "../../auth/AuthContext";
-import { categoryLabel, fmtDate, fmtDateTime, money } from "../../lib/format";
+import { categoryLabel, fmtDate, fmtDateTime, money, fmtDateTimeFull } from "../../lib/format";
 import {
-  addFavorite,
   createReview,
   getJobReview,
   type JobReview,
@@ -54,7 +54,7 @@ import {
   CancellationNote,
 } from "../../components/CancelBookingButton";
 import { StarRating } from "../../components/ui/StarRating";
-import { Heart } from "lucide-react";
+import { SaveJobButton } from "../../components/SaveJobButton";
 import { mergeCounterTemplates } from "../../lib/counterTemplates";
 import {
   normalizeWeeklyAvailability,
@@ -65,8 +65,12 @@ import {
   formatCustomPackage,
   type CustomRatePackage,
 } from "../../lib/ratePackages";
-import { t } from "../../lib/i18n";
+import { t, tf, plural } from "../../lib/i18n";
 
+import { useConfirm } from "../../components/ConfirmDialog";
+import { lowBidWarning } from "../../lib/bidWarnings";
+import { useRequestGuard } from "../../lib/useQuery";
+import { proPath } from "../../lib/paths";
 const DECLINE_CHIPS: { id: string; label: string }[] = [
   { id: "busy", label: "Busy" },
   { id: "schedule", label: "Schedule conflict" },
@@ -81,6 +85,7 @@ export function ProJobDetailPage() {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { success, error } = useToast();
+  const { confirm } = useConfirm();
   const [job, setJob] = useState<Job | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,17 +147,32 @@ export function ProJobDetailPage() {
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeFiles, setDisputeFiles] = useState<File[]>([]);
 
+  const beginLoad = useRequestGuard();
+  // Which action is in flight; its button is disabled so a double click can't submit twice.
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  async function runBusy(key: string, fn: () => Promise<void>) {
+    if (busyAction) return;
+    setBusyAction(key);
+    try {
+      await fn();
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   async function load() {
     if (!id) return;
+    const { signal, isCurrent } = beginLoad();
     if (!job) setLoading(true);
     try {
-      const j = await getJob(id);
+      const j = await getJob(id, signal);
       // Pros only see their own bid; no bid yet is a normal state.
-      const b = await listBids(id).catch((e) => {
+      const b = await listBids(id, signal).catch((e) => {
         if (e instanceof ApiError && e.status === 403)
           return { bids: [] as Bid[], otherActiveBidCount: undefined };
         throw e;
       });
+      if (!isCurrent()) return; // a newer load (or another job) owns the page now
       setJob(j.job);
       setBids(b.bids);
       setOtherBidCount(b.otherActiveBidCount ?? 0);
@@ -163,14 +183,15 @@ export function ProJobDetailPage() {
           .catch(() => setClientReview(null));
       }
     } catch (e) {
+      if (!isCurrent()) return;
       const err = e as ApiError;
       setLoadError(
         err.code === "NOT_VERIFIED"
-          ? "Your professional account needs to be verified by FixLocal before you can view job details."
-          : err.message,
+          ? t("Your professional account needs to be verified by FixLocal before you can view job details.")
+          : errorText(err, "Couldn't load this job"),
       );
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }
 
@@ -252,21 +273,23 @@ export function ProJobDetailPage() {
     const unit = (pkg.unit && String(pkg.unit).trim()) || "";
     const hint = (pkg.hint && String(pkg.hint).trim()) || "";
     const noteBits = [
-      `Package: ${pkg.label}`,
-      unit ? `Unit: ${unit}` : "",
-      hint,
+      tf("Package: {name}", { name: t(pkg.label) }),
+      unit ? tf("Unit: {unit}", { unit }) : "",
+      hint ? t(hint) : "",
       pkg.source === "soft"
-        ? "(soft estimate from hourly range)"
-        : "(from portfolio package)",
+        ? t("(soft estimate from hourly range)")
+        : t("(from portfolio package)"),
     ].filter(Boolean);
     setQuoteNotes((prev) => (prev.trim() ? prev : noteBits.join(" · ")));
     setMessage((prev) =>
       prev.trim()
         ? prev
-        : `Based on my ${pkg.label} package${unit ? ` (${unit})` : ""}.`,
+        : unit
+          ? tf("Based on my {name} package ({unit}).", { name: t(pkg.label), unit })
+          : tf("Based on my {name} package.", { name: t(pkg.label) }),
     );
     success(
-      `Filled bid/quote from ${pkg.source === "custom" ? "portfolio" : "soft"} package`,
+      pkg.source === "custom" ? t("Filled bid/quote from portfolio package") : t("Filled bid/quote from soft package"),
     );
   }
 
@@ -280,8 +303,7 @@ export function ProJobDetailPage() {
     setQuoteEditAmount(String(myBid.counterOffer.suggestedAmount));
     setQuoteEditNotes(myBid.counterOffer.notes || "");
     setShowQuoteEdit(true);
-    // Prefill once per counter-offer (keyed by its request time), not on every bid refresh.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- prefill once per counter-offer (keyed by its request time), not on every bid refresh
   }, [
     fromCounter,
     myBid?.id,
@@ -291,6 +313,16 @@ export function ProJobDetailPage() {
 
   async function onBid(e: FormEvent) {
     e.preventDefault();
+    const low = lowBidWarning(Number(amount), job?.budgetMin);
+    if (low) {
+      const ok = await confirm({
+        title: t("Bid this low?"),
+        message: low,
+        confirmLabel: t("Place bid"),
+      });
+      if (!ok) return;
+    }
+    await runBusy("bid", async () => {
     try {
       await placeBid(id!, {
         amount: Number(amount),
@@ -307,7 +339,7 @@ export function ProJobDetailPage() {
         quoteAttachment: quoteFile,
       });
       success(
-        myBid?.status === "withdrawn" ? "Bid re-submitted" : "Bid placed",
+        myBid?.status === "withdrawn" ? t("Bid re-submitted") : t("Bid placed"),
       );
       try {
         localStorage.setItem("fixlocal:onboarding:pro:bid", "1");
@@ -316,72 +348,84 @@ export function ProJobDetailPage() {
       }
       load();
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     }
+    });
   }
 
   async function onWithdraw() {
     if (!myBid) return;
-    if (
-      !confirm(
-        "Withdraw your bid? You can bid again while the job is still open.",
-      )
-    )
-      return;
-    try {
-      await withdrawBid(myBid.id);
-      success("Bid withdrawn");
-      load();
-    } catch (e) {
-      error((e as Error).message);
-    }
+    const ok = await confirm({
+      title: t("Withdraw your bid?"),
+      message: t("You can bid again while the job is still open."),
+      confirmLabel: t("Withdraw"),
+      danger: true,
+    });
+    if (!ok) return;
+    await runBusy("withdraw", async () => {
+      try {
+        await withdrawBid(myBid.id);
+        success(t("Bid withdrawn"));
+        load();
+      } catch (e) {
+        error(errorText(e));
+      }
+    });
   }
 
   async function onStart() {
-    try {
-      await startJob(id!);
-      success("Work started");
-      load();
-    } catch (e) {
-      error((e as Error).message);
-    }
+    await runBusy("start", async () => {
+      try {
+        await startJob(id!);
+        success(t("Work started"));
+        load();
+      } catch (e) {
+        error(errorText(e));
+      }
+    });
   }
 
   async function onComplete() {
+    await runBusy("complete", async () => {
     try {
       await markJobDone(id!);
       success(
-        "Marked as done — the client has been asked to confirm and release the remaining payment",
+        t("Marked as done — the client has been asked to confirm and release the remaining payment"),
       );
       load();
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
+    });
   }
 
   async function onReviewClient(e: FormEvent) {
     e.preventDefault();
+    await runBusy("review", async () => {
     try {
       await createReview(id!, reviewRating, reviewComment.trim() || undefined);
-      success("Thanks — your review of the client was saved");
+      success(t("Thanks — your review of the client was saved"));
       load();
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     }
+    });
   }
 
   async function onDispute(e: FormEvent) {
     e.preventDefault();
+    await runBusy("dispute", async () => {
     try {
       await createDispute(id!, { reason: disputeReason, files: disputeFiles });
-      success("Dispute opened — an admin will review it");
+      success(disputeFiles.length ? t("Dispute opened with evidence — an admin will review it") : t("Dispute opened — an admin will review it"));
       setDisputeOpen(false);
       setDisputeReason("");
       setDisputeFiles([]);
       load();
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     }
+    });
   }
 
   async function onDeclineInvite() {
@@ -397,13 +441,13 @@ export function ProJobDetailPage() {
         reason: declineReason || undefined,
         note: declineNote.trim() || undefined,
       });
-      success(r.message || "Invite declined");
+      success(r.message || t("Invite declined"));
       setInviteBanner(false);
       setShowDeclineSheet(false);
       setDeclineReason("");
       setDeclineNote("");
     } catch (e) {
-      error((e as Error).message || "Could not decline invite");
+      error(errorText(e, "Could not decline invite"));
     } finally {
       setDeclineBusy(false);
     }
@@ -426,8 +470,11 @@ export function ProJobDetailPage() {
   if (loadError && !job) {
     return (
       <Shell title={t("Job")}>
-        <div className="card p-6 text-slate-700" role="alert">
-          {loadError}
+        <div className="card space-y-3 p-6 text-slate-700" role="alert">
+          <p>{loadError}</p>
+          <Link to={proPath()} className="btn-secondary btn-sm inline-flex">
+            {t("Back to jobs")}
+          </Link>
         </div>
       </Shell>
     );
@@ -465,26 +512,14 @@ export function ProJobDetailPage() {
           {`${categoryLabel(job.category)} · ${fmtDate(job.createdAt)}`}
         </>
       }
-      actions={
-        <button
-          type="button"
-          className="btn-secondary btn-sm"
-          onClick={() =>
-            addFavorite("job", job.id)
-              .then(() => success("Saved"))
-              .catch((e) => error(e.message))
-          }
-        >
-          <Heart className="h-4 w-4" /> {t("Save")}
-        </button>
-      }
+      actions={<SaveJobButton jobId={job.id} />}
     >
       <div className="mb-6 card p-5">
         <StatusTimeline status={job.status} />
         {job.scheduledStart && (
           <p className="mt-3 text-sm text-slate-600">
             {t("Visit")}{" "}
-            {job.scheduleStatus === "confirmed" ? "confirmed" : "proposed"}:{" "}
+            {job.scheduleStatus === "confirmed" ? t("confirmed") : t("proposed")}:{" "}
             <strong>{fmtDateTime(job.scheduledStart)}</strong>
             {job.scheduledEnd ? ` – ${fmtDateTime(job.scheduledEnd)}` : ""}
           </p>
@@ -595,16 +630,16 @@ export function ProJobDetailPage() {
                 ? [job.address, job.area, job.pincode]
                     .filter(Boolean)
                     .join(", ") || t("Location TBD")
-                : `${[job.area, job.city].filter(Boolean).join(", ") || "Location TBD"} (exact address shared once you're hired)`}{" "}
+                : tf("{area} (exact address shared once you're hired)", { area: [job.area, job.city].filter(Boolean).join(", ") || t("Location to be confirmed") })}{" "}
               {t("· Budget")}{" "}{money(job.budgetMin)} – {money(job.budgetMax)}
             </p>
             {job.photoUrls?.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {job.photoUrls.map((u) => (
+                {job.photoUrls.map((u, i) => (
                   <img
                     key={u}
                     src={mediaUrl(u)}
-                    alt=""
+                    alt={tf("Job photo {n} of {total}", { n: i + 1, total: job.photoUrls.length })}
                     className="h-24 w-24 rounded-xl object-cover ring-1 ring-slate-200"
                   />
                 ))}
@@ -612,7 +647,7 @@ export function ProJobDetailPage() {
             )}
             <div className="flex flex-wrap gap-2">
               {isAwardedToMe && job.status === "awarded" && (
-                <button type="button" className="btn-primary" onClick={onStart}>
+                <button type="button" className="btn-primary" onClick={onStart} disabled={busyAction === "start"}>
                   {t("Start work")}
                 </button>
               )}
@@ -634,6 +669,7 @@ export function ProJobDetailPage() {
                   type="button"
                   className="btn-primary"
                   onClick={onComplete}
+                  disabled={busyAction === "complete"}
                 >
                   {t("Mark work done")}
                 </button>
@@ -687,7 +723,7 @@ export function ProJobDetailPage() {
                     )
                   }
                 />
-                <button type="submit" className="btn-primary btn-sm">
+                <button type="submit" className="btn-primary btn-sm" disabled={busyAction === "dispute"}>
                   {t("Submit dispute")}
                 </button>
               </form>
@@ -771,7 +807,7 @@ export function ProJobDetailPage() {
                     value={reviewComment}
                     onChange={(e) => setReviewComment(e.target.value)}
                   />
-                  <button type="submit" className="btn-primary">
+                  <button type="submit" className="btn-primary" disabled={busyAction === "review"}>
                     {t("Submit review")}
                   </button>
                 </form>
@@ -947,7 +983,7 @@ export function ProJobDetailPage() {
                     placeholder={t("Materials, labour breakdown, warranty…")}
                   />
                 </div>
-                <button type="submit" className="btn-primary">
+                <button type="submit" className="btn-primary" disabled={busyAction === "bid"}>
                   {t("Submit bid")}
                 </button>
               </form>
@@ -1094,13 +1130,12 @@ export function ProJobDetailPage() {
                             await declineCounterOffer(myBid.id, {
                               notes: notes.trim() || undefined,
                             });
-                            success("Counter-offer declined");
+                            success(t("Counter-offer declined"));
                             setShowCounterDecline(false);
                             load();
                           } catch (e) {
                             error(
-                              (e as Error).message ||
-                                "Could not decline counter",
+                              errorText(e, "Could not decline counter"),
                             );
                           } finally {
                             setCounterDeclineBusy(false);
@@ -1129,7 +1164,7 @@ export function ProJobDetailPage() {
               <p className="mt-1 text-xs text-amber-900">
                 {t("Homeowner viewed your revised quote")}
                 {myBid.viewedNoReply.hoursSinceView != null
-                  ? ` ~${Math.floor(myBid.viewedNoReply.hoursSinceView)}h ago`
+                  ? tf(" ~{hoursSinceView}h ago", { hoursSinceView: Math.floor(myBid.viewedNoReply.hoursSinceView) })
                   : ""}{" "}
                 {t("with no further revise (SLA soft flag). Consider updating the quote or messaging.")}
               </p>
@@ -1149,7 +1184,7 @@ export function ProJobDetailPage() {
                       ₹{Number(h.suggestedAmount).toFixed(0)} · {h.status}
                       <span className="text-slate-500">
                         {" "}
-                        · {new Date(h.requestedAt).toLocaleString()}
+                        · {fmtDateTimeFull(h.requestedAt)}
                       </span>
                       {h.declinedNotes
                         ? ` — “${h.declinedNotes}”`
@@ -1180,7 +1215,7 @@ export function ProJobDetailPage() {
                     {t("Quote")}{" "}
                     {myBid.quoteAmount != null ? money(myBid.quoteAmount) : ""}
                     {myBid.quoteHistory && myBid.quoteHistory.length > 0
-                      ? ` · ${myBid.quoteHistory.length} prior revision(s)`
+                      ? " · " + plural(myBid.quoteHistory.length, "{n} prior revision", "{n} prior revisions")
                       : ""}
                   </p>
                   {myBid.quoteNotes && (
@@ -1227,7 +1262,7 @@ export function ProJobDetailPage() {
                               .map((h, i) => (
                                 <li key={`${h.revisedAt}-${i}`}>
                                   {t("Was")}{" "}{h.amount != null ? money(h.amount) : "—"}{" "}
-                                  · {new Date(h.revisedAt).toLocaleString()}
+                                  · {fmtDateTimeFull(h.revisedAt)}
                                   {h.notes ? (
                                     <span className="block truncate text-slate-500">
                                       “{h.notes}”
@@ -1293,12 +1328,12 @@ export function ProJobDetailPage() {
                                   : undefined,
                                 quoteNotes: quoteEditNotes,
                               });
-                              success("Quote revised");
+                              success(t("Quote revised"));
                               setShowQuoteEdit(false);
                               await load();
                             } catch (e) {
                               error(
-                                (e as Error).message || "Quote revise failed",
+                                errorText(e, "Quote revise failed"),
                               );
                             } finally {
                               setQuoteEditBusy(false);
@@ -1332,6 +1367,7 @@ export function ProJobDetailPage() {
                   type="button"
                   className="btn-danger btn-sm mt-3"
                   onClick={onWithdraw}
+                  disabled={busyAction === "withdraw"}
                 >
                   {t("Withdraw")}
                 </button>
@@ -1349,21 +1385,25 @@ export function ProJobDetailPage() {
             <h3 className="font-semibold">{t("Competition")}</h3>
             <p className="mt-2 text-sm text-slate-600">
               {job.status !== "open"
-                ? t("Bidding has closed.")
+                ? myBid?.status === "rejected"
+                  ? t("Bidding has closed — the client hired another professional.")
+                  : t("Bidding has closed.")
                 : otherBidCount === 0
                   ? t("No other active bids yet.")
-                  : `${otherBidCount} other active bid${otherBidCount === 1 ? "" : "s"} (amounts are private).`}
+                  : plural(otherBidCount, "{n} other active bid (amounts are private).", "{n} other active bids (amounts are private).")}
             </p>
-            <p className="mt-1 text-xs text-slate-500">
-              {t("Up to")}{" "}{job.maxBids} {t("bids are accepted on this job.")}
-            </p>
+            {job.status === "open" && (
+              <p className="mt-1 text-xs text-slate-500">
+                {plural(job.maxBids, "Up to {n} bid is accepted on this job.", "Up to {n} bids are accepted on this job.")}
+              </p>
+            )}
           </div>
           <ReportButton
             targetType="job"
             targetId={job.id}
             label={t("Report this job")}
           />
-          <BlockButton userId={job.homeownerId} name="this client" />
+          <BlockButton userId={job.homeownerId} name={t("this client")} />
         </aside>
       </div>
     </Shell>

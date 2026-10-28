@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
+import { t } from "../lib/i18n";
 type Props = { children: ReactNode; resetKey?: string };
 type State = { error: Error | null };
 
@@ -24,10 +25,11 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6">
         <div className="card max-w-md space-y-3 p-6 text-center" role="alert">
-          <h1 className="text-lg font-semibold text-slate-900">Something went wrong on this page</h1>
-          <p className="text-sm text-slate-600">Reload to try again. If it keeps happening, let us know what you were doing.</p>
+          <h1 className="text-lg font-semibold text-slate-900">{t("Something went wrong on this page")}</h1>
+          <p className="text-sm text-slate-600">{t("Reload to try again. If it keeps happening, let us know what you were doing.")}</p>
           <button type="button" className="btn-primary" onClick={() => window.location.reload()}>
-            Reload
+            
+            {t("Reload")}
           </button>
         </div>
       </div>

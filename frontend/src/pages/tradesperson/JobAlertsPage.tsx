@@ -19,8 +19,9 @@ import {
 } from "../../api/features";
 import { CATEGORIES, categoryLabel, fmtDate } from "../../lib/format";
 import { RADII, criteriaOf, describeAlert, type AlertDraft as Draft } from "../../lib/jobAlerts";
-import { t } from "../../lib/i18n";
+import { t, tf, plural } from "../../lib/i18n";
 
+import { errorText } from "../../lib/apiErrors";
 const FREQUENCIES: { value: AlertFrequency; label: string; hint: string }[] = [
   { value: "daily", label: "Daily digest", hint: "One summary around 8 AM with every match from the last 24 hours." },
   { value: "instant", label: "Instant", hint: "A notification as soon as each matching job is posted." },
@@ -52,7 +53,7 @@ export function JobAlertsPage() {
         setAlerts(r.alerts);
         setMax(r.max);
       })
-      .catch((e: Error) => error(e.message))
+      .catch((e: Error) => error(errorText(e)))
       .finally(() => setLoading(false));
     getProfile()
       .then(({ profile }) => {
@@ -96,7 +97,7 @@ export function JobAlertsPage() {
           : "Job alert saved. We'll notify you as soon as a matching job is posted."
       );
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -107,7 +108,7 @@ export function JobAlertsPage() {
       const { alert } = await updateJobAlert(a.id, { frequency: next });
       setAlerts((list) => list.map((x) => (x.id === a.id ? alert : x)));
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     }
   }
 
@@ -116,7 +117,7 @@ export function JobAlertsPage() {
       const { alert } = await updateJobAlert(a.id, { active: !a.active });
       setAlerts((list) => list.map((x) => (x.id === a.id ? alert : x)));
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     }
   }
 
@@ -124,9 +125,9 @@ export function JobAlertsPage() {
     try {
       await deleteJobAlert(a.id);
       setAlerts((list) => list.filter((x) => x.id !== a.id));
-      success("Alert deleted");
+      success(t("Alert deleted"));
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     }
   }
 
@@ -248,7 +249,7 @@ export function JobAlertsPage() {
               t("Checking open jobs…")
             ) : (
               <>
-                <strong>{preview.count}</strong> {t("open job")}{preview.count === 1 ? "" : "s"} {t("from the last 30 days match right now.")}
+                {plural(preview.count, "{n} open job from the last 30 days matches right now.", "{n} open jobs from the last 30 days match right now.")}
                 {preview.jobs.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {preview.jobs.map((j) => (
@@ -264,7 +265,7 @@ export function JobAlertsPage() {
           </div>
 
           <button type="submit" className="btn-primary w-full sm:w-auto" disabled={busy || alerts.length >= max}>
-            <BellRing className="h-4 w-4" aria-hidden /> {alerts.length >= max ? `Limit of ${max} alerts reached` : t("Save alert")}
+            <BellRing className="h-4 w-4" aria-hidden /> {alerts.length >= max ? tf("Limit of {max} alerts reached", { max }) : t("Save alert")}
           </button>
         </form>
 
@@ -285,8 +286,8 @@ export function JobAlertsPage() {
                       <p className="font-semibold text-slate-900">{a.name}</p>
                       <p className="mt-0.5 text-sm text-slate-600">{describeAlert(a)}</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {a.active ? t("Active") : t("Paused")} · {a.matchCount} {t("match")}{a.matchCount === 1 ? "" : "es"}
-                        {a.lastMatchedAt ? ` · last ${fmtDate(a.lastMatchedAt)}` : ""}
+                        {a.active ? t("Active") : t("Paused")} · {plural(a.matchCount, "{n} match", "{n} matches")}
+                        {a.lastMatchedAt ? tf(" · last {lastMatchedAt}", { lastMatchedAt: fmtDate(a.lastMatchedAt) }) : ""}
                       </p>
                       <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
                         <span>{t("Delivery")}</span>
@@ -294,7 +295,7 @@ export function JobAlertsPage() {
                           className="input !w-auto !py-1 text-xs"
                           value={a.frequency}
                           onChange={(e) => onFrequency(a, e.target.value as AlertFrequency)}
-                          aria-label={`How often for ${a.name}`}
+                          aria-label={tf("How often for {name}", { name: a.name })}
                         >
                           <option value="daily">{t("Daily digest")}</option>
                           <option value="instant">{t("Instant")}</option>
@@ -305,7 +306,7 @@ export function JobAlertsPage() {
                       <button type="button" className="btn-ghost btn-sm" onClick={() => onToggle(a)} aria-label={`${a.active ? "Pause" : "Resume"} ${a.name}`}>
                         {a.active ? <Pause className="h-4 w-4" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
                       </button>
-                      <button type="button" className="btn-ghost btn-sm text-rose-700" onClick={() => onDelete(a)} aria-label={`Delete ${a.name}`}>
+                      <button type="button" className="btn-ghost btn-sm text-rose-700" onClick={() => onDelete(a)} aria-label={tf("Delete {name}", { name: a.name })}>
                         <Trash2 className="h-4 w-4" aria-hidden />
                       </button>
                     </div>

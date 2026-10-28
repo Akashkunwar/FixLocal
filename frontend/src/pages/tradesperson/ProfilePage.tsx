@@ -43,6 +43,8 @@ import {
   type WeeklyAvailability,
 } from "../../lib/availability";
 
+import { t, tf } from "../../lib/i18n";
+import { errorText } from "../../lib/apiErrors";
 export function ProfilePage() {
   const { success, error } = useToast();
   const [profile, setProfile] = useState<TradespersonProfile | null>(null);
@@ -101,7 +103,7 @@ export function ProfilePage() {
         setCustomPackages(normalizeCustomRatePackages(r.profile.customRatePackages));
         setCaseStudies(normalizeCaseStudies(r.profile.caseStudies));
       })
-      .catch((e) => error(e.message))
+      .catch((e) => error(errorText(e)))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when the page opens
   }, []);
@@ -130,9 +132,9 @@ export function ProfilePage() {
       setNotInterested(r.profile.notInterestedCategories || []);
       setCustomPackages(normalizeCustomRatePackages(r.profile.customRatePackages));
       setCaseStudies(normalizeCaseStudies(r.profile.caseStudies));
-      success("Portfolio updated");
+      success(t("Portfolio updated"));
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -145,9 +147,9 @@ export function ProfilePage() {
       const compressed = await compressImageFiles(Array.from(files).slice(0, 8));
       const r = await uploadGallery(compressed);
       setProfile(r.profile);
-      success("Gallery photos added");
+      success(t("Gallery photos added"));
     } catch (err) {
-      error((err as Error).message || "Upload failed");
+      error(errorText(err, "Upload failed"));
     } finally {
       setUploading(false);
     }
@@ -160,9 +162,9 @@ export function ProfilePage() {
       const doc = file.type === "application/pdf" ? file : (await compressImageFiles([file]))[0];
       const r = await uploadLicenseDoc(doc);
       setProfile(r.profile);
-      success("Document uploaded. An admin will review it.");
+      success(t("Document uploaded. An admin will review it."));
     } catch (err) {
-      error((err as Error).message || "Upload failed");
+      error(errorText(err, "Upload failed"));
     } finally {
       setLicenseUploading(false);
     }
@@ -172,15 +174,15 @@ export function ProfilePage() {
     try {
       const r = await removeGalleryImage(url);
       setProfile(r.profile);
-      success("Photo removed");
+      success(t("Photo removed"));
     } catch (err) {
-      error((err as Error).message);
+      error(errorText(err));
     }
   }
 
   if (loading)
     return (
-      <Shell title="Portfolio">
+      <Shell title={t("Portfolio")}>
         <Spinner />
       </Shell>
     );
@@ -188,38 +190,41 @@ export function ProfilePage() {
   const gallery = profile?.galleryUrls || [];
 
   return (
-    <Shell title="Your portfolio" subtitle="This is what clients see when comparing bids">
+    <Shell title={t("Your portfolio")} subtitle={t("This is what clients see when comparing bids")}>
       {profile && (
         <div className="mb-6 card flex flex-wrap items-center gap-4 p-4 sm:p-5">
           <div>
-            <p className="font-semibold text-lg">{profile.name || profile.email || "Your profile"}</p>
+            <p className="font-semibold text-lg">{profile.name || profile.email || t("Your profile")}</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <StarRating value={Math.round(Number(profile.averageRating))} readonly />
-              <span className="text-sm text-slate-500">({profile.reviewCount} reviews)</span>
+              <span className="text-sm text-slate-500">({profile.reviewCount} {" "}{t("reviews)")}</span>
               <Badge status={profile.verificationStatus} />
             </div>
           </div>
           {profile.verificationStatus === "pending" && (
             <p className="text-sm text-amber-800 bg-amber-50 rounded-xl px-3 py-2 ring-1 ring-amber-200">
-              Waiting for admin verification before you can bid.
+              
+              {t("Waiting for admin verification before you can bid.")}
             </p>
           )}
           {profile.verificationStatus !== "suspended" && (
             <div className="w-full border-t border-slate-100 pt-3 text-sm">
-              <p className="font-medium text-slate-900">Licence or ID document</p>
+              <p className="font-medium text-slate-900">{t("Licence or ID document")}</p>
               <p className="text-xs text-slate-500">
-                PDF, JPG, PNG or WebP. Only admins can see it; it's used to verify your account.
+                
+                {t("PDF, JPG, PNG or WebP. Only admins can see it; it's used to verify your account.")}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 {profile.licenseDocUrl ? (
                   <a href={mediaUrl(profile.licenseDocUrl)} target="_blank" rel="noopener noreferrer">
-                    View uploaded document
+                    
+                    {t("View uploaded document")}
                   </a>
                 ) : (
-                  <span className="text-slate-500">Nothing uploaded yet.</span>
+                  <span className="text-slate-500">{t("Nothing uploaded yet.")}</span>
                 )}
                 <label className="btn-secondary btn-sm cursor-pointer">
-                  {licenseUploading ? "Uploading…" : profile.licenseDocUrl ? "Replace" : "Upload"}
+                  {licenseUploading ? t("Uploading…") : profile.licenseDocUrl ? t("Replace") : t("Upload")}
                   <input
                     type="file"
                     className="sr-only"
@@ -240,12 +245,12 @@ export function ProfilePage() {
       <section className="card max-w-3xl p-4 sm:p-6 mb-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
-            <h2 className="font-semibold text-lg">Work gallery</h2>
-            <p className="text-sm text-slate-500">Up to 12 photos of past jobs (JPEG/PNG).</p>
+            <h2 className="font-semibold text-lg">{t("Work gallery")}</h2>
+            <p className="text-sm text-slate-500">{t("Up to 12 photos of past jobs (JPEG/PNG).")}</p>
           </div>
           <label className="btn-secondary btn-sm cursor-pointer touch-target">
             <ImagePlus className="h-4 w-4" />
-            {uploading ? "Uploading…" : "Add photos"}
+            {uploading ? t("Uploading…") : t("Add photos")}
             <input
               type="file"
               accept="image/*"
@@ -261,18 +266,19 @@ export function ProfilePage() {
         </div>
         {gallery.length === 0 ? (
           <p className="text-sm text-slate-500 py-8 text-center border border-dashed border-slate-200 rounded-xl">
-            No gallery photos yet — upload examples of your work.
+            
+            {t("No gallery photos yet — upload examples of your work.")}
           </p>
         ) : (
           <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {gallery.map((url) => (
               <li key={url} className="relative group aspect-4/3 overflow-hidden rounded-xl bg-slate-100">
-                <img src={mediaUrl(url)} alt="Portfolio" className="h-full w-full object-cover" />
+                <img src={mediaUrl(url)} alt={t("Portfolio")} className="h-full w-full object-cover" />
                 <button
                   type="button"
                   className="absolute right-2 top-2 rounded-lg bg-white/90 p-2 text-rose-600 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition shadow-sm touch-target"
                   onClick={() => onRemove(url)}
-                  aria-label="Remove photo"
+                  aria-label={t("Remove photo")}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -284,7 +290,7 @@ export function ProfilePage() {
 
       <form onSubmit={onSubmit} className="card max-w-2xl space-y-4 p-4 sm:p-6 mb-6">
         <div>
-          <label className="label" htmlFor="profile-bio">Bio</label>
+          <label className="label" htmlFor="profile-bio">{t("Bio")}</label>
           <textarea
             id="profile-bio"
             className="input min-h-[100px]"
@@ -293,9 +299,10 @@ export function ProfilePage() {
           />
         </div>
         <div>
-          <p className="label">Skills / specialties</p>
+          <p className="label">{t("Skills / specialties")}</p>
           <p className="text-xs text-slate-500 mb-2">
-            Select the lead specialties you offer (saved as your skills list).
+            
+            {t("Select the lead specialties you offer (saved as your skills list).")}
           </p>
           <div className="flex flex-wrap gap-2 mb-3">
             {CATEGORIES.filter((c) => c.value !== "other").map((c) => {
@@ -323,29 +330,30 @@ export function ProfilePage() {
                     const drop = new Set(
                       [c.value, c.label].map((x) => x.toLowerCase())
                     );
-                    let next = tokens.filter((t) => !drop.has(t.toLowerCase()));
+                    let next = tokens.filter((tok) => !drop.has(tok.toLowerCase()));
                     if (!on) next = [...next, c.label];
                     setForm({ ...form, skills: next.join(", ") });
                   }}
                 >
                   <CategoryIcon category={c.value} size="xs" inherit className="mr-1" />
-                  {c.label}
+                  {t(c.label)}
                 </button>
               );
             })}
           </div>
-          <label className="label" htmlFor="extra-skills">Extra skills (optional)</label>
+          <label className="label" htmlFor="extra-skills">{t("Extra skills (optional)")}</label>
           <input id="extra-skills"
             className="input"
-            placeholder="Freeform extras beyond the chips above"
+            placeholder={t("Freeform extras beyond the chips above")}
             value={form.skills}
             onChange={(e) => setForm({ ...form, skills: e.target.value })}
           />
         </div>
         <div>
-          <p className="label">Not interested categories</p>
+          <p className="label">{t("Not interested categories")}</p>
           <p className="text-xs text-slate-500 mb-2">
-            Soft-skip: clients won’t see you in suggested professionals for these categories (direct invites still possible).
+            
+            {t("Soft-skip: clients won’t see you in suggested professionals for these categories (direct invites still possible).")}
           </p>
           <div className="flex flex-wrap gap-2">
             {CATEGORIES.map((c) => {
@@ -367,21 +375,22 @@ export function ProfilePage() {
                   }
                 >
                   <CategoryIcon category={c.value} size="xs" inherit className="mr-1" />
-                  {c.label}
+                  {t(c.label)}
                 </button>
               );
             })}
           </div>
         </div>
         <div>
-          <p className="label">Service areas</p>
+          <p className="label">{t("Service areas")}</p>
           <p className="mb-2 text-xs text-slate-500">
-            Multi-select neighborhoods you cover (saved as a comma-separated list).
+            
+            {t("Multi-select neighborhoods you cover (saved as a comma-separated list).")}
           </p>
           <div
             className="mb-3 flex flex-wrap gap-2"
             role="group"
-            aria-label="Service areas"
+            aria-label={t("Service areas")}
           >
             {SERVICE_AREA_OPTIONS.map((area) => {
               const selected = parseServiceAreas(form.serviceAreas).includes(area);
@@ -409,17 +418,17 @@ export function ProfilePage() {
               );
             })}
           </div>
-          <label className="label" htmlFor="extra-areas">Extra areas (optional)</label>
+          <label className="label" htmlFor="extra-areas">{t("Extra areas (optional)")}</label>
           <input id="extra-areas"
             className="input"
-            placeholder="Add any areas not listed above"
+            placeholder={t("Add any areas not listed above")}
             value={form.serviceAreas}
             onChange={(e) => setForm({ ...form, serviceAreas: e.target.value })}
           />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="label" htmlFor="profile-city">City</label>
+            <label className="label" htmlFor="profile-city">{t("City")}</label>
             <input
               id="profile-city"
               className="input"
@@ -428,7 +437,7 @@ export function ProfilePage() {
             />
           </div>
           <div>
-            <label className="label" htmlFor="profile-years">Years experience</label>
+            <label className="label" htmlFor="profile-years">{t("Years experience")}</label>
             <input
               id="profile-years"
               className="input"
@@ -441,7 +450,7 @@ export function ProfilePage() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="label" htmlFor="profile-rate-min">Hourly rate min (₹)</label>
+            <label className="label" htmlFor="profile-rate-min">{t("Hourly rate min (₹)")}</label>
             <input
               id="profile-rate-min"
               className="input"
@@ -451,7 +460,7 @@ export function ProfilePage() {
             />
           </div>
           <div>
-            <label className="label" htmlFor="profile-rate-max">Hourly rate max (₹)</label>
+            <label className="label" htmlFor="profile-rate-max">{t("Hourly rate max (₹)")}</label>
             <input
               id="profile-rate-max"
               className="input"
@@ -465,10 +474,12 @@ export function ProfilePage() {
         {softRatePackages(form.hourlyRateMin, form.hourlyRateMax).length > 0 && (
           <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Soft package preview
+              
+              {t("Soft package preview")}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500">
-              Estimates from your hourly range — clients see these as guidance, not binding quotes.
+              
+              {t("Estimates from your hourly range — clients see these as guidance, not binding quotes.")}
             </p>
             <ul className="mt-3 grid gap-2 sm:grid-cols-3">
               {softRatePackages(form.hourlyRateMin, form.hourlyRateMax).map((p) => (
@@ -476,8 +487,8 @@ export function ProfilePage() {
                   key={p.id}
                   className="rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200"
                 >
-                  <p className="text-sm font-semibold text-slate-900">{p.label}</p>
-                  <p className="text-xs text-slate-500">{p.hint}</p>
+                  <p className="text-sm font-semibold text-slate-900">{t(p.label)}</p>
+                  <p className="text-xs text-slate-500">{t(p.hint)}</p>
                   <p className="mt-1 text-sm font-medium text-brand-800">{p.display}</p>
                 </li>
               ))}
@@ -488,54 +499,56 @@ export function ProfilePage() {
         <div className="rounded-xl bg-white p-3 ring-1 ring-slate-200 space-y-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Custom rate packages
+              
+              {t("Custom rate packages")}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500">
-              Editable packages beyond soft hourly estimates — clients see these on your public profile.
+              
+              {t("Editable packages beyond soft hourly estimates — clients see these on your public profile.")}
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <input
               className="input py-1.5! text-sm"
-              placeholder="Label (e.g. Leak fix visit)"
+              placeholder={t("Label (e.g. Leak fix visit)")}
               maxLength={80}
               value={pkgDraft.label}
               onChange={(e) => setPkgDraft({ ...pkgDraft, label: e.target.value })}
-              aria-label="Package label"
+              aria-label={t("Package label")}
             />
             <input
               className="input py-1.5! text-sm"
-              placeholder="Unit (optional, e.g. job / room)"
+              placeholder={t("Unit (optional, e.g. job / room)")}
               maxLength={40}
               value={pkgDraft.unit}
               onChange={(e) => setPkgDraft({ ...pkgDraft, unit: e.target.value })}
-              aria-label="Package unit"
+              aria-label={t("Package unit")}
             />
             <input
               className="input py-1.5! text-sm"
               type="number"
               min={0}
-              placeholder="Min ₹"
+              placeholder={t("Min ₹")}
               value={pkgDraft.amountMin}
               onChange={(e) => setPkgDraft({ ...pkgDraft, amountMin: e.target.value })}
-              aria-label="Package amount min"
+              aria-label={t("Package amount min")}
             />
             <input
               className="input py-1.5! text-sm"
               type="number"
               min={0}
-              placeholder="Max ₹ (optional)"
+              placeholder={t("Max ₹ (optional)")}
               value={pkgDraft.amountMax}
               onChange={(e) => setPkgDraft({ ...pkgDraft, amountMax: e.target.value })}
-              aria-label="Package amount max"
+              aria-label={t("Package amount max")}
             />
             <input
               className="input py-1.5! text-sm sm:col-span-2"
-              placeholder="Hint (optional)"
+              placeholder={t("Hint (optional)")}
               maxLength={160}
               value={pkgDraft.hint}
               onChange={(e) => setPkgDraft({ ...pkgDraft, hint: e.target.value })}
-              aria-label="Package hint"
+              aria-label={t("Package hint")}
             />
           </div>
           <div className="flex flex-wrap gap-2">
@@ -567,7 +580,7 @@ export function ProfilePage() {
                 setPkgDraft({ label: "", hint: "", amountMin: "", amountMax: "", unit: "" });
               }}
             >
-              {pkgEditId ? "Save package" : "Add package"}
+              {pkgEditId ? t("Save package") : t("Add package")}
             </button>
             {pkgEditId && (
               <button
@@ -578,7 +591,8 @@ export function ProfilePage() {
                   setPkgDraft({ label: "", hint: "", amountMin: "", amountMax: "", unit: "" });
                 }}
               >
-                Cancel edit
+                
+                {t("Cancel edit")}
               </button>
             )}
           </div>
@@ -611,7 +625,8 @@ export function ProfilePage() {
                         });
                       }}
                     >
-                      Edit
+                      
+                      {t("Edit")}
                     </button>
                     <button
                       type="button"
@@ -620,7 +635,8 @@ export function ProfilePage() {
                         setCustomPackages((prev) => prev.filter((x) => x.id !== pkg.id))
                       }
                     >
-                      Remove
+                      
+                      {t("Remove")}
                     </button>
                   </div>
                 </li>
@@ -628,7 +644,8 @@ export function ProfilePage() {
             </ul>
           ) : (
             <p className="text-xs text-slate-500">
-              No custom packages yet — add visit fees, room rates, or fixed-scope bundles.
+              
+              {t("No custom packages yet — add visit fees, room rates, or fixed-scope bundles.")}
             </p>
           )}
         </div>
@@ -637,21 +654,22 @@ export function ProfilePage() {
         <div className="rounded-xl bg-white p-3 ring-1 ring-slate-200 space-y-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Past work case studies
+              
+              {t("Past work case studies")}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500">
-              Before/after cards with notes — shown on your public profile for clients comparing bids.
-              Paste gallery or upload URLs (e.g. from Work gallery above).
+              
+              {t("Before/after cards with notes — shown on your public profile for clients comparing bids. Paste gallery or upload URLs (e.g. from Work gallery above).")}
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <input
               className="input py-1.5! text-sm sm:col-span-2"
-              placeholder="Title (e.g. Kitchen leak repair)"
+              placeholder={t("Title (e.g. Kitchen leak repair)")}
               maxLength={120}
               value={caseDraft.title}
               onChange={(e) => setCaseDraft({ ...caseDraft, title: e.target.value })}
-              aria-label="Case study title"
+              aria-label={t("Case study title")}
             />
             {(["beforeUrl", "afterUrl"] as const).map((key) => (
               <select
@@ -659,50 +677,51 @@ export function ProfilePage() {
                 className="input py-1.5! text-sm"
                 value={caseDraft[key]}
                 onChange={(e) => setCaseDraft({ ...caseDraft, [key]: e.target.value })}
-                aria-label={key === "beforeUrl" ? "Before photo" : "After photo"}
+                aria-label={key === "beforeUrl" ? t("Before photo") : t("After photo")}
                 disabled={gallery.length === 0}
               >
                 <option value="">
                   {gallery.length === 0
-                    ? "Add gallery photos first"
+                    ? t("Add gallery photos first")
                     : key === "beforeUrl"
-                      ? "Before photo (optional)"
-                      : "After photo (optional)"}
+                      ? t("Before photo (optional)")
+                      : t("After photo (optional)")}
                 </option>
                 {gallery.map((url, i) => (
                   <option key={url} value={url}>
-                    Gallery photo {i + 1}
+                    
+                    {t("Gallery photo")}{" "}{i + 1}
                   </option>
                 ))}
               </select>
             ))}
             <input
               className="input py-1.5! text-sm"
-              placeholder="Category (optional)"
+              placeholder={t("Category (optional)")}
               maxLength={40}
               value={caseDraft.category}
               onChange={(e) => setCaseDraft({ ...caseDraft, category: e.target.value })}
-              aria-label="Case study category"
+              aria-label={t("Case study category")}
             />
             <textarea
               className="input py-1.5! text-sm sm:col-span-2 min-h-[72px]"
-              placeholder="Notes — what changed, materials, outcome"
+              placeholder={t("Notes — what changed, materials, outcome")}
               maxLength={800}
               value={caseDraft.notes}
               onChange={(e) => setCaseDraft({ ...caseDraft, notes: e.target.value })}
-              aria-label="Case study notes"
+              aria-label={t("Case study notes")}
             />
           </div>
           {gallery.length > 0 && (
             <div>
-              <p className="text-[11px] text-slate-500 mb-1.5">Quick-pick from gallery</p>
+              <p className="text-[11px] text-slate-500 mb-1.5">{t("Quick-pick from gallery")}</p>
               <ul className="flex flex-wrap gap-2" role="list">
                 {gallery.slice(0, 8).map((url) => (
                   <li key={url}>
                     <button
                       type="button"
                       className="overflow-hidden rounded-lg ring-1 ring-slate-200 hover:ring-brand-400"
-                      title="Use as before or after"
+                      title={t("Use as before or after")}
                       onClick={() => {
                         if (!caseDraft.beforeUrl) {
                           setCaseDraft({ ...caseDraft, beforeUrl: url });
@@ -753,7 +772,7 @@ export function ProfilePage() {
                 });
               }}
             >
-              {caseEditId ? "Save case study" : "Add case study"}
+              {caseEditId ? t("Save case study") : t("Add case study")}
             </button>
             {caseEditId && (
               <button
@@ -770,7 +789,8 @@ export function ProfilePage() {
                   });
                 }}
               >
-                Cancel edit
+                
+                {t("Cancel edit")}
               </button>
             )}
           </div>
@@ -808,7 +828,8 @@ export function ProfilePage() {
                           });
                         }}
                       >
-                        Edit
+                        
+                        {t("Edit")}
                       </button>
                       <button
                         type="button"
@@ -817,7 +838,8 @@ export function ProfilePage() {
                           setCaseStudies((prev) => prev.filter((x) => x.id !== cs.id))
                         }
                       >
-                        Remove
+                        
+                        {t("Remove")}
                       </button>
                     </div>
                   </div>
@@ -827,12 +849,13 @@ export function ProfilePage() {
                         {cs.beforeUrl ? (
                           <img
                             src={mediaUrl(cs.beforeUrl)}
-                            alt="Before"
+                            alt={t("Before")}
                             className="h-full w-full object-cover"
                           />
                         ) : (
                           <p className="flex h-full items-center justify-center text-[11px] text-slate-500">
-                            Before
+                            
+                            {t("Before")}
                           </p>
                         )}
                       </div>
@@ -840,12 +863,13 @@ export function ProfilePage() {
                         {cs.afterUrl ? (
                           <img
                             src={mediaUrl(cs.afterUrl)}
-                            alt="After"
+                            alt={t("After")}
                             className="h-full w-full object-cover"
                           />
                         ) : (
                           <p className="flex h-full items-center justify-center text-[11px] text-slate-500">
-                            After
+                            
+                            {t("After")}
                           </p>
                         )}
                       </div>
@@ -856,16 +880,17 @@ export function ProfilePage() {
             </ul>
           ) : (
             <p className="text-xs text-slate-500">
-              No case studies yet — add a before/after story from a completed job.
+              
+              {t("No case studies yet — add a before/after story from a completed job.")}
             </p>
           )}
         </div>
 
         <div className="border-t border-slate-100 pt-4">
-          <h3 className="font-semibold text-slate-900">Weekly availability</h3>
+          <h3 className="font-semibold text-slate-900">{t("Weekly availability")}</h3>
           <p className="mt-1 text-xs text-slate-500 mb-3">
-            Usual hours on your public profile. Add a second window per day if you split morning / afternoon.
-            Visit proposals use these for soft conflict hints.
+            
+            {t("Usual hours on your public profile. Add a second window per day if you split morning / afternoon. Visit proposals use these for soft conflict hints.")}
           </p>
           <ul className="space-y-3">
             {DAY_KEYS.map((day) => {
@@ -909,7 +934,8 @@ export function ProfilePage() {
                           });
                         }}
                       >
-                        + Slot
+                        
+                        {t("+ Slot")}
                       </button>
                     )}
                   </div>
@@ -919,7 +945,7 @@ export function ProfilePage() {
                         <input
                           type="time"
                           className="input py-2"
-                          aria-label={`${DAY_LABELS[day]} slot ${idx + 1} start`}
+                          aria-label={tf("{day} slot {idx} start", { day: DAY_LABELS[day], idx: idx + 1 })}
                           value={slot.start}
                           onChange={(e) => {
                             const next = slots.map((s, i) =>
@@ -936,11 +962,11 @@ export function ProfilePage() {
                             });
                           }}
                         />
-                        <span className="text-xs text-slate-500">to</span>
+                        <span className="text-xs text-slate-500">{t("to")}</span>
                         <input
                           type="time"
                           className="input py-2"
-                          aria-label={`${DAY_LABELS[day]} slot ${idx + 1} end`}
+                          aria-label={tf("{day} slot {idx} end", { day: DAY_LABELS[day], idx: idx + 1 })}
                           value={slot.end}
                           onChange={(e) => {
                             const next = slots.map((s, i) =>
@@ -974,7 +1000,8 @@ export function ProfilePage() {
                               });
                             }}
                           >
-                            Remove
+                            
+                            {t("Remove")}
                           </button>
                         )}
                       </div>
@@ -986,13 +1013,14 @@ export function ProfilePage() {
         </div>
 
         <div className="border-t border-slate-100 pt-4">
-          <h3 className="font-semibold text-slate-900">Blocked dates</h3>
+          <h3 className="font-semibold text-slate-900">{t("Blocked dates")}</h3>
           <p className="mt-1 text-xs text-slate-500 mb-3">
-            Full days you are unavailable (holidays, leave). Visit proposals on these dates show a conflict hint.
+            
+            {t("Full days you are unavailable (holidays, leave). Visit proposals on these dates show a conflict hint.")}
           </p>
           <div className="flex flex-wrap items-end gap-2 mb-3">
             <div>
-              <label className="label" htmlFor="block-date">Add date</label>
+              <label className="label" htmlFor="block-date">{t("Add date")}</label>
               <input
                 id="block-date"
                 type="date"
@@ -1011,11 +1039,12 @@ export function ProfilePage() {
                 setBlockDateInput("");
               }}
             >
-              Add
+              
+              {t("Add")}
             </button>
           </div>
           {blockedDates.length === 0 ? (
-            <p className="text-xs text-slate-500">No blocked dates</p>
+            <p className="text-xs text-slate-500">{t("No blocked dates")}</p>
           ) : (
             <ul className="flex flex-wrap gap-2">
               {blockedDates.map((d) => (
@@ -1027,7 +1056,7 @@ export function ProfilePage() {
                   <button
                     type="button"
                     className="text-amber-700 hover:text-rose-600"
-                    aria-label={`Remove ${d}`}
+                    aria-label={tf("Remove {v}", { v: d })}
                     onClick={() => setBlockedDates(blockedDates.filter((x) => x !== d))}
                   >
                     ×
@@ -1039,7 +1068,7 @@ export function ProfilePage() {
         </div>
 
         <button type="submit" className="btn-primary w-full sm:w-auto touch-target" disabled={busy}>
-          {busy ? "Saving…" : "Save portfolio"}
+          {busy ? t("Saving…") : t("Save portfolio")}
         </button>
       </form>
     </Shell>

@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
-import { BLR_CENTER } from "../lib/geo";
+import { BLR_CENTER, parseLatLng } from "../lib/geo";
 import "leaflet/dist/leaflet.css";
 import markerIconUrl from "leaflet/dist/images/marker-icon.png";
 import markerIconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
 import markerShadowUrl from "leaflet/dist/images/marker-shadow.png";
 
 
+import { t } from "../lib/i18n";
 // OpenStreetMap's public tiles are fine for development only; set VITE_MAP_TILE_URL
 // to a provider with a production usage policy before launch.
 const TILE_URL = import.meta.env.VITE_MAP_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -35,7 +36,11 @@ type Props = {
   className?: string;
 };
 
-export function MapPinPicker({ lat, lng, onChange, height = 260, className }: Props) {
+export function MapPinPicker({ lat: rawLat, lng: rawLng, onChange, height = 260, className }: Props) {
+  // Never hand Leaflet a NaN or out-of-range value: it throws and takes the page down.
+  const valid = parseLatLng(rawLat ?? null, rawLng ?? null);
+  const lat = valid?.lat ?? null;
+  const lng = valid?.lng ?? null;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -80,8 +85,8 @@ export function MapPinPicker({ lat, lng, onChange, height = 260, className }: Pr
     mapRef.current = map;
     markerRef.current = marker;
 
-    // If parent had no coords yet, seed Bengaluru once
-    if (lat == null || lng == null) {
+    // If parent had no (valid) coords yet, seed Bengaluru once
+    if ((lat == null || lng == null) && rawLat == null && rawLng == null) {
       onChangeRef.current({
         lat: Math.round(startLat * 1e5) / 1e5,
         lng: Math.round(startLng * 1e5) / 1e5,
@@ -117,10 +122,11 @@ export function MapPinPicker({ lat, lng, onChange, height = 260, className }: Pr
         className="overflow-hidden rounded-xl ring-1 ring-slate-200"
         style={{ height }}
         role="application"
-        aria-label="Map pin picker — click or drag to set job location"
+        aria-label={t("Map pin picker — click or drag to set job location")}
       />
       <p className="mt-1.5 text-xs text-slate-500">
-        Click the map or drag the pin to set coordinates
+        
+        {t("Click the map or drag the pin to set coordinates")}
         {lat != null && lng != null && (
           <span className="ml-1 font-mono text-slate-600">
             ({lat.toFixed(5)}, {lng.toFixed(5)})

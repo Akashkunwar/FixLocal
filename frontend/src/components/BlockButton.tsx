@@ -3,8 +3,9 @@ import { Ban } from "lucide-react";
 import { blockUser } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "./Toast";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
 
+import { errorText } from "../lib/apiErrors";
 type Props = { userId?: string | null; name?: string | null; className?: string; onBlocked?: () => void };
 
 /** Two-step "Block" control. Blocking stops bids, invites and new messages in both directions. */
@@ -23,10 +24,10 @@ export function BlockButton({ userId, name, className = "", onBlocked }: Props) 
       await blockUser(userId!);
       setDone(true);
       setConfirming(false);
-      success(`${who} is blocked. You can undo this in Settings.`);
+      success(tf("{who} is blocked. You can undo this in Settings.", { who: who }));
       onBlocked?.();
     } catch (err) {
-      error((err as Error).message || "Couldn't block");
+      error(errorText(err, "Couldn't block"));
     } finally {
       setBusy(false);
     }
@@ -41,7 +42,7 @@ export function BlockButton({ userId, name, className = "", onBlocked }: Props) 
     );
   }
   return (
-    <div className="card space-y-2 p-4" role="group" aria-label={`Block ${who}`}>
+    <div className="card space-y-2 p-4" role="group" aria-label={tf("Block {who}", { who })}>
       <p className="text-sm text-slate-700">
         {t("Block")}{" "}{who}{t("? They won't be able to bid on your jobs, invite you or message you, and you won't be able to contact them. Jobs already in progress are not affected.")}
       </p>

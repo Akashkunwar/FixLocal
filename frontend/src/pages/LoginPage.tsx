@@ -3,11 +3,12 @@ import { FormEvent, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { dashboardPath, resendConfirmation } from "../api/client";
-import { ApiError } from "../api/client";
 import { Wrench } from "lucide-react";
 import { safeNext } from "../lib/paths";
 import { useToast } from "../components/Toast";
 
+import { errorText } from "../lib/apiErrors";
+import { AuthTopBar } from "../components/AuthTopBar";
 export function LoginPage() {
   const { user, login, loading } = useAuth();
   const { t } = useI18n();
@@ -36,10 +37,10 @@ export function LoginPage() {
     setErr(null);
     try {
       const u = await login(email.trim(), password);
-      success("Welcome back!");
+      success(t("Welcome back!"));
       navigate(pendingNext || dashboardPath(u.role), { replace: true });
     } catch (ex) {
-      const msg = ex instanceof ApiError ? ex.message : "Login failed";
+      const msg = errorText(ex, "Login failed");
       setErr(msg);
       error(msg);
     } finally {
@@ -52,7 +53,7 @@ export function LoginPage() {
       <div className="hidden lg:flex flex-col justify-between bg-brand-800 p-10 text-white">
         <div className="flex items-center gap-2">
           <Wrench className="h-5 w-5" />
-          <span className="font-display text-xl font-semibold">FixLocal</span>
+          <span className="font-display text-xl font-semibold">{t("FixLocal")}</span>
         </div>
         <div>
           <h2 className="font-display text-3xl font-semibold leading-snug">
@@ -62,7 +63,10 @@ export function LoginPage() {
         </div>
         <p className="text-sm text-brand-200">{t("Local services, handled with care.")}</p>
       </div>
-      <div className="flex items-center justify-center p-6">
+      <main className="flex flex-col items-center justify-center gap-4 p-6">
+        <div className="w-full max-w-md">
+          <AuthTopBar logoClassName="lg:invisible" />
+        </div>
         <form onSubmit={onSubmit} className="card w-full max-w-md p-8 space-y-4">
           <div>
             <h1 className="font-display text-2xl font-semibold text-slate-900">{t("Welcome back")}</h1>
@@ -77,9 +81,10 @@ export function LoginPage() {
             <div className="space-y-1 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200" role="alert">
               <p>{err}</p>
               <p className="text-rose-800">
-                Just signed up? Confirm your email first.{" "}
+                
+                {t("Just signed up? Confirm your email first.")}{" "}
                 {resent ? (
-                  <span>If that address needs confirming, a new link is on its way.</span>
+                  <span>{t("If that address needs confirming, a new link is on its way.")}</span>
                 ) : (
                   <button
                     type="button"
@@ -88,10 +93,11 @@ export function LoginPage() {
                     onClick={() =>
                       resendConfirmation(email.trim())
                         .then(() => setResent(true))
-                        .catch((e) => error((e as Error).message))
+                        .catch((e) => error(errorText(e)))
                     }
                   >
-                    Resend the confirmation link
+                    
+                    {t("Resend the confirmation link")}
                   </button>
                 )}
               </p>
@@ -116,7 +122,7 @@ export function LoginPage() {
           </p>
           {demoMode && (
             <div className="space-y-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-              <p className="text-xs font-semibold text-slate-500">Demo accounts (local only)</p>
+              <p className="text-xs font-semibold text-slate-500">{t("Demo accounts (local only)")}</p>
               <div className="flex flex-wrap gap-2">
                 {[
                   ["Client", "home@fixlocal.local"],
@@ -139,7 +145,7 @@ export function LoginPage() {
             </div>
           )}
         </form>
-      </div>
+      </main>
     </div>
   );
 }

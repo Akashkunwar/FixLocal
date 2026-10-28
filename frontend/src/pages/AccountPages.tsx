@@ -3,14 +3,20 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { forgotPassword, resetPassword, verifyEmail } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
+import { t } from "../lib/i18n";
+import { errorText } from "../lib/apiErrors";
+import { AuthTopBar } from "../components/AuthTopBar";
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-6">
+      <div className="w-full max-w-md">
+        <AuthTopBar />
+      </div>
       <div className="card w-full max-w-md space-y-4 p-8">
         <h1 className="font-display text-2xl font-semibold text-slate-900">{title}</h1>
         {children}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -27,21 +33,21 @@ export function ForgotPasswordPage() {
     try {
       setSent((await forgotPassword(email.trim())).message);
     } catch (ex) {
-      setErr((ex as Error).message);
+      setErr(errorText(ex));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Card title="Reset your password">
+    <Card title={t("Reset your password")}>
       {sent ? (
         <p className="text-sm text-slate-600" role="status">
           {sent}
         </p>
       ) : (
         <form onSubmit={submit} className="space-y-4">
-          <p className="text-sm text-slate-500">Enter your account email and we'll send you a reset link.</p>
+          <p className="text-sm text-slate-500">{t("Enter your account email and we'll send you a reset link.")}</p>
           {err && (
             <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
               {err}
@@ -49,7 +55,8 @@ export function ForgotPasswordPage() {
           )}
           <div>
             <label className="label" htmlFor="forgot-email">
-              Email
+              
+              {t("Email")}
             </label>
             <input
               id="forgot-email"
@@ -62,12 +69,12 @@ export function ForgotPasswordPage() {
             />
           </div>
           <button type="submit" className="btn-primary w-full" disabled={busy}>
-            {busy ? "Sending…" : "Send reset link"}
+            {busy ? t("Sending…") : t("Send reset link")}
           </button>
         </form>
       )}
       <p className="text-center text-sm">
-        <Link to="/login">Back to sign in</Link>
+        <Link to="/login">{t("Back to sign in")}</Link>
       </p>
     </Card>
   );
@@ -85,7 +92,7 @@ export function ResetPasswordPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (password !== confirm) {
-      setErr("The two passwords don't match");
+      setErr(t("The two passwords don't match"));
       return;
     }
     setBusy(true);
@@ -94,7 +101,7 @@ export function ResetPasswordPage() {
       await resetPassword(token, password);
       navigate("/login?reset=1", { replace: true });
     } catch (ex) {
-      setErr((ex as Error).message);
+      setErr(errorText(ex));
     } finally {
       setBusy(false);
     }
@@ -102,23 +109,28 @@ export function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <Card title="Reset link missing">
-        <p className="text-sm text-slate-600">Open the link from your email, or request a new one.</p>
-        <Link to="/forgot-password">Request a new link</Link>
+      <Card title={t("Reset link missing")}>
+        <p className="text-sm text-slate-600">{t("Open the link from your email, or request a new one.")}</p>
+        <Link to="/forgot-password">{t("Request a new link")}</Link>
       </Card>
     );
   }
   return (
-    <Card title="Choose a new password">
+    <Card title={t("Choose a new password")}>
       <form onSubmit={submit} className="space-y-4">
         {err && (
-          <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
-            {err}
-          </p>
+          <div className="space-y-1 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
+            <p>{err}</p>
+            {/* An expired or mistyped link is the usual cause: never leave the user stuck here. */}
+            <Link to="/forgot-password" className="font-semibold text-rose-800 underline">
+              {t("Request a new link")}
+            </Link>
+          </div>
         )}
         <div>
           <label className="label" htmlFor="new-password">
-            New password
+            
+            {t("New password")}
           </label>
           <input
             id="new-password"
@@ -131,11 +143,12 @@ export function ResetPasswordPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <p className="mt-1 text-xs text-slate-500">At least 10 characters. You'll be signed out on other devices.</p>
+          <p className="mt-1 text-xs text-slate-500">{t("At least 10 characters. You'll be signed out on other devices.")}</p>
         </div>
         <div>
           <label className="label" htmlFor="confirm-password">
-            Confirm password
+            
+            {t("Confirm password")}
           </label>
           <input
             id="confirm-password"
@@ -148,7 +161,7 @@ export function ResetPasswordPage() {
           />
         </div>
         <button type="submit" className="btn-primary w-full" disabled={busy}>
-          {busy ? "Saving…" : "Save new password"}
+          {busy ? t("Saving…") : t("Save new password")}
         </button>
       </form>
     </Card>
@@ -160,8 +173,9 @@ export function VerifyEmailPage() {
   const { user, refreshUser } = useAuth();
   const token = params.get("token") || "";
   const [state, setState] = useState<"working" | "done" | "failed">(token ? "working" : "failed");
-  const [message, setMessage] = useState(token ? "Verifying your email…" : "This link is missing its token.");
+  const [message, setMessage] = useState(token ? t("Verifying your email…") : t("This link is missing its token."));
   const started = useRef(false);
+  const refreshed = useRef(false);
 
   useEffect(() => {
     if (!token || started.current) return;
@@ -169,22 +183,29 @@ export function VerifyEmailPage() {
     verifyEmail(token)
       .then(async () => {
         setState("done");
-        setMessage("Your email is verified.");
-        if (user) await refreshUser().catch(() => undefined);
+        setMessage(t("Your email is verified."));
       })
       .catch((e) => {
         setState("failed");
-        setMessage((e as Error).message);
+        setMessage(errorText(e, "This link isn't valid. Ask for a new one."));
       });
-  }, [token, user, refreshUser]);
+  }, [token]);
+
+  // The session may finish restoring after verification succeeds: refresh once a user is there,
+  // so the "confirm your email" banner disappears without a reload.
+  useEffect(() => {
+    if (state !== "done" || !user || refreshed.current) return;
+    refreshed.current = true;
+    refreshUser().catch(() => undefined);
+  }, [state, user, refreshUser]);
 
   return (
-    <Card title={state === "done" ? "Email verified" : state === "failed" ? "Couldn't verify" : "Verifying"}>
+    <Card title={state === "done" ? t("Email verified") : state === "failed" ? t("Couldn't verify") : t("Verifying")}>
       <p className="text-sm text-slate-600" role="status">
         {message}
       </p>
       <Link className="btn-primary w-full" to={user ? "/" : "/login"}>
-        {user ? "Continue" : "Sign in"}
+        {user ? t("Continue") : t("Sign in")}
       </Link>
     </Card>
   );

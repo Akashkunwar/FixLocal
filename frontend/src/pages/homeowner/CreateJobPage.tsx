@@ -1,5 +1,5 @@
 import { CategoryIcon } from "../../components/CategoryIcon";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shell } from "../../components/Shell";
 import { createJob } from "../../api/jobs";
@@ -10,7 +10,7 @@ import { compressImageFiles } from "../../lib/compressImage";
 import { useToast } from "../../components/Toast";
 import clsx from "clsx";
 import { LazyMapPinPicker, preloadMapPicker } from "../../components/LazyMapPinPicker";
-import { BLR_CENTER } from "../../lib/geo";
+import { BLR_CENTER, parseLatLng } from "../../lib/geo";
 import {
   CADENCE_OPTIONS,
   cadenceLabel,
@@ -30,8 +30,9 @@ import {
   type NamedJobTemplate,
 } from "../../lib/namedJobTemplates";
 import { useAuth } from "../../auth/AuthContext";
-import { t } from "../../lib/i18n";
+import { t, tf } from "../../lib/i18n";
 
+import { errorText } from "../../lib/apiErrors";
 const DRAFT_KEY = JOB_DRAFT_KEY;
 const STEPS = ["Basics", "Budget & location", "Photos & review"] as const;
 
@@ -83,6 +84,55 @@ const emptyDraft: Draft = {
   lng: String(BLR_CENTER.lng),
 };
 
+/** Max bids the server accepts (backend validation: 1–50). */
+export const MAX_BIDS_LIMIT = 50;
+
+/**
+ * A saved draft can hold anything (older versions, hand-typed coordinates). Bad coordinates used
+ * to reach Leaflet as NaN and crash the page on every load; reset them to the default pin.
+ */
+export function sanitizeDraft(d: Draft): Draft {
+  const out = { ...d };
+  for (const k of Object.keys(emptyDraft) as (keyof Draft)[]) {
+    if (typeof out[k] !== "string") (out as Record<string, unknown>)[k] = emptyDraft[k];
+  }
+  if (!parseLatLng(out.lat, out.lng)) {
+    out.lat = emptyDraft.lat;
+    out.lng = emptyDraft.lng;
+  }
+  return out;
+}
+
+/** A datetime-local value ("2026-11-02T09:30") is the user's wall-clock time: send it as an instant. */
+export function localInputToIso(v: string): string {
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+}
+
+/** What still blocks the current step, in plain words (shown under the disabled Continue). */
+export function stepProblems(step: number, draft: Draft): string[] {
+  const out: string[] = [];
+  if (step === 0) {
+    if (draft.title.trim().length < 3) out.push(t("Add a title (at least 3 characters)."));
+    if (draft.description.trim().length < 10) out.push(t("Describe the work (at least 10 characters)."));
+    if (!draft.category) out.push(t("Pick a specialty."));
+    const max = Number(draft.maxBids);
+    if (draft.maxBids && (!Number.isInteger(max) || max < 1 || max > MAX_BIDS_LIMIT)) {
+      out.push(t("Max bids must be a whole number from 1 to 50."));
+    }
+  }
+  if (step === 1) {
+    if (draft.budgetMin && draft.budgetMax && Number(draft.budgetMin) > Number(draft.budgetMax)) {
+      out.push(t("Budget min can't be more than budget max."));
+    }
+    if (!parseLatLng(draft.lat, draft.lng)) {
+      out.push(t("Enter a valid latitude (−90 to 90) and longitude (−180 to 180), or click the map."));
+    }
+    if (draft.preferredStart && !localInputToIso(draft.preferredStart)) out.push(t("Check the preferred start date."));
+  }
+  return out;
+}
+
 export function CreateJobPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -111,7 +161,7 @@ export function CreateJobPage() {
         if (cat && !parsed.leadGroup) parsed.leadGroup = cat.group;
         parsed.cadence = normalizeCadence(parsed.cadence);
         if (parsed.cadenceNote == null) parsed.cadenceNote = "";
-        return parsed;
+        return sanitizeDraft(parsed);
       }
     } catch { /* ignore */ }
     return emptyDraft;
@@ -195,40 +245,64 @@ export function CreateJobPage() {
       siteType: d.siteType || draft.siteType || "residential",
       maxBids: d.maxBids || draft.maxBids || "5",
     });
-    success(`Applied library template “${tpl.name}”`);
+    success(tf("Applied library template “{name}”", { name: tpl.name }));
   }
 
   function canNext() {
-    if (step === 0) {
-      return (
-        draft.title.trim().length >= 3 &&
-        draft.description.trim().length >= 10 &&
-        !!draft.category
-      );
+    return stepProblems(step, draft).length === 0;
+  }
+
+  // The Post button only arms a moment after the last step appears, so the second click of a
+  // double-click on Continue can't post the job (fe-logic HIGH 2).
+  const [postArmed, setPostArmed] = useState(true);
+  const lastStep = STEPS.length - 1;
+  const prevStep = useRef(step);
+  // Back takes the place of Continue's neighbour on the next step: ignore it for a beat after a
+  // step change so a double-click on Continue doesn't go forward and straight back.
+  const stepChangedAt = useRef(0);
+  function moveTo(next: (s: number) => number) {
+    stepChangedAt.current = Date.now(); // set before render so a click landing mid-render is caught
+    setStep(next);
+  }
+  function goBack() {
+    if (Date.now() - stepChangedAt.current < 500) return;
+    moveTo((s) => Math.max(0, s - 1));
+  }
+  useEffect(() => {
+    if (step === lastStep && prevStep.current !== lastStep) {
+      setPostArmed(false);
+      const id = window.setTimeout(() => setPostArmed(true), 700);
+      prevStep.current = step;
+      return () => window.clearTimeout(id);
     }
-    if (step === 1) {
-      if (draft.budgetMin && draft.budgetMax && Number(draft.budgetMin) > Number(draft.budgetMax)) {
-        return false;
-      }
-      return true;
+    prevStep.current = step;
+  }, [step, lastStep]);
+
+  function goNext() {
+    const problems = stepProblems(step, draft);
+    if (problems.length) {
+      error(problems[0]);
+      return;
     }
-    return true;
+    moveTo((s) => Math.min(s + 1, lastStep));
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (step < STEPS.length - 1) {
-      if (!canNext()) {
-        error(step === 0 ? "Add a clear title, description, and specialty" : "Check budget range");
-        return;
-      }
-      setStep((s) => s + 1);
+    if (step < lastStep) {
+      goNext(); // Enter in a field on an earlier step moves on; it never posts
       return;
     }
+    if (!postArmed || busy || Date.now() - stepChangedAt.current < 700) return;
 
     const fd = new FormData();
     Object.entries(draft).forEach(([k, v]) => {
       if (k === "leadGroup") return;
+      if (k === "preferredStart") {
+        // Send an instant, not a naive local time the UTC server would read 5.5 hours off.
+        if (v) fd.append(k, localInputToIso(v));
+        return;
+      }
       if (v) fd.append(k, v);
     });
     files.slice(0, 5).forEach((f) => fd.append("photos", f));
@@ -239,10 +313,10 @@ export function CreateJobPage() {
       localStorage.removeItem(DRAFT_KEY);
       clearRepeatBanner();
       setRepeatBanner(null);
-      success("Job posted!");
+      success(t("Job posted!"));
       navigate(clientPath(`jobs/${r.job.id}`));
     } catch (err) {
-      error((err as Error).message || "Could not create job");
+      error(errorText(err, "Could not create job"));
     } finally {
       setBusy(false);
     }
@@ -255,7 +329,7 @@ export function CreateJobPage() {
     localStorage.removeItem(DRAFT_KEY);
     clearRepeatBanner();
     setRepeatBanner(null);
-    success("Draft cleared");
+    success(t("Draft cleared"));
   }
 
   function dismissRepeatBanner() {
@@ -286,7 +360,7 @@ export function CreateJobPage() {
                   : "bg-slate-100 text-slate-600"
             )}
           >
-            {i + 1}. {label}
+            {i + 1}. {t(label)}
           </li>
         ))}
       </ol>
@@ -506,7 +580,7 @@ export function CreateJobPage() {
                 className="input max-w-32"
                 type="number"
                 min={1}
-                max={20}
+                max={MAX_BIDS_LIMIT}
                 value={draft.maxBids}
                 onChange={(e) => patch({ maxBids: e.target.value })}
               />
@@ -656,8 +730,8 @@ export function CreateJobPage() {
             <div>
               <p className="label">{t("Pin on map")}</p>
               <LazyMapPinPicker
-                lat={draft.lat ? Number(draft.lat) : null}
-                lng={draft.lng ? Number(draft.lng) : null}
+                lat={parseLatLng(draft.lat, draft.lng)?.lat ?? null}
+                lng={parseLatLng(draft.lat, draft.lng)?.lng ?? null}
                 onChange={({ lat, lng }) =>
                   patch({ lat: String(lat), lng: String(lng) })
                 }
@@ -703,7 +777,7 @@ export function CreateJobPage() {
                     setFiles(await compressImageFiles(picked));
                   } catch (err) {
                     input.value = "";
-                    error((err as Error).message);
+                    error(errorText(err));
                   }
                 }}
               />
@@ -740,15 +814,35 @@ export function CreateJobPage() {
 
         <div className="flex flex-wrap gap-2 pt-2">
           {step > 0 && (
-            <button type="button" className="btn-secondary" onClick={() => setStep((s) => s - 1)}>
+            <button type="button" className="btn-secondary" onClick={goBack}>
               {t("Back")}
             </button>
           )}
-          <button type="submit" className="btn-primary" disabled={busy || !canNext()}>
-            {busy ? t("Posting…") : step < STEPS.length - 1 ? t("Continue") : t("Post job")}
-          </button>
+          {step < lastStep ? (
+            <button
+              key="continue"
+              type="button"
+              className="btn-primary aria-disabled:opacity-60"
+              aria-disabled={!canNext()}
+              aria-describedby={!canNext() ? "step-problems" : undefined}
+              onClick={goNext}
+            >
+              {t("Continue")}
+            </button>
+          ) : (
+            <button key="post" type="submit" className="btn-primary" disabled={busy || !postArmed}>
+              {busy ? t("Posting…") : t("Post job")}
+            </button>
+          )}
           <button type="button" className="btn-ghost" onClick={() => navigate(-1)}>{t("Cancel")}</button>
         </div>
+        {step < lastStep && !canNext() && (
+          <ul id="step-problems" className="space-y-0.5 text-xs text-slate-600" aria-live="polite">
+            {stepProblems(step, draft).map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        )}
       </form>
     </Shell>
   );

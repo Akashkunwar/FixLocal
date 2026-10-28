@@ -1,6 +1,7 @@
 import { t } from "./t";
 import type { Notification } from "../api/extras";
 
+import { displayLocale, getDisplayTimeZone } from "./format";
 /** Fired on window when notifications are read elsewhere (the bell reloads its badge). */
 export const NOTIFICATIONS_CHANGED = "fixlocal:notifications-changed";
 
@@ -46,5 +47,5 @@ export function dayLabel(iso: string, now = new Date()): string {
   const diff = Math.round((day(now) - day(d)) / 86_400_000);
   if (diff === 0) return t("Today");
   if (diff === 1) return t("Yesterday");
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+  return d.toLocaleDateString(displayLocale(), { day: "numeric", month: "short", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric", timeZone: getDisplayTimeZone() });
 }

@@ -130,14 +130,15 @@ export function Shell({
               <Wrench className="h-4 w-4" />
             </span>
             <span className="font-display text-xl font-semibold tracking-tight">
-              FixLocal
+              
+              {t("FixLocal")}
             </span>
           </Link>
 
           {user && (
             <nav
               className="hidden items-center gap-1 md:flex"
-              aria-label="Primary"
+              aria-label={t("Primary")}
             >
               {links.map((l) => (
                 <NavLink
@@ -160,7 +161,7 @@ export function Shell({
           )}
 
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {user?.role !== "ADMIN" && <LanguageToggle />}
+            <LanguageToggle />
             {!user && (
               <>
                 <Link to="/login" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-700 no-underline hover:bg-slate-100">
@@ -232,7 +233,7 @@ export function Shell({
       {user && (
         <nav
           className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white md:hidden safe-bottom"
-          aria-label="Mobile primary"
+          aria-label={t("Mobile primary")}
         >
           <div className="mx-auto flex max-w-6xl overflow-x-auto px-1 py-1">
             {links.map((l) => (

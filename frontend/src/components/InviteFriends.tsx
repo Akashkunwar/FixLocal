@@ -29,7 +29,7 @@ export function InviteFriends() {
     try {
       setRef((await createMyReferralCode()).referral);
     } catch {
-      error("Couldn't create your invite link. Please try again.");
+      error(t("Couldn't create your invite link. Please try again."));
     } finally {
       setBusy(false);
     }
@@ -39,16 +39,16 @@ export function InviteFriends() {
     if (!ref?.link) return;
     try {
       await navigator.clipboard.writeText(ref.link);
-      success("Invite link copied");
+      success(t("Invite link copied"));
     } catch {
-      error("Copy failed. Select the link and copy it instead.");
+      error(t("Copy failed. Select the link and copy it instead."));
     }
   }
 
   async function share() {
     if (!ref?.link) return;
     try {
-      await navigator.share({ title: "Join me on FixLocal", text: ref.shareText ?? undefined, url: ref.link });
+      await navigator.share({ title: t("Join me on FixLocal"), text: ref.shareText ?? undefined, url: ref.link });
     } catch {
       /* the user closed the share sheet */
     }
@@ -111,7 +111,7 @@ export function InviteFriends() {
               ] as const
             ).map(([label, n]) => (
               <div key={label} className="rounded-xl bg-slate-50 p-3">
-                <dt className="text-xs text-slate-500">{label}</dt>
+                <dt className="text-xs text-slate-500">{t(label)}</dt>
                 <dd className="font-display text-xl font-semibold text-slate-900">{n}</dd>
               </div>
             ))}

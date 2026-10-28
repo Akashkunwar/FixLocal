@@ -8,6 +8,9 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { useToast } from "../../components/Toast";
 import { fmtDateTime, money } from "../../lib/format";
 
+import { t, tf } from "../../lib/i18n";
+import { errorText } from "../../lib/apiErrors";
+import { statusLabel } from "../../lib/status";
 export function AdminDisputesPage() {
   const { success, error } = useToast();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
@@ -38,7 +41,7 @@ export function AdminDisputesPage() {
       );
       setMilestonesByJob(map);
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     } finally {
       setLoading(false);
     }
@@ -75,17 +78,17 @@ export function AdminDisputesPage() {
         refunded ? `₹${Number(refunded).toFixed(0)} refunded` : null,
         released ? `₹${Number(released).toFixed(0)} released` : null,
       ].filter(Boolean);
-      success(`Dispute resolved · job is now ${r.job.status.replace(/_/g, " ")}${parts.length ? ` · ${parts.join(" · ")} (simulated)` : ""}`);
+      success(tf("Dispute resolved · job is now {status}", { status: statusLabel(r.job.status) }) + (parts.length ? ` · ${parts.join(" · ")} ${t("(simulated)")}` : ""));
       load();
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     } finally {
       setBusyId(null);
     }
   }
 
   return (
-    <Shell title="Disputes" subtitle="Review evidence, reverse escrow milestones, and set post-resolution job status">
+    <Shell title={t("Disputes")} subtitle={t("Review evidence, reverse escrow milestones, and set post-resolution job status")}>
       <div className="mb-4 flex gap-2">
         {(["open", "resolved", ""] as const).map((f) => (
           <button
@@ -94,7 +97,7 @@ export function AdminDisputesPage() {
             className={filter === f ? "btn-primary btn-sm" : "btn-secondary btn-sm"}
             onClick={() => setFilter(f)}
           >
-            {f === "" ? "All" : f === "open" ? "Open" : "Resolved"}
+            {f === "" ? t("All") : f === "open" ? t("Open") : t("Resolved")}
           </button>
         ))}
       </div>
@@ -102,7 +105,7 @@ export function AdminDisputesPage() {
       {loading ? (
         <Spinner />
       ) : disputes.length === 0 ? (
-        <EmptyState title="No disputes" description="Nothing in this filter right now." />
+        <EmptyState title={t("No disputes")} description={t("Nothing in this filter right now.")} />
       ) : (
         <ul className="grid gap-4">
           {disputes.map((d) => {
@@ -112,17 +115,18 @@ export function AdminDisputesPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge status={d.status} />
                   {d.resolution && <Badge status={d.resolution} />}
-                  <span className="text-sm text-slate-500">Job: {d.job?.title || d.jobId}</span>
-                  {d.job?.status && <span className="text-xs text-slate-500">· job {d.job.status}</span>}
+                  <span className="text-sm text-slate-500">{t("Job:")}{" "}{d.job?.title || d.jobId}</span>
+                  {d.job?.status && <span className="text-xs text-slate-500">{t("· job")}{" "}{d.job.status}</span>}
                 </div>
                 <p className="text-slate-800 whitespace-pre-wrap">{d.reason}</p>
                 <p className="text-xs text-slate-500">
-                  Raised by {d.raisedBy?.name || d.raisedBy?.email || "party"} · {fmtDateTime(d.createdAt)}
+                  
+                  {t("Raised by")}{" "}{d.raisedBy?.name || d.raisedBy?.email || t("party")} · {fmtDateTime(d.createdAt)}
                 </p>
 
                 {(d.evidenceUrls?.length ?? 0) > 0 && (
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Evidence</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">{t("Evidence")}</p>
                     <ul className="flex flex-wrap gap-2">
                       {d.evidenceUrls!.map((url) => {
                         const href = mediaUrl(url);
@@ -131,11 +135,12 @@ export function AdminDisputesPage() {
                           <li key={url}>
                             {isPdf ? (
                               <a href={href} target="_blank" rel="noreferrer" className="btn-secondary btn-sm no-underline">
-                                View PDF
+                                
+                                {t("View PDF")}
                               </a>
                             ) : (
                               <a href={href} target="_blank" rel="noreferrer" className="block h-20 w-20 overflow-hidden rounded-lg ring-1 ring-slate-200">
-                                <img src={href} alt="Evidence" className="h-full w-full object-cover" />
+                                <img src={href} alt={t("Evidence")} className="h-full w-full object-cover" />
                               </a>
                             )}
                           </li>
@@ -150,7 +155,8 @@ export function AdminDisputesPage() {
                     {milestones.length > 0 && (
                       <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200 space-y-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Escrow refund / reverse (simulated)
+                          
+                          {t("Escrow refund / reverse (simulated)")}
                         </p>
                         <ul className="space-y-1.5">
                           {milestones.map((m) => {
@@ -168,7 +174,7 @@ export function AdminDisputesPage() {
                                     onChange={() => toggleRefund(d.id, m.id)}
                                   />
                                   <span>
-                                    {m.label} · {money(m.amount)} · <Badge status={m.status} />
+                                    {t(m.label)} · {money(m.amount)} · <Badge status={m.status} />
                                   </span>
                                 </label>
                               </li>
@@ -176,20 +182,20 @@ export function AdminDisputesPage() {
                           })}
                         </ul>
                         <p className="text-xs text-slate-500">
-                          Tick held or pending milestones to refund them. Money already released can't be refunded.
-                          "Favor client" refunds everything not yet released; "Favor professional" releases it.
+                          
+                          {t("Tick held or pending milestones to refund them. Money already released can't be refunded. \"Favor client\" refunds everything not yet released; \"Favor professional\" releases it.")}
                         </p>
                       </div>
                     )}
                     <textarea
                       className="input"
-                      aria-label="Resolution notes"
-                      placeholder="Resolution notes (visible in audit trail)"
+                      aria-label={t("Resolution notes")}
+                      placeholder={t("Resolution notes (visible in audit trail)")}
                       value={notes[d.id] || ""}
                       onChange={(e) => setNotes({ ...notes, [d.id]: e.target.value })}
                     />
                     <div>
-                      <label className="label" htmlFor={`dispute-status-${d.id}`}>After resolution, set job to</label>
+                      <label className="label" htmlFor={`dispute-status-${d.id}`}>{t("After resolution, set job to")}</label>
                       <select
                         id={`dispute-status-${d.id}`}
                         className="input w-auto"
@@ -198,16 +204,18 @@ export function AdminDisputesPage() {
                           setJobStatus({ ...jobStatus, [d.id]: e.target.value as "" | "cancelled" | "completed" | "restore" })
                         }
                       >
-                        <option value="">Default for outcome</option>
-                        <option value="cancelled">Cancelled (refund what's left)</option>
-                        <option value="completed">Completed (release what's left)</option>
+                        <option value="">{t("Default for outcome")}</option>
+                        <option value="cancelled">{t("Cancelled (refund what's left)")}</option>
+                        <option value="completed">{t("Completed (release what's left)")}</option>
                         <option value="restore">
-                          Back to {d.previousJobStatus ? d.previousJobStatus.replace(/_/g, " ") : "previous status"}
+                          
+                          {t("Back to")}{" "}{d.previousJobStatus ? statusLabel(d.previousJobStatus) : t("previous status")}
                         </option>
                       </select>
                       <p className="mt-1 text-xs text-slate-500">
-                        Defaults: favor client → cancelled · favor professional → completed · no action → back to{" "}
-                        {d.previousJobStatus ? d.previousJobStatus.replace(/_/g, " ") : "previous status"}
+                        
+                        {t("Defaults: favor client → cancelled · favor professional → completed · no action → back to")}{" "}
+                        {d.previousJobStatus ? statusLabel(d.previousJobStatus) : t("previous status")}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -217,7 +225,8 @@ export function AdminDisputesPage() {
                         disabled={busyId === d.id}
                         onClick={() => resolve(d.id, "favor_homeowner")}
                       >
-                        Favor client
+                        
+                        {t("Favor client")}
                       </button>
                       <button
                         type="button"
@@ -225,7 +234,8 @@ export function AdminDisputesPage() {
                         disabled={busyId === d.id}
                         onClick={() => resolve(d.id, "favor_tradesperson")}
                       >
-                        Favor professional
+                        
+                        {t("Favor professional")}
                       </button>
                       <button
                         type="button"
@@ -233,7 +243,8 @@ export function AdminDisputesPage() {
                         disabled={busyId === d.id}
                         onClick={() => resolve(d.id, "no_action")}
                       >
-                        No action
+                        
+                        {t("No action")}
                       </button>
                     </div>
                   </>
@@ -242,13 +253,13 @@ export function AdminDisputesPage() {
                 {d.status === "resolved" && (
                   <div className="space-y-1 text-sm text-slate-600">
                     {d.resolutionNotes && (
-                      <p className="bg-slate-50 rounded-xl p-3">Notes: {d.resolutionNotes}</p>
+                      <p className="bg-slate-50 rounded-xl p-3">{t("Notes:")}{" "}{d.resolutionNotes}</p>
                     )}
                     {d.refundMeta && (d.refundMeta.totalRefunded > 0 || (d.refundMeta.totalReleased ?? 0) > 0) && (
                       <p className="bg-emerald-50 text-emerald-900 rounded-xl p-3">
-                        {d.refundMeta.totalRefunded > 0 && <>Refunded (simulated): {money(d.refundMeta.totalRefunded)}</>}
+                        {d.refundMeta.totalRefunded > 0 && <>{t("Refunded (simulated):")}{" "}{money(d.refundMeta.totalRefunded)}</>}
                         {d.refundMeta.labels?.length ? ` · ${d.refundMeta.labels.join(", ")}` : ""}
-                        {(d.refundMeta.totalReleased ?? 0) > 0 && <> Released to the professional: {money(d.refundMeta.totalReleased)}</>}
+                        {(d.refundMeta.totalReleased ?? 0) > 0 && <> {" "}{t("Released to the professional:")}{" "}{money(d.refundMeta.totalReleased)}</>}
                       </p>
                     )}
                   </div>

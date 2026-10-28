@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { listChatThreads, type ChatThread } from "../api/extras";
 import { JobChat } from "./JobChat";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
 
 type Props = {
   jobId: string;
@@ -25,7 +25,8 @@ export function JobConversations({ jobId, initialProId, hiredProId }: Props) {
           setThreads(r.threads);
           setSelected((cur) => cur || hiredProId || r.threads[0]?.tradespersonId);
         })
-        .catch(() => !cancelled && setThreads([]));
+        // A failed poll keeps what's on screen (and the open chat's unsent text) (fe-logic MED 14).
+        .catch(() => !cancelled && setThreads((prev) => prev ?? []));
     void load();
     const timer = window.setInterval(load, 60_000);
     return () => {
@@ -64,7 +65,7 @@ export function JobConversations({ jobId, initialProId, hiredProId }: Props) {
             >
               {th.name || t("Professional")}
               {th.hired ? t(" · hired") : ""}
-              {th.unread > 0 && th.tradespersonId !== current.tradespersonId ? ` · ${th.unread} new` : ""}
+              {th.unread > 0 && th.tradespersonId !== current.tradespersonId ? tf(" · {unread} new", { unread: th.unread }) : ""}
             </button>
           ))}
         </div>
@@ -73,7 +74,7 @@ export function JobConversations({ jobId, initialProId, hiredProId }: Props) {
         key={current.tradespersonId}
         jobId={jobId}
         proId={current.tradespersonId}
-        title={`Messages with ${current.name || "the professional"}`}
+        title={tf("Messages with {professional}", { professional: current.name || "the professional" })}
       />
     </section>
   );

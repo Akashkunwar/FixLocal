@@ -9,7 +9,7 @@ import { getMySpending, type Spending } from "../../api/features";
 import { categoryLabel, fmtDate, money } from "../../lib/format";
 import { monthLabel, spendingCsv } from "../../lib/spending";
 import { clientPath } from "../../lib/paths";
-import { t } from "../../lib/i18n";
+import { t, plural, tf } from "../../lib/i18n";
 
 const FILTERS = [
   { key: "all", label: "All jobs", match: () => true },
@@ -55,10 +55,10 @@ export function SpendingPage() {
         <div className="space-y-6">
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
             {[
-              ["Paid to pros", money(data.totals.paid), `${data.totals.jobsCompleted} completed job${data.totals.jobsCompleted === 1 ? "" : "s"}`],
-              ["Held in escrow", money(data.totals.inEscrow), `${data.totals.jobsActive} job${data.totals.jobsActive === 1 ? "" : "s"} in progress`],
-              ["Refunded", money(data.totals.refunded), `${data.totals.jobsCancelled} cancelled`],
-              ["Average paid job", money(data.totals.averageJob), `${data.totals.jobsPosted} posted in total`],
+              [t("Paid to pros"), money(data.totals.paid), plural(data.totals.jobsCompleted, "{n} completed job", "{n} completed jobs")],
+              [t("Held in escrow"), money(data.totals.inEscrow), plural(data.totals.jobsActive, "{n} job in progress", "{n} jobs in progress")],
+              [t("Refunded"), money(data.totals.refunded), tf("{n} cancelled", { n: data.totals.jobsCancelled })],
+              [t("Average paid job"), money(data.totals.averageJob), tf("{n} posted in total", { n: data.totals.jobsPosted })],
             ].map(([label, value, hint]) => (
               <div key={label} className="card min-w-0 p-4">
                 <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
@@ -114,7 +114,7 @@ export function SpendingPage() {
                       <li key={p.proId} className="flex items-center justify-between gap-2">
                         <span className="min-w-0 truncate">
                           <Link to={`/pros/${p.proId}`}>{p.name}</Link>
-                          <span className="text-slate-500"> · {p.jobs} {t("job")}{p.jobs === 1 ? "" : "s"}</span>
+                          <span className="text-slate-500"> · {plural(p.jobs, "{n} job", "{n} jobs")}</span>
                         </span>
                         <span className="font-semibold">{money(p.paid)}</span>
                       </li>

@@ -1,6 +1,5 @@
 import { t } from "./t";
-export function statusClass(status: string) {
-  const map: Record<string, string> = {
+export const STATUS_CLASSES: Record<string, string> = {
     open: "bg-teal-50 text-teal-800 ring-1 ring-teal-200",
     bidding_closed: "bg-slate-100 text-slate-700 ring-1 ring-slate-200",
     awarded: "bg-blue-50 text-blue-800 ring-1 ring-blue-200",
@@ -41,8 +40,10 @@ export function statusClass(status: string) {
     open_report: "bg-amber-50 text-amber-900 ring-1 ring-amber-200",
     resolved: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200",
     dismissed: "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
-  };
-  return map[status] || "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+};
+
+export function statusClass(status: string) {
+  return STATUS_CLASSES[status] || "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
 }
 
 export const JOB_TIMELINE = ["open", "awarded", "in_progress", "pending_confirmation", "completed"] as const;

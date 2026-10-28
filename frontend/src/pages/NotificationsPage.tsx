@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCheck } from "lucide-react";
 import clsx from "clsx";
@@ -13,8 +13,12 @@ import {
   type Notification,
 } from "../api/extras";
 import { NOTIFICATION_GROUPS, NOTIFICATIONS_CHANGED, dayLabel, notificationHref } from "../lib/notifications";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
+import { useRequestGuard } from "../lib/useQuery";
+import { errorText } from "../lib/apiErrors";
+import { isAbort } from "../api/client";
 
+import { fmtTime } from "../lib/format";
 const PAGE = 20;
 
 export function NotificationsPage() {
@@ -27,32 +31,48 @@ export function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
 
-  const types = NOTIFICATION_GROUPS.find((g) => g.key === group)?.types ?? [];
+  const types = useMemo(() => NOTIFICATION_GROUPS.find((g) => g.key === group)?.types ?? [], [group]);
 
+  // Every load belongs to one filter. Changing the filter aborts the old request, and a slow
+  // answer (or a "load more") for the previous filter is dropped instead of mixed in (fe-logic MED 15).
+  const begin = useRequestGuard();
   const load = useCallback(
     async (before?: string) => {
-      const r = await listNotificationsPage({ unread: unreadOnly, types, before, limit: PAGE });
+      const { signal, isCurrent } = begin();
+      const r = await listNotificationsPage({ unread: unreadOnly, types, before, limit: PAGE }, signal);
+      if (!isCurrent()) return false;
       setTotal(r.total);
       setUnreadCount(r.unreadCount);
       setItems((xs) => (before ? [...xs, ...r.notifications] : r.notifications));
+      return true;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [unreadOnly, group]
+    [unreadOnly, types, begin]
   );
 
   useEffect(() => {
+    let live = true;
     setLoading(true);
+    setItems([]);
     load()
-      .catch((e: Error) => error(e.message))
-      .finally(() => setLoading(false));
+      .then((done) => {
+        if (done && live) setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if (!live || isAbort(e)) return;
+        error(errorText(e, "Couldn't load notifications"));
+        setLoading(false);
+      });
+    return () => {
+      live = false;
+    };
   }, [load, error]);
 
   async function loadMore() {
     setMore(true);
     try {
-      await load(items[items.length - 1]?.createdAt);
+      await load(items[items.length - 1]?.id); // the cursor is the last notification's id
     } catch (e) {
-      error((e as Error).message);
+      if (!isAbort(e)) error(errorText(e, "Couldn't load more notifications"));
     } finally {
       setMore(false);
     }
@@ -73,7 +93,7 @@ export function NotificationsPage() {
       setUnreadCount(0);
       window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     }
   }
 
@@ -81,7 +101,7 @@ export function NotificationsPage() {
   return (
     <Shell
       title={t("Notifications")}
-      subtitle={unreadCount ? `${unreadCount} unread` : t("You're all caught up")}
+      subtitle={unreadCount ? tf("{unreadCount} unread", { unreadCount }) : t("You're all caught up")}
       actions={
         <button type="button" className="btn-secondary btn-sm" onClick={markAll} disabled={!unreadCount}>
           <CheckCheck className="h-4 w-4" aria-hidden /> {t("Mark all read")}
@@ -148,7 +168,7 @@ export function NotificationsPage() {
                       </span>
                       <span className="mt-0.5 block text-sm text-slate-600">{n.body}</span>
                       <span className="mt-1 block text-xs text-slate-500">
-                        {new Date(n.createdAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
+                        {fmtTime(n.createdAt)}
                       </span>
                     </span>
                   </Link>
@@ -159,7 +179,7 @@ export function NotificationsPage() {
           {items.length < total && (
             <div className="p-3 text-center">
               <button type="button" className="btn-secondary btn-sm" onClick={loadMore} disabled={more}>
-                {more ? t("Loading…") : `Show older (${total - items.length} more)`}
+                {more ? t("Loading…") : tf("Show older ({items} more)", { items: total - items.length })}
               </button>
             </div>
           )}

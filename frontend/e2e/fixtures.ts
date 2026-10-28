@@ -2,7 +2,6 @@ import zlib from "node:zlib";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 export const PASSWORD = "E2e-Password-123";
-export const NEW_PASSWORD = "Another-Pass-456";
 export const SEEDED = {
   admin: "admin@fixlocal.local",
   client: "home@fixlocal.local",
@@ -160,4 +159,20 @@ export async function awardedJob(request: APIRequestContext, client: ApiUser, pr
   });
   expect(res.status(), await res.text()).toBe(200);
   return { job, bid };
+}
+
+/**
+ * Answer the app's own confirm/prompt dialog (it replaced window.confirm/prompt): optionally type
+ * into its text box, press the confirm button, and return the dialog's text for assertions.
+ */
+export async function answerDialog(page: Page, opts: { text?: string; button?: string | RegExp } = {}) {
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toBeVisible();
+  const message = (await dialog.textContent()) || "";
+  if (opts.text !== undefined) await dialog.getByRole("textbox").fill(opts.text);
+  const buttons = dialog.locator("button:not([aria-label])");
+  const button = opts.button ? dialog.getByRole("button", { name: opts.button }).last() : buttons.last();
+  await button.click();
+  await expect(dialog).toHaveCount(0);
+  return message;
 }

@@ -4,7 +4,7 @@ import { ResponseSlaBadge } from "../../../components/ui/ResponseSlaBadge";
 import { ShortlistFunnelPanel } from "./ShortlistFunnelPanel";
 import { Users } from "lucide-react";
 import type { JobDetailState } from "./useJobDetail";
-import { t } from "../../../lib/i18n";
+import { t, tf } from "../../../lib/i18n";
 
 export function ShortlistInvitePanel({
   s,
@@ -113,8 +113,8 @@ export function ShortlistInvitePanel({
                             className="rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-800 ring-1 ring-brand-200"
                             title={
                               pro.tagBoost
-                                ? `Match ${pro.score} + tag boost ${pro.tagBoost}`
-                                : `Match score ${pro.score}`
+                                ? tf("Match {score} + tag boost {tagBoost}", { score: pro.score, tagBoost: pro.tagBoost })
+                                : tf("Match score {score}", { score: pro.score })
                             }
                           >
                             {t("Match")}{" "}{pro.smartScore}
@@ -138,8 +138,8 @@ export function ShortlistInvitePanel({
                             title={
                               pro.inviteBlockedByHeat
                                 ? pro.inviteHeatReason ||
-                                  `Needs heat ≥${pro.shortlistInviteMinHeat ?? shortlistMinHeat}`
-                                : `Availability heat ${pro.availabilityHeat.score}`
+                                  tf("Needs heat ≥{shortlistMinHeat}", { shortlistMinHeat: pro.shortlistInviteMinHeat ?? shortlistMinHeat })
+                                : tf("Availability heat {score}", { score: pro.availabilityHeat.score })
                             }
                           >
                             {t("Heat")}{" "}{pro.availabilityHeat.score}
@@ -252,7 +252,7 @@ export function ShortlistInvitePanel({
               >
                 {inviteBusy
                   ? t("Sending…")
-                  : `Invite ${shortlistSelected.length || ""} from shortlist`}
+                  : tf("Invite {shortlistSelected} from shortlist", { shortlistSelected: shortlistSelected.length || "" })}
               </button>
             </div>
           )}

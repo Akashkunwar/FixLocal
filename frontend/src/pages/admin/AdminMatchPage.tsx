@@ -21,6 +21,8 @@ import { fmtDate } from "../../lib/format";
 import { useToast } from "../../components/Toast";
 import clsx from "clsx";
 
+import { t, tf } from "../../lib/i18n";
+import { errorText } from "../../lib/apiErrors";
 const BAND: Record<string, string> = {
   none: "bg-rose-50 text-rose-800 ring-rose-200",
   thin: "bg-amber-50 text-amber-900 ring-amber-200",
@@ -55,19 +57,20 @@ function TopProsList({ pros }: { pros: MatchTopPro[] }) {
             to={`/pros/${p.userId}`}
             className="font-medium text-slate-800 no-underline hover:text-brand-700"
           >
-            {p.name || "Pro"}
+            {p.name || t("Pro")}
           </Link>
           <span className="ml-1 font-mono text-brand-800">
             {(p.rankedScore ?? p.score).toFixed(0)}
           </span>
           {p.heatBoost != null && p.heatBoost > 0 ? (
             <span className="ml-1 rounded-sm bg-amber-50 px-1 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-200">
-              +{p.heatBoost} heat
+              +{p.heatBoost} {" "}{t("heat")}
             </span>
           ) : null}
           <span className="ml-1 text-[10px] text-slate-500">
-            sk{p.breakdown.skills.toFixed(0)}·rt{p.breakdown.rating.toFixed(0)}·rs
-            {p.breakdown.response.toFixed(0)}·ds{p.breakdown.distance.toFixed(0)}
+            
+            {t("sk")}{p.breakdown.skills.toFixed(0)}{t("·rt")}{p.breakdown.rating.toFixed(0)}{t("·rs")}
+            {p.breakdown.response.toFixed(0)}{t("·ds")}{p.breakdown.distance.toFixed(0)}
           </span>
         </li>
       ))}
@@ -161,7 +164,7 @@ export function AdminMatchPage() {
         }
       })();
     } catch (e) {
-      error((e as Error).message || "Failed to load match data");
+      error(errorText(e, "Failed to load match data"));
     } finally {
       setLoading(false);
     }
@@ -217,7 +220,7 @@ export function AdminMatchPage() {
       setJobs(mq.jobs);
       await runBlendPreview(r.bestValueBlend || bestValueBlend);
     } catch (e) {
-      error((e as Error).message || "Save failed");
+      error(errorText(e, "Save failed"));
     } finally {
       setSavingWeights(false);
     }
@@ -225,8 +228,8 @@ export function AdminMatchPage() {
 
   return (
     <Shell
-      title="Match quality"
-      subtitle="Scored verified pros vs open jobs — skills ∩ category · rating · response · distance · tunable heat · named best-value blend presets · live blend preview"
+      title={t("Match quality")}
+      subtitle={t("Scored verified pros vs open jobs — skills ∩ category · rating · response · distance · tunable heat · named best-value blend presets · live blend preview")}
     >
       {loading || !summary ? (
         <Spinner />
@@ -234,40 +237,40 @@ export function AdminMatchPage() {
         <div className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="card p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Open jobs</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">{t("Open jobs")}</p>
               <p className="mt-1 text-2xl font-semibold">{summary.openJobs}</p>
             </div>
             <div className="card p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Verified pros</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">{t("Verified pros")}</p>
               <p className="mt-1 text-2xl font-semibold">{summary.verifiedPros}</p>
             </div>
             <div className="card p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">No nearby match</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">{t("No nearby match")}</p>
               <p className="mt-1 text-2xl font-semibold text-rose-700">{summary.jobsWithNoNearby}</p>
             </div>
             <div className="card p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Avg best score</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">{t("Avg best score")}</p>
               <p className="mt-1 text-2xl font-semibold text-brand-800">
                 {summary.avgBestScore != null ? summary.avgBestScore.toFixed(0) : "—"}
               </p>
             </div>
             <div className="card p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Radius</p>
-              <p className="mt-1 text-2xl font-semibold">{summary.radiusKm} km</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">{t("Radius")}</p>
+              <p className="mt-1 text-2xl font-semibold">{summary.radiusKm} {" "}{t("km")}</p>
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="card p-4 text-center">
-              <p className="text-xs text-slate-500">Thin (1–2)</p>
+              <p className="text-xs text-slate-500">{t("Thin (1–2)")}</p>
               <p className="text-xl font-semibold">{summary.jobsThin}</p>
             </div>
             <div className="card p-4 text-center">
-              <p className="text-xs text-slate-500">OK (3–6)</p>
+              <p className="text-xs text-slate-500">{t("OK (3–6)")}</p>
               <p className="text-xl font-semibold">{summary.jobsOk}</p>
             </div>
             <div className="card p-4 text-center">
-              <p className="text-xs text-slate-500">Strong (7+)</p>
+              <p className="text-xs text-slate-500">{t("Strong (7+)")}</p>
               <p className="text-xl font-semibold">{summary.jobsStrong}</p>
             </div>
           </div>
@@ -275,9 +278,10 @@ export function AdminMatchPage() {
           <div className="card p-4 sm:p-5 space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <h2 className="text-sm font-semibold text-slate-900">Match score weights</h2>
+                <h2 className="text-sm font-semibold text-slate-900">{t("Match score weights")}</h2>
                 <p className="text-xs text-slate-500">
-                  Admin-tunable sk / rt / rs / ds (defaults 35 / 25 / 20 / 20). Persisted in app config.
+                  
+                  {t("Admin-tunable sk / rt / rs / ds (defaults 35 / 25 / 20 / 20). Persisted in app config.")}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -288,7 +292,8 @@ export function AdminMatchPage() {
                     disabled={savingWeights}
                     onClick={() => setWeights({ ...defaults })}
                   >
-                    Reset defaults
+                    
+                    {t("Reset defaults")}
                   </button>
                 )}
                 <button
@@ -297,7 +302,7 @@ export function AdminMatchPage() {
                   disabled={savingWeights}
                   onClick={saveWeights}
                 >
-                  {savingWeights ? "Saving…" : "Save weights"}
+                  {savingWeights ? t("Saving…") : t("Save weights")}
                 </button>
               </div>
             </div>
@@ -313,7 +318,7 @@ export function AdminMatchPage() {
                         : "btn-secondary btn-sm"
                     }
                     disabled={savingWeights}
-                    title={pr.description}
+                    title={t(pr.description)}
                     onClick={async () => {
                       setSavingWeights(true);
                       try {
@@ -322,26 +327,27 @@ export function AdminMatchPage() {
                         setActivePreset(r.preset || pr.id);
                         if (r.presets) setPresets(r.presets);
                         if (r.heatWeight != null) setHeatWeight(Number(r.heatWeight));
-                        success(r.message || `${pr.label} applied`);
+                        success(r.message || tf("{preset} applied", { preset: t(pr.label) }));
                         const mq = await getMatchQuality();
                         setSummary(mq.summary);
                         setJobs(mq.jobs);
                       } catch (e) {
-                        error((e as Error).message || "Preset failed");
+                        error(errorText(e, "Preset failed"));
                       } finally {
                         setSavingWeights(false);
                       }
                     }}
                   >
-                    {pr.label}
+                    {t(pr.label)}
                     {pr.heatWeight != null ? (
-                      <span className="ml-1 opacity-80">· heat {pr.heatWeight}</span>
+                      <span className="ml-1 opacity-80">{t("· heat")}{" "}{pr.heatWeight}</span>
                     ) : null}
                   </button>
                 ))}
                 {activePreset && (
                   <span className="self-center text-xs text-slate-500">
-                    Active: {activePreset}
+                    
+                    {t("Active:")}{" "}{activePreset}
                   </span>
                 )}
               </div>
@@ -375,13 +381,14 @@ export function AdminMatchPage() {
               ))}
             </div>
             <p className="text-xs text-slate-500">
-              Current sum {weights.skills + weights.rating + weights.response + weights.distance}
-              {" "}(typical max ≈ 100). Breakdown tags: sk / rt / rs / ds.
+              
+              {t("Current sum")}{" "}{weights.skills + weights.rating + weights.response + weights.distance}
+              {" "}{t("(typical max ≈ 100). Breakdown tags: sk / rt / rs / ds.")}
             </p>
             <div className="rounded-xl bg-amber-50/80 p-3 ring-1 ring-amber-100">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <label className="block min-w-48 flex-1">
-                  <span className="label">Availability heat weight (boost)</span>
+                  <span className="label">{t("Availability heat weight (boost)")}</span>
                   <input
                     type="number"
                     min={0}
@@ -398,17 +405,18 @@ export function AdminMatchPage() {
                   disabled={savingWeights}
                   onClick={() => setHeatWeight(defaultHeatWeight)}
                 >
-                  Reset heat ({defaultHeatWeight})
+                  
+                  {t("Reset heat (")}{defaultHeatWeight})
                 </button>
               </div>
               <p className="mt-2 text-[11px] text-amber-900">
-                Clean weekly schedules get up to +{heatWeight} on suggested-pros / match-quality{" "}
-                <span className="font-mono">rankedScore</span> (proportional to heat 0–100).
-                Unclean schedules get 0. Presets include heat (balanced 10 · speed 15 · quality 8 · availability 20).
+                
+                {t("Clean weekly schedules get up to +")}{heatWeight} {" "}{t("on suggested-pros / match-quality")}{" "}
+                <span className="font-mono">{t("rankedScore")}</span> {" "}{t("(proportional to heat 0–100). Unclean schedules get 0. Presets include heat (balanced 10 · speed 15 · quality 8 · availability 20).")}
               </p>
               <div className="mt-3 flex flex-wrap items-end justify-between gap-3 border-t border-amber-100 pt-3">
                 <label className="block min-w-48 flex-1" htmlFor="shortlist-min-heat">
-                  <span className="label">Shortlist invite availability gate (0–100)</span>
+                  <span className="label">{t("Shortlist invite availability gate (0–100)")}</span>
                   <input
                     id="shortlist-min-heat"
                     type="number"
@@ -426,22 +434,23 @@ export function AdminMatchPage() {
                   disabled={savingWeights}
                   onClick={() => setShortlistMinHeat(defaultShortlistMinHeat)}
                 >
-                  Reset gate ({defaultShortlistMinHeat})
+                  
+                  {t("Reset gate (")}{defaultShortlistMinHeat})
                 </button>
               </div>
               <p className="mt-2 text-[11px] text-amber-900">
-                Clients can't invite a shortlisted pro whose published schedule has less availability heat than this.
-                Pros without a schedule are never blocked. Saved with the weights; changes are audited and can be rolled back.
+                
+                {t("Clients can't invite a shortlisted pro whose published schedule has less availability heat than this. Pros without a schedule are never blocked. Saved with the weights; changes are audited and can be rolled back.")}
               </p>
             </div>
 
             <div className="rounded-xl bg-sky-50/80 p-3 ring-1 ring-sky-100">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900">Best-value blend</h3>
+                  <h3 className="text-sm font-semibold text-slate-900">{t("Best-value blend")}</h3>
                   <p className="text-[11px] text-slate-500">
-                    Client bid compare: match/ranked % · lower escrow hold % · optional SLA/heat %.
-                    Renormalized to 100 on save. Changes are audited with rollback on Audit.
+                    
+                    {t("Client bid compare: match/ranked % · lower escrow hold % · optional SLA/heat %. Renormalized to 100 on save. Changes are audited with rollback on Audit.")}
                   </p>
                 </div>
                 <button
@@ -457,7 +466,8 @@ export function AdminMatchPage() {
                     setActiveBlendPreset(null);
                   }}
                 >
-                  Reset blend ({defaultBestValueBlend.matchPct}/{defaultBestValueBlend.pricePct}
+                  
+                  {t("Reset blend (")}{defaultBestValueBlend.matchPct}/{defaultBestValueBlend.pricePct}
                   {(defaultBestValueBlend.slaHeatPct ?? 0) > 0
                     ? `/${defaultBestValueBlend.slaHeatPct}`
                     : ""}
@@ -474,7 +484,7 @@ export function AdminMatchPage() {
                         activeBlendPreset === pr.id ? "btn-primary btn-sm" : "btn-secondary btn-sm"
                       }
                       disabled={savingWeights}
-                      title={pr.description}
+                      title={t(pr.description)}
                       onClick={async () => {
                         setSavingWeights(true);
                         try {
@@ -488,16 +498,16 @@ export function AdminMatchPage() {
                           }
                           if (r.bestValueBlendPresets) setBlendPresets(r.bestValueBlendPresets);
                           setActiveBlendPreset(r.bestValueBlendPreset || pr.id);
-                          success(r.message || `${pr.label} applied`);
+                          success(r.message || tf("{preset} applied", { preset: t(pr.label) }));
                           await runBlendPreview(r.bestValueBlend);
                         } catch (e) {
-                          error((e as Error).message || "Blend preset failed");
+                          error(errorText(e, "Blend preset failed"));
                         } finally {
                           setSavingWeights(false);
                         }
                       }}
                     >
-                      {pr.label}
+                      {t(pr.label)}
                       <span className="ml-1 opacity-80">
                         {pr.blend.matchPct}/{pr.blend.pricePct}
                         {(pr.blend.slaHeatPct ?? 0) > 0 ? `/${pr.blend.slaHeatPct}` : ""}
@@ -506,14 +516,15 @@ export function AdminMatchPage() {
                   ))}
                   {activeBlendPreset && (
                     <span className="self-center text-xs text-slate-500">
-                      Active blend: {activeBlendPreset}
+                      
+                      {t("Active blend:")}{" "}{activeBlendPreset}
                     </span>
                   )}
                 </div>
               )}
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <label className="block">
-                  <span className="label">Match %</span>
+                  <span className="label">{t("Match %")}</span>
                   <input
                     type="number"
                     min={0}
@@ -531,7 +542,7 @@ export function AdminMatchPage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="label">Price (lower hold) %</span>
+                  <span className="label">{t("Price (lower hold) %")}</span>
                   <input
                     type="number"
                     min={0}
@@ -549,7 +560,7 @@ export function AdminMatchPage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="label">SLA / heat % (optional)</span>
+                  <span className="label">{t("SLA / heat % (optional)")}</span>
                   <input
                     type="number"
                     min={0}
@@ -576,7 +587,7 @@ export function AdminMatchPage() {
                       : "btn-ghost btn-sm"
                   }
                   disabled={savingWeights}
-                  title="Toggle a soft 15% SLA/heat third weight (renormalizes on save)"
+                  title={t("Toggle a soft 15% SLA/heat third weight (renormalizes on save)")}
                   onClick={() =>
                     setBestValueBlend((b) => {
                       const on = Number(b.slaHeatPct ?? 0) > 0;
@@ -591,22 +602,25 @@ export function AdminMatchPage() {
                   }
                 >
                   {Number(bestValueBlend.slaHeatPct ?? 0) > 0
-                    ? "Disable SLA/heat weight"
-                    : "Enable SLA/heat (~15%)"}
+                    ? t("Disable SLA/heat weight")
+                    : t("Enable SLA/heat (~15%)")}
                 </button>
                 <p className="text-[11px] text-sky-900">
-                  Current mix {bestValueBlend.matchPct}% match · {bestValueBlend.pricePct}% price
+                  
+                  {t("Current mix")}{" "}{bestValueBlend.matchPct}{t("% match ·")}{" "}{bestValueBlend.pricePct}{t("% price")}
                   {Number(bestValueBlend.slaHeatPct ?? 0) > 0
-                    ? ` · ${bestValueBlend.slaHeatPct}% SLA/heat`
-                    : " · SLA/heat off"}{" "}
-                  (sum{" "}
+                    ? tf(" · {slaHeatPct}% SLA/heat", { slaHeatPct: bestValueBlend.slaHeatPct })
+                    : t(" · SLA/heat off")}{" "}
+                  
+                  {t("(sum")}{" "}
                   {Math.round(
                     (bestValueBlend.matchPct +
                       bestValueBlend.pricePct +
                       Number(bestValueBlend.slaHeatPct ?? 0)) *
                       10
                   ) / 10}
-                  ). Draft sliders preview without saving.
+                  
+                  {t("). Draft sliders preview without saving.")}
                 </p>
                 <button
                   type="button"
@@ -614,24 +628,26 @@ export function AdminMatchPage() {
                   disabled={blendPreviewBusy || savingWeights}
                   onClick={() => runBlendPreview()}
                 >
-                  {blendPreviewBusy ? "Previewing…" : "Live blend preview"}
+                  {blendPreviewBusy ? t("Previewing…") : t("Live blend preview")}
                 </button>
               </div>
 
               <div className="mt-3 rounded-lg bg-white/70 p-3 ring-1 ring-sky-100/80">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Live blend preview
+                    
+                    {t("Live blend preview")}
                   </h4>
                   <span className="text-[11px] text-slate-500">
-                    Sample of open jobs · top ranked bids (draft or saved mix)
+                    
+                    {t("Sample of open jobs · top ranked bids (draft or saved mix)")}
                   </span>
                 </div>
                 {blendPreviewBusy && !blendPreviewJobs.length ? (
-                  <p className="mt-2 text-xs text-slate-500">Loading sample…</p>
+                  <p className="mt-2 text-xs text-slate-500">{t("Loading sample…")}</p>
                 ) : blendPreviewJobs.length === 0 ? (
                   <p className="mt-2 text-xs text-slate-500">
-                    {blendPreviewMsg || "No open jobs with ≥2 active bids yet — post competing bids to preview."}
+                    {blendPreviewMsg || t("No open jobs with ≥2 active bids yet — post competing bids to preview.")}
                   </p>
                 ) : (
                   <ul className="mt-2 space-y-2">
@@ -644,7 +660,7 @@ export function AdminMatchPage() {
                           <p className="text-sm font-medium text-slate-900">
                             {j.title}
                             <span className="ml-2 text-[11px] font-normal text-slate-500">
-                              {[j.category, j.city].filter(Boolean).join(" · ")} · {j.bidCount} bids
+                              {[j.category, j.city].filter(Boolean).join(" · ")} · {j.bidCount} {" "}{t("bids")}
                             </span>
                           </p>
                         </div>
@@ -663,9 +679,10 @@ export function AdminMatchPage() {
                                 {b.valueScore.toFixed(1)}
                               </span>
                               <span className="ml-1 text-slate-500">
-                                mt{b.matchScore.toFixed(0)} · ₹{Math.round(b.hold)}
+                                
+                                {t("mt")}{b.matchScore.toFixed(0)} · ₹{Math.round(b.hold)}
                               </span>
-                              {b.isBest ? <span className="ml-1">best</span> : null}
+                              {b.isBest ? <span className="ml-1">{t("best")}</span> : null}
                             </li>
                           ))}
                         </ul>
@@ -678,18 +695,18 @@ export function AdminMatchPage() {
           </div>
 
           {jobs.length === 0 ? (
-            <EmptyState title="No open jobs" description="Nothing to score right now." />
+            <EmptyState title={t("No open jobs")} description={t("Nothing to score right now.")} />
           ) : (
             <div className="card overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-4 py-3">Job</th>
-                    <th className="px-4 py-3">Location</th>
-                    <th className="px-4 py-3">Nearby</th>
-                    <th className="px-4 py-3">Best score</th>
-                    <th className="px-4 py-3">Top pros</th>
-                    <th className="px-4 py-3">Band</th>
+                    <th className="px-4 py-3">{t("Job")}</th>
+                    <th className="px-4 py-3">{t("Location")}</th>
+                    <th className="px-4 py-3">{t("Nearby")}</th>
+                    <th className="px-4 py-3">{t("Best score")}</th>
+                    <th className="px-4 py-3">{t("Top pros")}</th>
+                    <th className="px-4 py-3">{t("Band")}</th>
                   </tr>
                 </thead>
                 <tbody>

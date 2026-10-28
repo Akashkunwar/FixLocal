@@ -7,7 +7,7 @@ import { CounterAmountSparkline } from "./CounterAmountSparkline";
 import { CounterAnalyticsPanel } from "./CounterAnalyticsPanel";
 import { BidCard } from "./BidCard";
 import { BidGlance } from "./BidGlance";
-import { money } from "../../../lib/format";
+import { money, fmtDateTimeFull } from "../../../lib/format";
 import {
   BID_SORT_OPTIONS,
   bidHighlights,
@@ -15,7 +15,7 @@ import {
   type BidSortKey,
 } from "../../../lib/bidCompare";
 import type { JobDetailState } from "./useJobDetail";
-import { t } from "../../../lib/i18n";
+import { t, tf } from "../../../lib/i18n";
 
 /**
  * The client's "pick a pro" screen: a short at-a-glance comparison, sortable bid
@@ -145,7 +145,7 @@ export function BidComparePanel({
                 <p className="mt-0.5 text-[11px] text-slate-500">
                   {t("Blend of match/ranked (")}{bestValueBlend.matchPct}{t("%) and lower simulated escrow hold (")}{bestValueBlend.pricePct}%)
                   {Number(bestValueBlend.slaHeatPct ?? 0) > 0
-                    ? ` plus response SLA + availability heat (${bestValueBlend.slaHeatPct}%)`
+                    ? tf(" plus response SLA + availability heat ({slaHeatPct}%)", { slaHeatPct: bestValueBlend.slaHeatPct })
                     : ""}
                   {t(". Higher is better · admin-tunable (audited).")}
                 </p>
@@ -177,7 +177,7 @@ export function BidComparePanel({
                         {money(row.hold)}
                         {Number(bestValueBlend.slaHeatPct ?? 0) > 0 &&
                         row.slaHeatRaw != null
-                          ? ` · SLA/heat ${Number(row.slaHeatRaw).toFixed(0)}`
+                          ? tf(" · SLA/heat {slaHeatRaw}", { slaHeatRaw: Number(row.slaHeatRaw).toFixed(0) })
                           : ""}
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -222,7 +222,7 @@ export function BidComparePanel({
                       className="flex flex-wrap gap-x-2"
                     >
                       <span className="text-slate-500">
-                        {new Date(p.t).toLocaleString()}
+                        {fmtDateTimeFull(p.t)}
                       </span>
                       <span className="font-medium">{t(p.label)}</span>
                       <span>{money(p.amount)}</span>

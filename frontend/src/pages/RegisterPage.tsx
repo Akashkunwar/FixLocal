@@ -1,13 +1,15 @@
-import { useI18n } from "../lib/i18n";
+import { tf, useI18n } from "../lib/i18n";
 import { FormEvent, useEffect, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { ApiError, dashboardPath, resendConfirmation } from "../api/client";
+import { dashboardPath, resendConfirmation } from "../api/client";
 import { useToast } from "../components/Toast";
-import { Gift, Wrench } from "lucide-react";
+import { Gift } from "lucide-react";
 import { safeNext } from "../lib/paths";
 import clsx from "clsx";
 
+import { errorText } from "../lib/apiErrors";
+import { AuthTopBar } from "../components/AuthTopBar";
 const ROLE_CARDS = [
   {
     role: "HOMEOWNER" as const,
@@ -67,11 +69,11 @@ export function RegisterPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (password.length < 10) {
-      setErr("Password must be at least 10 characters");
+      setErr(t("Password must be at least 10 characters"));
       return;
     }
     if (!agreed) {
-      setErr("Please accept the Terms of Service and Privacy Policy to continue");
+      setErr(t("Please accept the Terms of Service and Privacy Policy to continue"));
       return;
     }
     setBusy(true);
@@ -91,7 +93,7 @@ export function RegisterPage() {
         /* storage blocked: nothing to clear */
       }
     } catch (ex) {
-      const msg = ex instanceof ApiError ? ex.message : "Registration failed";
+      const msg = errorText(ex, "Registration failed");
       setErr(msg);
       error(msg);
     } finally {
@@ -105,21 +107,19 @@ export function RegisterPage() {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
         <section className="card w-full max-w-lg p-8 space-y-4" aria-labelledby="check-inbox">
-          <div className="flex items-center gap-2 text-brand-800">
-            <Wrench className="h-5 w-5" aria-hidden />
-            <span className="font-display text-lg font-semibold">FixLocal</span>
-          </div>
-          <h1 id="check-inbox" className="font-display text-2xl font-semibold">Check your inbox</h1>
+          <AuthTopBar />
+          <h1 id="check-inbox" className="font-display text-2xl font-semibold">{t("Check your inbox")}</h1>
           <p className="text-sm text-slate-600" role="status">
-            We&apos;ve sent a link to <strong>{sentTo}</strong>. Open it to confirm your email, then log in. If you
-            already have an account with this address, the email explains how to get back in.
+            
+            {tf("We've sent a link to {email}. Open it to confirm your email, then log in. If you already have an account with this address, the email explains how to get back in.", { email: sentTo })}
           </p>
           <Link className="btn-primary w-full no-underline" to={loginTo}>
-            Go to log in
+            
+            {t("Go to log in")}
           </Link>
           <p className="text-center text-sm text-slate-500">
             {resent ? (
-              "Sent again. It can take a minute to arrive; check spam too."
+              t("Sent again. It can take a minute to arrive; check spam too.")
             ) : (
               <button
                 type="button"
@@ -127,10 +127,11 @@ export function RegisterPage() {
                 onClick={() =>
                   resendConfirmation(sentTo)
                     .then(() => setResent(true))
-                    .catch((e) => error((e as Error).message))
+                    .catch((e) => error(errorText(e)))
                 }
               >
-                Didn&apos;t get it? Send the link again
+                
+                {t("Didn't get it? Send the link again")}
               </button>
             )}
           </p>
@@ -140,12 +141,9 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+    <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
       <form onSubmit={onSubmit} className="card w-full max-w-lg p-8 space-y-4">
-        <div className="flex items-center gap-2 text-brand-800">
-          <Wrench className="h-5 w-5" />
-          <span className="font-display text-lg font-semibold">FixLocal</span>
-        </div>
+        <AuthTopBar />
         <div>
           <h1 className="font-display text-2xl font-semibold">{t("Create your account")}</h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -176,29 +174,29 @@ export function RegisterPage() {
               )}
               onClick={() => setRole(c.role)}
             >
-              <p className="text-sm font-semibold text-slate-900">{c.title}</p>
-              <p className="mt-0.5 text-xs font-medium text-brand-800">{c.tagline}</p>
-              <p className="mt-1.5 text-[11px] leading-snug text-slate-500">{c.detail}</p>
+              <p className="text-sm font-semibold text-slate-900">{t(c.title)}</p>
+              <p className="mt-0.5 text-xs font-medium text-brand-800">{t(c.tagline)}</p>
+              <p className="mt-1.5 text-[11px] leading-snug text-slate-500">{t(c.detail)}</p>
             </button>
           ))}
         </div>
 
         <div>
-          <label className="label" htmlFor="name">Full name</label>
-          <input id="name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
+          <label className="label" htmlFor="name">{t("Full name")}</label>
+          <input id="name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Your name")} />
         </div>
         <div>
           <label className="label" htmlFor="email">{t("Email")}</label>
           <input id="email" className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div>
-          <label className="label" htmlFor="phone">Phone (optional)</label>
+          <label className="label" htmlFor="phone">{t("Phone (optional)")}</label>
           <input id="phone" className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div>
           <label className="label" htmlFor="password">{t("Password")}</label>
           <input id="password" className="input" type="password" required minLength={10} maxLength={128} aria-describedby="password-hint" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <p id="password-hint" className="mt-1 text-xs text-slate-500">At least 10 characters. Avoid common passwords.</p>
+          <p id="password-hint" className="mt-1 text-xs text-slate-500">{t("At least 10 characters. Avoid common passwords.")}</p>
         </div>
         <label className="flex items-start gap-2 text-sm text-slate-600" htmlFor="accept-terms">
           <input
@@ -209,18 +207,20 @@ export function RegisterPage() {
             onChange={(e) => setAgreed(e.target.checked)}
           />
           <span>
-            I am 18 or older and agree to the{" "}
-            <Link to="/terms" target="_blank" rel="noopener">Terms of Service</Link> and{" "}
-            <Link to="/privacy" target="_blank" rel="noopener">Privacy Policy</Link>.
+            
+            {t("I am 18 or older and agree to the")}{" "}
+            <Link to="/terms" target="_blank" rel="noopener">{t("Terms of Service")}</Link> {" "}{t("and")}{" "}
+            <Link to="/privacy" target="_blank" rel="noopener">{t("Privacy Policy")}</Link>.
           </span>
         </label>
         <button type="submit" className="btn-primary w-full" disabled={busy}>
-          {busy ? "Creating…" : "Create account"}
+          {busy ? t("Creating…") : t("Create account")}
         </button>
         <p className="text-center text-sm text-slate-500">
-          Already have an account? <Link to="/login">Log in</Link>
+          
+          {t("Already have an account?")}{" "}<Link to="/login">{t("Log in")}</Link>
         </p>
       </form>
-    </div>
+    </main>
   );
 }

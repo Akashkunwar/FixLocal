@@ -7,7 +7,7 @@ import { Badge } from "../../../components/ui/Badge";
 import { ResponseSlaBadge } from "../../../components/ui/ResponseSlaBadge";
 import { StarRating } from "../../../components/ui/StarRating";
 import { CounterAmountSparkline } from "./CounterAmountSparkline";
-import { fmtDateTime, initials, money } from "../../../lib/format";
+import { fmtDateTime, initials, money, fmtDateTimeFull } from "../../../lib/format";
 import {
   previewEscrowSplit,
   escrowHoldAmount,
@@ -21,7 +21,7 @@ import {
   type BidHighlight,
 } from "../../../lib/bidCompare";
 import type { JobDetailState } from "./useJobDetail";
-import { t } from "../../../lib/i18n";
+import { t, tf, plural } from "../../../lib/i18n";
 
 const HIGHLIGHT_STYLE: Record<BidHighlight, string> = {
   best_value: "bg-sky-600 text-white",
@@ -171,7 +171,7 @@ export function BidCard({
                       {p.averageRating.toFixed(1)}
                     </span>
                     <span>
-                      ({p.reviewCount} {t("review")}{p.reviewCount === 1 ? "" : "s"})
+                      ({plural(p.reviewCount, "{n} review", "{n} reviews")})
                     </span>
                   </Fact>
                 ) : (
@@ -179,7 +179,7 @@ export function BidCard({
                 )}
                 {p?.completedJobs != null && (
                   <Fact>
-                    {p.completedJobs} {t("job")}{p.completedJobs === 1 ? "" : "s"} {t("done")}
+                    {plural(p.completedJobs, "{n} job done", "{n} jobs done")}
                   </Fact>
                 )}
                 {p?.yearsExperience != null && (
@@ -189,7 +189,7 @@ export function BidCard({
                   <Fact>
                     <MapPin className="h-3.5 w-3.5" aria-hidden />
                     {b.distanceKm != null
-                      ? `~${b.distanceKm} km away`
+                      ? tf("~{distanceKm} km away", { distanceKm: b.distanceKm })
                       : p?.city}
                   </Fact>
                 )}
@@ -199,7 +199,7 @@ export function BidCard({
                 Number.isFinite(Number(b.matchScore)) && (
                   <p className="mt-1 text-[11px] text-slate-500">
                     {t("Match score")}{" "}{(b.rankedScore ?? b.matchScore).toFixed(0)} {t("for this job")}
-                    {b.heatBoost ? ` · +${b.heatBoost} availability` : ""}
+                    {b.heatBoost ? tf(" · +{heatBoost} availability", { heatBoost: b.heatBoost }) : ""}
                   </p>
                 )}
             </div>
@@ -230,7 +230,7 @@ export function BidCard({
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
                 {t("Quote / estimate")}
                 {b.quoteHistory && b.quoteHistory.length > 0
-                  ? ` · ${b.quoteHistory.length} revision${b.quoteHistory.length === 1 ? "" : "s"}`
+                  ? " · " + plural(b.quoteHistory.length, "{n} revision", "{n} revisions")
                   : ""}
               </p>
               {hasQuote && (
@@ -320,15 +320,15 @@ export function BidCard({
               {fit.kind === "within"
                 ? t("Within your budget")
                 : fit.kind === "over"
-                  ? `${money(fit.by)} over budget`
-                  : `${money(fit.by)} under budget`}
+                  ? tf("{by} over budget", { by: money(fit.by) })
+                  : tf("{by} under budget", { by: money(fit.by) })}
             </p>
           )}
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 sm:justify-end">
             {b.etaDays != null && (
               <Fact>
                 <Clock className="h-3.5 w-3.5" aria-hidden />
-                {t("Done in")}{" "}{b.etaDays} {t("day")}{b.etaDays === 1 ? "" : "s"}
+                {plural(b.etaDays, "Done in {n} day", "Done in {n} days")}
               </Fact>
             )}
             {b.proposedVisitStart && (
@@ -461,7 +461,7 @@ export function BidCard({
                             ) : null}
                             {prev.at && (
                               <span className="text-slate-500">
-                                {new Date(prev.at).toLocaleString()}
+                                {fmtDateTimeFull(prev.at)}
                               </span>
                             )}
                           </div>
@@ -499,7 +499,7 @@ export function BidCard({
                         {money(h.suggestedAmount)} · {h.status}
                         <span className="text-slate-500">
                           {" "}
-                          · {new Date(h.requestedAt).toLocaleString()}
+                          · {fmtDateTimeFull(h.requestedAt)}
                         </span>
                       </li>
                     ))}
@@ -653,7 +653,7 @@ export function BidCard({
                 <button
                   type="button"
                   className="btn-ghost btn-sm text-[11px] text-sky-800 ring-1 ring-sky-200"
-                  title={`Soft hint from peer best-value hold (avg peers ₹${peerBestValueCounterHint.avgHold})`}
+                  title={tf("Soft hint from peer best-value hold (avg peers ₹{avgHold})", { avgHold: peerBestValueCounterHint.avgHold })}
                   onClick={() =>
                     setCounterAmount(String(peerBestValueCounterHint.suggested))
                   }

@@ -8,12 +8,14 @@ import {
 } from "../api/jobs";
 import { Badge } from "./ui/Badge";
 import { Spinner } from "./ui/Spinner";
-import { money, fmtDate } from "../lib/format";
+import { fmtDate, moneyExact } from "../lib/format";
 import { useToast } from "./Toast";
 import { Download, IndianRupee, Printer } from "lucide-react";
 import { downloadMilestoneInvoice, printMilestoneInvoice } from "../lib/invoice";
-import { t } from "../lib/i18n";
+import { t, tf } from "../lib/i18n";
 
+import { errorText } from "../lib/apiErrors";
+import { useConfirm } from "./ConfirmDialog";
 export function PaymentPanel({
   job,
   canRelease,
@@ -24,6 +26,7 @@ export function PaymentPanel({
   onChanged?: () => void;
 }) {
   const { success, error } = useToast();
+  const { confirm } = useConfirm();
   const [data, setData] = useState<JobPayments | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -34,7 +37,7 @@ export function PaymentPanel({
       const r = await getJobPayments(job.id);
       setData(r);
     } catch (e) {
-      error((e as Error).message || "Failed to load payments");
+      error(errorText(e, "Failed to load payments"));
     } finally {
       setLoading(false);
     }
@@ -46,15 +49,20 @@ export function PaymentPanel({
   }, [job.id, job.paymentStatus, job.acceptedBidId]);
 
   async function onRelease(m: PaymentMilestone) {
-    if (!confirm(`Release ${m.label} (${money(m.amount)}) from escrow to the pro?`)) return;
+    const ok = await confirm({
+      title: tf("Release {milestone}?", { milestone: t(m.label) }),
+      message: tf("{amount} moves from escrow to the professional. This can't be undone.", { amount: moneyExact(m.amount) }),
+      confirmLabel: t("Release payment"),
+    });
+    if (!ok) return;
     setBusyId(m.id);
     try {
       await releaseMilestone(job.id, m.id);
-      success(`${m.label} released`);
+      success(tf("{label} released", { label: m.label }));
       await load();
       onChanged?.();
     } catch (e) {
-      error((e as Error).message);
+      error(errorText(e));
     } finally {
       setBusyId(null);
     }
@@ -96,19 +104,7 @@ export function PaymentPanel({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge status={data.paymentStatus} />
-          {!!data.credit?.appliedToPayment && (
-        <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-900">
-          {t("FixLocal credit used:")}{" "}<strong>{money(data.credit.appliedToPayment)}</strong>{t(". You funded")}{" "}
-          {money(Math.max(0, (data.escrowAmount ?? 0) - data.credit.appliedToPayment))} {t("of this escrow; FixLocal covered the rest (simulated).")}
-        </p>
-      )}
-      {!!data.credit?.addedToPayout && (
-        <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-900">
-          {t("Your FixLocal credit of")}{" "}<strong>{money(data.credit.addedToPayout)}</strong> {t("was added to a payout on this job (simulated).")}
-        </p>
-      )}
-
-      {data.escrowSource && (
+          {data.escrowSource && (
             <span
               className={
                 data.escrowSource === "quote"
@@ -121,7 +117,7 @@ export function PaymentPanel({
                   : t("Escrow funded from the accepted bid amount")
               }
             >
-              {t("From")}{" "}{data.escrowSource}
+              {data.escrowSource === "quote" ? t("From quote") : t("From bid")}
             </span>
           )}
           {data.milestones.length > 0 && (
@@ -131,7 +127,7 @@ export function PaymentPanel({
                 className="btn-secondary btn-sm touch-target"
                 onClick={() => {
                   if (printMilestoneInvoice(job, data) === "downloaded") {
-                    success("Pop-up blocked — the escrow summary was downloaded instead");
+                    success(t("Pop-up blocked — the escrow summary was downloaded instead"));
                   }
                 }}
                 title={t("Print or save as PDF")}
@@ -144,7 +140,7 @@ export function PaymentPanel({
                 className="btn-ghost btn-sm touch-target"
                 onClick={() => {
                   downloadMilestoneInvoice(job, data);
-                  success("Escrow summary downloaded");
+                  success(t("Escrow summary downloaded"));
                 }}
                 title={t("Download HTML summary")}
               >
@@ -156,23 +152,39 @@ export function PaymentPanel({
         </div>
       </div>
 
+      {!!data.credit?.appliedToPayment && (
+        <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-900">
+          {tf("FixLocal credit used: {credit}. You funded {funded} of this escrow; FixLocal covered the rest (simulated).", {
+            credit: moneyExact(data.credit.appliedToPayment),
+            funded: moneyExact(Math.max(0, (data.escrowAmount ?? 0) - data.credit.appliedToPayment)),
+          })}
+        </p>
+      )}
+      {!!data.credit?.addedToPayout && (
+        <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-900">
+          {tf("Your FixLocal credit of {credit} was added to a payout on this job (simulated).", {
+            credit: moneyExact(data.credit.addedToPayout),
+          })}
+        </p>
+      )}
+
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="rounded-xl bg-slate-50 p-2.5 sm:p-3 ring-1 ring-slate-100">
           <p className="text-[10px] uppercase tracking-wide text-slate-500">{t("Escrow")}</p>
           <p className="mt-1 text-sm sm:text-base font-semibold text-slate-900">
-            {money(data.escrowAmount)}
+            {moneyExact(data.escrowAmount)}
           </p>
         </div>
         <div className="rounded-xl bg-emerald-50 p-2.5 sm:p-3 ring-1 ring-emerald-100">
           <p className="text-[10px] uppercase tracking-wide text-emerald-700">{t("Released")}</p>
           <p className="mt-1 text-sm sm:text-base font-semibold text-emerald-900">
-            {money(data.releasedTotal)}
+            {moneyExact(data.releasedTotal)}
           </p>
         </div>
         <div className="rounded-xl bg-amber-50 p-2.5 sm:p-3 ring-1 ring-amber-100">
           <p className="text-[10px] uppercase tracking-wide text-amber-800">{t("Held")}</p>
           <p className="mt-1 text-sm sm:text-base font-semibold text-amber-950">
-            {money(data.remainingHeld)}
+            {moneyExact(data.remainingHeld)}
           </p>
         </div>
       </div>
@@ -218,7 +230,7 @@ export function PaymentPanel({
           </p>
           <p className="mt-0.5 text-[10px] text-slate-500">
             {t("Included on printable invoice")}
-            {data.auditNotes.length > 1 ? ` · +${data.auditNotes.length - 1} more` : ""}
+            {data.auditNotes.length > 1 ? tf(" · +{auditNotes} more", { auditNotes: data.auditNotes.length - 1 }) : ""}
           </p>
         </div>
       )}
@@ -237,8 +249,8 @@ export function PaymentPanel({
                   <span className="text-slate-500 font-normal">({m.percent}%)</span>
                 </p>
                 <p className="text-xs text-slate-500">
-                  {money(m.amount)}
-                  {m.releasedAt ? ` · released ${fmtDate(m.releasedAt)}` : ""}
+                  {moneyExact(m.amount)}
+                  {m.releasedAt ? tf(" · released {releasedAt}", { releasedAt: fmtDate(m.releasedAt) }) : ""}
                 </p>
               </div>
               <div className="flex items-center gap-2 self-stretch sm:self-auto">
